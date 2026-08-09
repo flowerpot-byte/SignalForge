@@ -60,6 +60,39 @@ function str(value, fallback) {
   return typeof value === 'string' ? value : fallback;
 }
 
+/** One motion entry, with its own speed and amount. */
+function normalizeMotion(raw, layerId, index, problems) {
+  const input = raw && typeof raw === 'object' ? raw : {};
+  const kind = str(input.kind, 'none');
+  if (!MOTION_KINDS.includes(kind)) {
+    problems.push(`Layer "${layerId}": unknown motion "${kind}" at position ${index}, dropped.`);
+    return null;
+  }
+  // An empty list already means "no motion", so a "none" entry is noise.
+  if (kind === 'none') return null;
+  return {
+    kind,
+    speed: clamp(num(input.speed, 15), 0, 100),
+    amount: clamp(num(input.amount, 30), 0, 100)
+  };
+}
+
+/**
+ * Read the motion list. Accepts the old singular `motion` field so documents
+ * and effects exported before this change still load.
+ */
+function normalizeMotions(input, layerId, problems) {
+  const hasList = Array.isArray(input.motions);
+  const hasSingle = input.motion && typeof input.motion === 'object';
+  if (hasList && hasSingle) {
+    problems.push(`Layer "${layerId}": both motion and motions given, using motions.`);
+  }
+  const source = hasList ? input.motions : (hasSingle ? [input.motion] : []);
+  return source
+    .map((entry, index) => normalizeMotion(entry, layerId, index, problems))
+    .filter((entry) => entry !== null);
+}
+
 function normalizeLayer(raw, index, usedIds, problems) {
   const input = raw && typeof raw === 'object' ? raw : {};
   let id = str(input.id, '').trim() || `layer-${index}`;
@@ -96,13 +129,6 @@ function normalizeLayer(raw, index, usedIds, problems) {
     fit = 'cover';
   }
 
-  const motionInput = input.motion && typeof input.motion === 'object' ? input.motion : {};
-  let kind = str(motionInput.kind, 'none');
-  if (!MOTION_KINDS.includes(kind)) {
-    problems.push(`Layer "${id}": unknown motion "${kind}", using "none".`);
-    kind = 'none';
-  }
-
   const offsetInput = input.offset && typeof input.offset === 'object' ? input.offset : {};
 
   return {
@@ -113,11 +139,7 @@ function normalizeLayer(raw, index, usedIds, problems) {
       x: clamp(num(offsetInput.x, 0), -1, 1),
       y: clamp(num(offsetInput.y, 0), -1, 1)
     },
-    motion: {
-      kind,
-      speed: clamp(num(motionInput.speed, 15), 0, 100),
-      amount: clamp(num(motionInput.amount, 30), 0, 100)
-    }
+    motions: normalizeMotions(input, id, problems)
   };
 }
 

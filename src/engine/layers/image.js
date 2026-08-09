@@ -57,33 +57,40 @@ function breatheFactor(motion, timeSec) {
 export function render(ctx, layer, asset, timeSec, state) {
   if (!asset || !asset.element) return;
 
-  const motion = layer.motion ?? { kind: 'none', speed: 15, amount: 30 };
-
-  if (motion.kind === 'warp') {
-    renderWarped(ctx, layer, asset, timeSec, state, motion);
-    return;
-  }
-
-  let rect = computeSourceRect({
-    srcW: asset.width,
-    srcH: asset.height,
-    dstW: CANVAS_WIDTH,
-    dstH: CANVAS_HEIGHT,
-    fit: layer.fit,
-    offsetX: layer.offset.x,
-    offsetY: layer.offset.y
-  });
-
-  if (motion.kind === 'drift') rect = applyDrift(rect, motion, timeSec);
+  // Each motion kind acts on a different stage of the draw (drift moves the
+  // sampling window, warp distorts while sampling, breathe scales opacity),
+  // so they compose regardless of order. The application order below is
+  // therefore fixed by kind, deliberately NOT by the order layer.motions
+  // lists them in — otherwise the same three entries would render
+  // differently depending on how the user happened to sort them, which
+  // would be a surprising, undocumented dependency on list order.
+  const motions = Array.isArray(layer.motions) ? layer.motions : [];
+  const drift = motions.find((m) => m.kind === 'drift') ?? null;
+  const warp = motions.find((m) => m.kind === 'warp') ?? null;
+  const breathe = motions.find((m) => m.kind === 'breathe') ?? null;
 
   const previousAlpha = ctx.globalAlpha;
-  if (motion.kind === 'breathe') {
-    ctx.globalAlpha = clamp(previousAlpha * breatheFactor(motion, timeSec), 0, 1);
+  if (breathe) {
+    ctx.globalAlpha = clamp(previousAlpha * breatheFactor(breathe, timeSec), 0, 1);
   }
 
-  ctx.imageSmoothingEnabled = true;
-  ctx.imageSmoothingQuality = 'high';
-  ctx.drawImage(asset.element, rect.sx, rect.sy, rect.sw, rect.sh, rect.dx, rect.dy, rect.dw, rect.dh);
+  if (warp) {
+    renderWarped(ctx, layer, asset, timeSec, state, warp, drift);
+  } else {
+    let rect = computeSourceRect({
+      srcW: asset.width,
+      srcH: asset.height,
+      dstW: CANVAS_WIDTH,
+      dstH: CANVAS_HEIGHT,
+      fit: layer.fit,
+      offsetX: layer.offset.x,
+      offsetY: layer.offset.y
+    });
+    if (drift) rect = applyDrift(rect, drift, timeSec);
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(asset.element, rect.sx, rect.sy, rect.sw, rect.sh, rect.dx, rect.dy, rect.dw, rect.dh);
+  }
 
   ctx.globalAlpha = previousAlpha;
 }
@@ -166,7 +173,7 @@ function buildSource(asset, layer, state) {
   return source;
 }
 
-function renderWarped(ctx, layer, asset, timeSec, state, motion) {
+function renderWarped(ctx, layer, asset, timeSec, state, warp, drift) {
   const source = buildSource(asset, layer, state);
 
   if (!state.buffer) {
@@ -178,9 +185,25 @@ function renderWarped(ctx, layer, asset, timeSec, state, motion) {
   }
   if (!state.warp) state.warp = createWarpField(BUFFER_WIDTH, BUFFER_HEIGHT);
 
-  const amplitude = (motion.amount / 100) * MAX_AMPLITUDE;
-  const phase = timeSec * speedToRate(motion.speed) * WARP_SPEED_SCALE;
+  // The padded buffer only has BUFFER_PAD pixels of margin, and warp alone at
+  // full amplitude already uses all of it (WARP_PEAK_FACTOR * MAX_AMPLITUDE
+  // === BUFFER_PAD). Adding drift on top would sample past the edge, so when
+  // both are active each gets only half the padding budget.
+  const headroom = drift ? 0.5 : 1;
+  const amplitude = (warp.amount / 100) * MAX_AMPLITUDE * headroom;
+  const phase = timeSec * speedToRate(warp.speed) * WARP_SPEED_SCALE;
   state.warp.update(phase, amplitude);
+
+  // Drift shifts the sampling window inside the padded buffer instead of
+  // moving the crop, so the cached buffer stays valid across frames.
+  let driftX = 0;
+  let driftY = 0;
+  if (drift) {
+    const phase = timeSec * speedToRate(drift.speed) * SPEED_SCALE;
+    const reach = (drift.amount / 100) * (BUFFER_PAD * 0.5);
+    driftX = reach * Math.sin(phase * 0.37 + 0.4);
+    driftY = reach * Math.cos(phase * 0.23 + 1.1);
+  }
 
   const { rowDX, rowDY, colDX, colDY } = state.warp;
   const src = source.data;
@@ -195,8 +218,8 @@ function renderWarped(ctx, layer, asset, timeSec, state, motion) {
     const rdy = rowDY[y];
     const baseY = y + BUFFER_PAD;
     for (let x = 0; x < BUFFER_WIDTH; x += 1) {
-      let sx = x + BUFFER_PAD + rdx + colDX[x];
-      let sy = baseY + rdy + colDY[x];
+      let sx = x + BUFFER_PAD + driftX + rdx + colDX[x];
+      let sy = baseY + driftY + rdy + colDY[x];
       if (sx < 0) sx = 0; else if (sx > maxX) sx = maxX;
       if (sy < 0) sy = 0; else if (sy > maxY) sy = maxY;
 

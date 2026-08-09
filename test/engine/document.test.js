@@ -38,7 +38,7 @@ test('image layer gets full defaults', () => {
   assert.equal(layer.blend, 'normal');
   assert.equal(layer.fit, 'cover');
   assert.deepEqual(layer.offset, { x: 0, y: 0 });
-  assert.deepEqual(layer.motion, { kind: 'none', speed: 15, amount: 30 });
+  assert.deepEqual(layer.motions, []);
 });
 
 test('unknown blend falls back to normal and is reported', () => {
@@ -106,9 +106,9 @@ test('unknown layer fit falls back to cover and is reported', () => {
   assert.match(problems[0], /fit/);
 });
 
-test('unknown motion kind falls back to none and is reported', () => {
+test('unknown motion kind is dropped, not substituted, and is reported', () => {
   const { doc, problems } = normalizeDocument({ layers: [{ id: 'x', type: 'image', motion: { kind: 'spin' } }] });
-  assert.equal(doc.layers[0].motion.kind, 'none');
+  assert.deepEqual(doc.layers[0].motions, []);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /motion/);
 });
@@ -121,9 +121,11 @@ test('unknown control type falls back to number and is reported', () => {
 });
 
 test('motion speed and amount are clamped into 0..100', () => {
-  const { doc } = normalizeDocument({ layers: [{ type: 'image', motion: { speed: 200, amount: -50 } }] });
-  assert.equal(doc.layers[0].motion.speed, 100);
-  assert.equal(doc.layers[0].motion.amount, 0);
+  const { doc } = normalizeDocument({
+    layers: [{ type: 'image', motion: { kind: 'warp', speed: 200, amount: -50 } }]
+  });
+  assert.equal(doc.layers[0].motions[0].speed, 100);
+  assert.equal(doc.layers[0].motions[0].amount, 0);
 });
 
 test('normalizeAsset defaults and mutually excludes data vs file', () => {
