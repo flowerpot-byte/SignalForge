@@ -1395,6 +1395,11 @@ import { meanBrightness, pixelAt, isColour, meanDifference } from '../harness/pi
 // 4x4 PNG: red / green / blue / white quadrants, two pixels each way.
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
+// The breathe cycle starts at full brightness and dips. Its darkest point is
+// half a cycle in: phase = timeSec * (speed/100) * SPEED_SCALE must equal PI,
+// and with speed 100 and SPEED_SCALE 0.6 that lands here.
+const BREATHE_DARKEST_AT = Math.PI / 0.6;
+
 function docWith(layer) {
   return {
     assets: { q: { kind: 'image', mime: 'image/png', data: QUADRANTS } },
@@ -1409,7 +1414,8 @@ test('image layer draws the picture and honours fit, opacity and motion', async 
     { name: 'contain', kind: 'engine', timeSec: 0, doc: docWith({ fit: 'contain' }) },
     { name: 'still-a', kind: 'engine', timeSec: 0, doc: docWith({ fit: 'stretch', motion: { kind: 'none' } }) },
     { name: 'still-b', kind: 'engine', timeSec: 40, doc: docWith({ fit: 'stretch', motion: { kind: 'none' } }) },
-    { name: 'breathe-dark', kind: 'engine', timeSec: 0, doc: docWith({ fit: 'stretch', motion: { kind: 'breathe', speed: 100, amount: 100 } }) },
+    { name: 'breathe-bright', kind: 'engine', timeSec: 0, doc: docWith({ fit: 'stretch', motion: { kind: 'breathe', speed: 100, amount: 100 } }) },
+    { name: 'breathe-dark', kind: 'engine', timeSec: BREATHE_DARKEST_AT, doc: docWith({ fit: 'stretch', motion: { kind: 'breathe', speed: 100, amount: 100 } }) },
     { name: 'drift-a', kind: 'engine', timeSec: 0, doc: docWith({ fit: 'cover', motion: { kind: 'drift', speed: 100, amount: 100 } }) },
     { name: 'drift-b', kind: 'engine', timeSec: 20, doc: docWith({ fit: 'cover', motion: { kind: 'drift', speed: 100, amount: 100 } }) },
     { name: 'missing', kind: 'engine', timeSec: 0, doc: { layers: [{ type: 'image', asset: 'nope' }] } }
@@ -1428,14 +1434,19 @@ test('image layer draws the picture and honours fit, opacity and motion', async 
   const half = meanBrightness(byName.half.pixels);
   assert.ok(Math.abs(half / full - 0.5) < 0.02, `expected half brightness, got ${half / full}`);
 
-  // Contain letterboxes: the very top row stays black, the middle does not.
-  assert.deepEqual(pixelAt(byName.contain.pixels, 320, 160, 1), { r: 0, g: 0, b: 0, a: 255 });
-  assert.ok(meanBrightness(byName.contain.pixels) > 0);
+  // Contain letterboxes rather than cropping. The test picture is SQUARE, so on
+  // a 320x200 canvas it fills the full height and the bars fall left and right
+  // (dw = 200, dx = 60) — not top and bottom.
+  assert.deepEqual(pixelAt(byName.contain.pixels, 320, 8, 100), { r: 0, g: 0, b: 0, a: 255 }, 'left bar');
+  assert.deepEqual(pixelAt(byName.contain.pixels, 320, 311, 100), { r: 0, g: 0, b: 0, a: 255 }, 'right bar');
+  assert.ok(meanBrightness(byName.contain.pixels) > 0, 'something must be drawn between the bars');
 
   // motion "none" must be perfectly still.
   assert.equal(meanDifference(byName['still-a'].pixels, byName['still-b'].pixels), 0);
 
-  // breathe at t=0 sits at the dark end of its cycle.
+  // breathe starts at full brightness and dips to its darkest half a cycle in.
+  const bright = meanBrightness(byName['breathe-bright'].pixels);
+  assert.ok(Math.abs(bright - full) < 0.5, `breathe at t=0 should be full brightness, got ${bright} vs ${full}`);
   assert.ok(meanBrightness(byName['breathe-dark'].pixels) < full * 0.45);
 
   // drift moves the picture without changing what is in it.
