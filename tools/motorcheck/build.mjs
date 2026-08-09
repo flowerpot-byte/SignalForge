@@ -57,6 +57,28 @@ const html = `<head>
     return typeof document.createElement('video').play === 'function';
   });
 
+  // Can an effect pull in live data from outside? If yes, the app could write
+  // current screen colours to a small file 30x a second and an effect could
+  // follow them — real synchronisation instead of a canned recording.
+  has('fetch exists', function () { return typeof fetch === 'function'; });
+  has('XMLHttpRequest exists', function () { return typeof XMLHttpRequest === 'function'; });
+
+  has('XHR reads a sibling file', function () {
+    var x = new XMLHttpRequest();
+    x.open('GET', 'ZZ-4-daten.txt', false);
+    x.send(null);
+    return x.responseText.indexOf('LIVE-DATA-OK') >= 0;
+  });
+
+  if (typeof fetch === 'function') {
+    fetch('ZZ-4-daten.txt')
+      .then(function (r) { return r.text(); })
+      .then(function (t) { report('fetch reads a sibling file', t.indexOf('LIVE-DATA-OK') >= 0 ? 'YES' : 'NO'); })
+      .catch(function (e) { report('fetch reads a sibling file', 'THREW: ' + e); });
+  } else {
+    report('fetch reads a sibling file', 'NO');
+  }
+
   // Paint the verdict so it is visible without opening the console:
   // green stripe per YES, red per NO, top to bottom.
   var frame = 0;
@@ -79,5 +101,8 @@ const html = `<head>
   window.requestAnimationFrame(update);
 </script>`;
 
+// Companion file the probe tries to read back. If an effect can load this,
+// the app can feed it live data.
+writeFileSync(join(effects, 'ZZ-4-daten.txt'), 'LIVE-DATA-OK\n', 'utf8');
 writeFileSync(join(effects, 'ZZ-4-Motorcheck.html'), html, 'utf8');
 console.log('probe 4 written');
