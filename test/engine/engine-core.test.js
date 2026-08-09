@@ -19,5 +19,9 @@ test('engine renders a 320x200 canvas and clears unknown layers to black', async
   assert.deepEqual(pixelAt(empty.pixels, 320, 0, 0), { r: 0, g: 0, b: 0, a: 255 });
 
   // An unknown layer type must be skipped, not crash the whole effect.
+  // Check alpha too: a fresh, untouched page would also score meanBrightness
+  // 0 (transparent black), so brightness alone can't tell "cleared to
+  // opaque black" apart from "never drawn on at all".
   assert.equal(meanBrightness(unknown.pixels), 0);
+  assert.deepEqual(pixelAt(unknown.pixels, 320, 0, 0), { r: 0, g: 0, b: 0, a: 255 });
 });

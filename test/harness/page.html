@@ -1,12 +1,19 @@
+<!-- SignalForge — build SignalRGB effects from images, video, gradients and shapes. -->
+<!-- Copyright (C) 2026 Max -->
+<!-- SPDX-License-Identifier: GPL-3.0-or-later -->
 <!doctype html>
 <meta charset="utf-8" />
 <title>SignalForge render harness</title>
 <body style="margin:0;padding:0;background:#000">
-  <canvas id="exCanvas" width="320" height="200"></canvas>
+  <canvas id="exCanvas"></canvas>
 </body>
 <script src="../../dist/engine.bundle.js"></script>
 <script>
   const canvas = document.getElementById('exCanvas');
+  // The canvas size comes only from the engine's document.js constants —
+  // never hardcoded here.
+  canvas.width = window.SignalForgeEngine.CANVAS_WIDTH;
+  canvas.height = window.SignalForgeEngine.CANVAS_HEIGHT;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   function grab() {

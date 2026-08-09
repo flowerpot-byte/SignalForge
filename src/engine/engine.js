@@ -4,12 +4,16 @@
 import { BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT } from './document.js';
 import { LAYER_RENDERERS } from './layers/index.js';
 
+// Per-asset watchdog: if an <img> never fires onload or onerror (a stalled
+// data: URI, a browser quirk), don't let it hang the whole document forever.
+const DEFAULT_ASSET_TIMEOUT_MS = 5000;
+
 /**
  * Turn the document's assets into things a canvas can draw.
  * resolveUrl decides where the bytes come from: an embedded data URI in the
  * exported effect, or a sibling file next to it.
  */
-export async function loadAssets(doc, { resolveUrl }) {
+export async function loadAssets(doc, { resolveUrl, assetTimeoutMs = DEFAULT_ASSET_TIMEOUT_MS } = {}) {
   const assets = new Map();
   const pending = [];
 
@@ -18,7 +22,21 @@ export async function loadAssets(doc, { resolveUrl }) {
     if (asset.kind === 'image') {
       pending.push(new Promise((resolve) => {
         const element = new Image();
+        let settled = false;
+
+        // setTimeout is a DOM API here, not a Node/clock read: it does not
+        // make the frame this asset ends up in vary run to run, it only
+        // guarantees loadAssets() itself always finishes.
+        const watchdog = setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resolve();
+        }, assetTimeoutMs);
+
         element.onload = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
           assets.set(id, {
             kind: 'image',
             element,
@@ -28,7 +46,12 @@ export async function loadAssets(doc, { resolveUrl }) {
           resolve();
         };
         // A broken asset must not stop the whole effect from starting.
-        element.onerror = () => resolve();
+        element.onerror = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(watchdog);
+          resolve();
+        };
         element.src = url;
       }));
     }
@@ -69,13 +92,27 @@ export function createRenderer() {
         if (!renderer) continue;
 
         ctx.globalAlpha = layer.opacity;
-        ctx.globalCompositeOperation = BLEND_MODES[layer.blend];
-        const asset = layer.asset ? assets.get(layer.asset) : null;
+        ctx.globalCompositeOperation = BLEND_MODES[layer.blend] ?? 'source-over';
+        const asset = (layer.asset ? assets.get(layer.asset) : null) ?? null;
+
+        // A layer renderer may translate/scale/clip/set filters or shadows
+        // without restoring them; save/restore keeps that contained to this
+        // layer instead of corrupting every layer (and frame) after it.
+        ctx.save();
         renderer.render(ctx, layer, asset, timeSec, stateFor(layer, renderer));
+        ctx.restore();
       }
 
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
+
+      // Drop scratch state for layers that no longer exist, so (a) the map
+      // doesn't grow unbounded across an editing session, and (b) a reused
+      // layer id never inherits a deleted layer's warmed-up buffers.
+      const liveIds = new Set(doc.layers.map((layer) => layer.id));
+      for (const id of states.keys()) {
+        if (!liveIds.has(id)) states.delete(id);
+      }
     },
 
     dispose() {
