@@ -102,7 +102,7 @@ async function buildImageDocument(options, name) {
     controls: [
       { property: 'tempo', label: { de: 'Tempo', en: 'Speed' }, type: 'number', min: 1, max: 100, default: 15, bind: ['a1.motion.speed'] },
       { property: 'strength', label: { de: 'Staerke', en: 'Strength' }, type: 'number', min: 0, max: 100, default: 30, bind: ['a1.motion.amount'] },
-      { property: 'brightness', label: { de: 'Helligkeit', en: 'Brightness' }, type: 'number', min: 5, max: 100, default: 100, bind: [] }
+      { property: 'brightness', label: { de: 'Helligkeit', en: 'Brightness' }, type: 'number', min: 5, max: 100, default: 100, bind: ['brightness'] }
     ]
   };
 }

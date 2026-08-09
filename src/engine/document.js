@@ -171,6 +171,10 @@ export function normalizeDocument(raw) {
     name: str(input.name, '').trim() || 'Untitled',
     description: str(input.description, ''),
     publisher: str(input.publisher, ''),
+    // Overall output dimmer, 0..100, applied once to the finished frame by
+    // the renderer (see engine.js). 100 = unchanged, matching every
+    // document that predates this field so old previews/exports don't shift.
+    brightness: clamp(num(input.brightness, 100), 0, 100),
     layers,
     controls,
     assets

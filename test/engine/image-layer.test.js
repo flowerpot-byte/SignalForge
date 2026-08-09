@@ -10,8 +10,10 @@ import { meanBrightness, pixelAt, isColour, meanDifference } from '../harness/pi
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
 // The breathe cycle starts at full brightness and dips. Its darkest point is
-// half a cycle in: phase = timeSec * (speed/100) * SPEED_SCALE must equal PI,
-// and with speed 100 and SPEED_SCALE 0.6 that lands here.
+// half a cycle in: phase = timeSec * speedToRate(speed) * SPEED_SCALE must
+// equal PI. speedToRate(100) is exactly 1 (see src/engine/motion/speed.js),
+// the same as the old linear speed/100 at speed 100, so with SPEED_SCALE 0.6
+// this constant is unchanged by the tempo curve.
 const BREATHE_DARKEST_AT = Math.PI / 0.6;
 
 function docWith(layer) {

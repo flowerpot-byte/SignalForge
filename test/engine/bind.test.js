@@ -3,9 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getByPath, setByPath, resolveLayerPath, applyControls } from '../../src/engine/bind.js';
+import { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from '../../src/engine/bind.js';
 
 const base = () => ({
+  brightness: 100,
   layers: [
     { id: 'a1', type: 'image', opacity: 1, motion: { kind: 'warp', speed: 15, amount: 30 } },
     { id: 'b2', type: 'image', opacity: 1, motion: { kind: 'warp', speed: 15, amount: 30 } }
@@ -106,4 +107,54 @@ test('applyControls still prevents a nested write from reaching the original doc
   assert.equal(original.layers[0].motion.speed, 15);
   assert.equal(result.layers[0].motion.speed, 90);
   assert.notEqual(result.layers[0].motion, original.layers[0].motion);
+});
+
+test('resolveBindingPath resolves a bare name (no dot) straight onto the document', () => {
+  assert.equal(resolveBindingPath(base(), 'brightness'), 'brightness');
+});
+
+test('resolveBindingPath still delegates a dotted binding to resolveLayerPath', () => {
+  const doc = base();
+  assert.equal(resolveBindingPath(doc, 'b2.motion.speed'), resolveLayerPath(doc, 'b2.motion.speed'));
+  assert.equal(resolveBindingPath(doc, 'ghost.motion.speed'), null);
+});
+
+test('a document-level bind writes straight onto the document, not into a layer', () => {
+  const input = base();
+  input.controls.push({ property: 'brightness', type: 'number', default: 100, bind: ['brightness'] });
+  const doc = applyControls(input, { brightness: 42 });
+  assert.equal(doc.brightness, 42);
+});
+
+test('a document-level bind leaves the original document untouched', () => {
+  const original = base();
+  original.controls.push({ property: 'brightness', type: 'number', default: 100, bind: ['brightness'] });
+  applyControls(original, { brightness: 42 });
+  assert.equal(original.brightness, 100);
+});
+
+test('a document-level bind for a field that does not exist on the document is ignored, not thrown', () => {
+  const input = base();
+  input.controls.push({ property: 'ghostField', type: 'number', default: 1, bind: ['thisFieldDoesNotExist'] });
+  assert.doesNotThrow(() => applyControls(input, { ghostField: 5 }));
+  const doc = applyControls(input, { ghostField: 5 });
+  assert.equal(Object.hasOwn(doc, 'thisFieldDoesNotExist'), false);
+});
+
+test('a document-level bind refuses a __proto__ binding and leaves Object.prototype untouched', () => {
+  const originalToString = Object.prototype.toString;
+  const input = base();
+  input.controls.push({ property: 'evil', type: 'number', default: 1, bind: ['__proto__'] });
+  applyControls(input, { evil: 1 });
+  assert.equal(Object.prototype.toString, originalToString);
+  assert.equal(({}).toString(), '[object Object]');
+});
+
+test('a control can mix a layer binding and a document binding side by side', () => {
+  const input = base();
+  input.controls.push({ property: 'brightness', type: 'number', default: 100, bind: ['brightness'] });
+  const doc = applyControls(input, { tempo: 77, brightness: 33 });
+  assert.equal(doc.layers[0].motion.speed, 77);
+  assert.equal(doc.layers[1].motion.speed, 77);
+  assert.equal(doc.brightness, 33);
 });

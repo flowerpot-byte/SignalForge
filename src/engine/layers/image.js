@@ -4,9 +4,17 @@
 import { CANVAS_WIDTH, CANVAS_HEIGHT, clamp } from '../document.js';
 import { computeSourceRect } from '../util/fit.js';
 import { createWarpField, WARP_PEAK_FACTOR } from '../motion/warp.js';
+import { speedToRate } from '../motion/speed.js';
 
-/** Motion speed 0..100 maps onto this many radians per second at full tilt. */
+/**
+ * speedToRate(motion.speed) maps onto this many radians per second at full
+ * tilt (rate 1, i.e. speed 100) for drift and breathe. Warp gets its own,
+ * larger scale below — its visible motion is more subtle per radian, so it
+ * needs a faster phase to read as comparably fast.
+ */
 const SPEED_SCALE = 0.6;
+/** Warp's equivalent of SPEED_SCALE: radians per second at full tilt. */
+const WARP_SPEED_SCALE = 2.0;
 /** Drift eats at most this fraction of the source rect to make room to pan. */
 const DRIFT_MAX_INSET = 0.12;
 /** Breathe dims by at most this fraction at full amount. */
@@ -26,7 +34,7 @@ export function createState() {
 
 /** Slide and shrink the source rect so the picture wanders without deforming. */
 function applyDrift(rect, motion, timeSec) {
-  const phase = timeSec * (motion.speed / 100) * SPEED_SCALE;
+  const phase = timeSec * speedToRate(motion.speed) * SPEED_SCALE;
   const inset = (motion.amount / 100) * DRIFT_MAX_INSET;
   const insetX = rect.sw * inset;
   const insetY = rect.sh * inset;
@@ -41,7 +49,7 @@ function applyDrift(rect, motion, timeSec) {
 
 /** A slow swell between full brightness and BREATHE_MAX_DEPTH below it. */
 function breatheFactor(motion, timeSec) {
-  const phase = timeSec * (motion.speed / 100) * SPEED_SCALE;
+  const phase = timeSec * speedToRate(motion.speed) * SPEED_SCALE;
   const depth = (motion.amount / 100) * BREATHE_MAX_DEPTH;
   return 1 - depth * (0.5 - 0.5 * Math.cos(phase));
 }
@@ -171,7 +179,7 @@ function renderWarped(ctx, layer, asset, timeSec, state, motion) {
   if (!state.warp) state.warp = createWarpField(BUFFER_WIDTH, BUFFER_HEIGHT);
 
   const amplitude = (motion.amount / 100) * MAX_AMPLITUDE;
-  const phase = timeSec * (motion.speed / 100) * 2.0;
+  const phase = timeSec * speedToRate(motion.speed) * WARP_SPEED_SCALE;
   state.warp.update(phase, amplitude);
 
   const { rowDX, rowDY, colDX, colDY } = state.warp;

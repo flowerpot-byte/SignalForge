@@ -1,7 +1,7 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT } from './document.js';
+import { BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT, clamp } from './document.js';
 import { LAYER_RENDERERS } from './layers/index.js';
 
 // Per-asset watchdog: if an <img> never fires onload or onerror (a stalled
@@ -62,6 +62,32 @@ export async function loadAssets(doc, { resolveUrl, assetTimeoutMs = DEFAULT_ASS
 }
 
 /**
+ * Scale the whole finished frame by the document's brightness (0..100,
+ * 100 = unchanged, see document.js). This runs once on the composited
+ * canvas instead of touching every layer individually: it is cheaper, and
+ * it means every layer, blend mode and future layer type gets dimmed the
+ * same way for free instead of needing its own brightness handling.
+ *
+ * There is no ctx.filter on the real SignalRGB host, so this is done by
+ * hand: read the frame back with getImageData, scale each colour channel,
+ * write it back with putImageData. Skipped entirely at brightness 100 so
+ * the default path stays byte-identical to the pre-brightness output (no
+ * float rounding noise on the common case).
+ */
+function applyBrightness(ctx, brightness) {
+  const factor = Number.isFinite(brightness) ? clamp(brightness, 0, 100) / 100 : 1;
+  if (factor === 1) return;
+  const frame = ctx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  const data = frame.data;
+  for (let i = 0; i < data.length; i += 4) {
+    data[i] *= factor;
+    data[i + 1] *= factor;
+    data[i + 2] *= factor;
+  }
+  ctx.putImageData(frame, 0, 0);
+}
+
+/**
  * A renderer instance. It owns the per-layer scratch buffers, which is why
  * this is a factory and not a bare function.
  *
@@ -105,6 +131,8 @@ export function createRenderer() {
 
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
+
+      applyBrightness(ctx, doc.brightness);
 
       // Drop scratch state for layers that no longer exist, so (a) the map
       // doesn't grow unbounded across an editing session, and (b) a reused

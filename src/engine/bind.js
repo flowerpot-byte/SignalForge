@@ -49,18 +49,47 @@ export function resolveLayerPath(doc, path) {
 }
 
 /**
+ * Resolve a control's bind entry against the document.
+ *
+ * Two shapes:
+ *  - "<layerId>.<rest>" addresses a field inside a layer, via resolveLayerPath
+ *    above (e.g. "a1.motion.speed" -> "layers.0.motion.speed").
+ *  - a bare name with no dot at all addresses a field on the document
+ *    itself (e.g. "brightness", for a control with no per-layer meaning).
+ *    The path returned is just that name, since document-level fields sit
+ *    directly on the object applyControls already copies.
+ *
+ * These two shapes cannot collide: resolveLayerPath already requires a dot
+ * (no dot -> null), so a bare name can never be mistaken for a layer id
+ * followed by a path, and a layer id can never be mistaken for a document
+ * field. setByPath still refuses __proto__/constructor/prototype and any
+ * segment that isn't already an own property, so a document-level binding
+ * gets exactly the same guards as a layer-level one — including that
+ * "brightness" must already exist on the document (it does, unconditionally,
+ * once normalizeDocument has run — see document.js).
+ */
+export function resolveBindingPath(doc, binding) {
+  return binding.includes('.') ? resolveLayerPath(doc, binding) : binding;
+}
+
+/**
  * Apply SignalRGB control values to a copy of the document.
  *
  * values comes from the exported effect's global variables. Anything missing
  * falls back to the control's own default, so a half-configured effect still
  * renders instead of breaking.
  *
- * This runs every frame for as long as the effect is active, so it only
- * deep-clones what bindings can actually write: `layers`. Every other field
- * (notably `assets`, which can hold megabytes of base64 image data) is
- * carried across by reference — bindings never resolve a path outside
- * `layers` (see resolveLayerPath) and controls are only read here, never
- * written, so nothing else needs copying to keep the caller's document safe.
+ * This runs every frame for as long as the effect is active, so the copy is
+ * kept as cheap as possible: `layers` is deep-cloned because bindings write
+ * into it, and the document itself is shallow-copied so a document-level
+ * binding (see resolveBindingPath) can overwrite a top-level primitive field
+ * like `brightness` without touching the original — a plain reassignment is
+ * enough for a primitive, no deep clone needed. Every other field (notably
+ * `assets`, which can hold megabytes of base64 image data) is carried across
+ * by reference — no binding, layer- or document-level, ever resolves a path
+ * outside `layers` or the document's own top-level fields, and controls are
+ * only read here, never written, so nothing else needs copying to keep the
+ * caller's document safe.
  */
 export function applyControls(doc, values) {
   const copy = { ...doc, layers: structuredClone(doc.layers) };
@@ -71,7 +100,7 @@ export function applyControls(doc, values) {
     const value = control.type === 'number' ? Number(raw) : raw;
     if (control.type === 'number' && !Number.isFinite(value)) continue;
     for (const binding of control.bind) {
-      const path = resolveLayerPath(copy, binding);
+      const path = resolveBindingPath(copy, binding);
       if (path) setByPath(copy, path, value);
     }
   }

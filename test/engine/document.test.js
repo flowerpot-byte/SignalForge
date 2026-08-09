@@ -17,7 +17,16 @@ test('empty input produces a valid empty document', () => {
   assert.deepEqual(doc.layers, []);
   assert.deepEqual(doc.controls, []);
   assert.deepEqual(doc.assets, {});
+  assert.equal(doc.brightness, 100);
   assert.deepEqual(problems, []);
+});
+
+test('brightness defaults to 100 (unchanged) and is clamped into 0..100', () => {
+  assert.equal(normalizeDocument({}).doc.brightness, 100);
+  assert.equal(normalizeDocument({ brightness: 50 }).doc.brightness, 50);
+  assert.equal(normalizeDocument({ brightness: 500 }).doc.brightness, 100);
+  assert.equal(normalizeDocument({ brightness: -50 }).doc.brightness, 0);
+  assert.equal(normalizeDocument({ brightness: 'nonsense' }).doc.brightness, 100);
 });
 
 test('image layer gets full defaults', () => {
