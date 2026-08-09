@@ -3,13 +3,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { runJobs } from '../harness/render.js';
 import { meanDifference, maxDifference, meanBrightness } from '../harness/pixels.js';
 import { buildEffectHtml } from '../../src/export/build-effect.js';
 import { MOTION_KINDS } from '../../src/engine/document.js';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const cli = join(root, 'bin', 'sfexport.js');
 
 // 4x4 PNG: red / green / blue / white quadrants, two pixels each way -- the
 // same picture test/export/fit-control.test.js uses, for the same reason:
@@ -22,14 +27,17 @@ const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJs
  * The document this stands in for `sfexport.js --motion <kind>` producing:
  * exactly one motion entry on the layer, with the motion/tempo/strength
  * controls bound into it exactly the way buildImageDocument wires them up
- * (see bin/sfexport.js). A literal `kind: 'none'` motion is baked as `warp`
- * instead -- normalizeDocument drops a stored 'none' entry entirely, since
- * an empty motions list already means "no motion" -- and the `motion`
- * control's own default (which IS allowed to be the string 'none') is what
- * actually makes the export open still: applyControls overwrites the
- * entry's kind with the control default before the very first frame, and a
- * motions[0] whose kind is 'none' matches none of image.js's per-kind
- * lookups.
+ * (see bin/sfexport.js). `kind: 'none'` is baked as-is -- normalizeDocument
+ * keeps a stored 'none' entry as an ordinary, inert one (document.js), so it
+ * renders exactly like having no motion at all without needing a
+ * placeholder kind.
+ *
+ * NOTE: these three tests (tempo/strength/motion combobox) exercise the
+ * render mechanism with a hand-built document, which is fine for them --
+ * they are about whether a bound control reaches the renderer at all, not
+ * about whether sfexport.js's own bind paths are the right ones. The
+ * regression guard below is the one that must exercise the CLI's real
+ * output; see its own comment.
  */
 function docWithMotion({ motion, tempo = 15, strength = 30, fit = 'cover' }) {
   return {
@@ -42,7 +50,7 @@ function docWithMotion({ motion, tempo = 15, strength = 30, fit = 'cover' }) {
       type: 'image',
       asset: 'q',
       fit,
-      motions: [{ kind: motion === 'none' ? 'warp' : motion, speed: tempo, amount: strength }]
+      motions: [{ kind: motion, speed: tempo, amount: strength }]
     }],
     controls: [
       { property: 'motion', label: { de: 'Modus', en: 'Motion' }, type: 'combobox',
@@ -140,13 +148,42 @@ test('the motion combobox changes what is rendered', async () => {
 
 test('regression guard: with --motion none, the exported effect still renders the picture, '
   + 'and its motion/tempo/strength sliders are not silently dead', async () => {
-  // Exactly what `sfexport.js --motion none` bakes: the CLI's fixed
-  // speed/amount defaults (15/30, see bin/sfexport.js), with the motion
-  // kind resolved to 'none'.
-  const doc = docWithMotion({ motion: 'none', tempo: 15, strength: 30 });
-  const { dir, file } = await writeEffect(doc);
+  // This test drives the real `bin/sfexport.js` CLI and renders the file it
+  // actually wrote, instead of hand-building a document with the bind paths
+  // already known to be correct. That distinction matters: a hand-built
+  // document, however faithfully it mirrors buildImageDocument today, proves
+  // nothing about whether sfexport.js itself still wires those bindings the
+  // same way tomorrow. This is the guard against exactly the bug that
+  // shipped once already -- an image layer's `motion` object became a
+  // `motions` array, and sfexport.js kept binding controls to
+  // `a1.motion.*`, which setByPath (src/engine/bind.js) silently refuses to
+  // write, leaving three dead sliders in every exported effect. Revert
+  // sfexport.js's bind paths back to `a1.motion.*` and this test must fail:
+  // see the "Fix round 2" section of task-1-report.md for that experiment's
+  // actual red/green output.
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-motion-none-cli-'));
+  const image = join(dir, 'quadrants.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(QUADRANTS, 'base64'));
 
   try {
+    execFileSync(process.execPath, [
+      cli, '--image', image, '--name', 'MotionNoneCli', '--out', outDir, '--motion', 'none', '--fit', 'cover'
+    ], { encoding: 'utf8', cwd: root });
+
+    const file = join(outDir, 'MotionNoneCli.html');
+    const html = readFileSync(file, 'utf8');
+
+    // The reference for "genuinely no motion" is built from the exact asset
+    // bytes the CLI actually embedded (prepareImageFile re-encodes the
+    // source picture, so it is not byte-identical to QUADRANTS above) --
+    // read straight back out of the CLI's own output, not re-derived.
+    const bakedDocMatch = html.match(/<script id="sf-document" type="application\/json">([\s\S]*?)<\/script>/);
+    assert.ok(bakedDocMatch, 'could not find the baked document in the CLI output');
+    const bakedDoc = JSON.parse(bakedDocMatch[1]);
+    const bakedLayer = bakedDoc.layers.find((layer) => layer.id === 'a1');
+    assert.ok(bakedLayer, 'CLI output has no "a1" layer');
+
     const [untouched, forced, engineStill] = await runJobs([
       // Baseline: nothing touched, must render the picture (not black, not
       // broken) exactly as a genuinely motionless layer would.
@@ -161,13 +198,11 @@ test('regression guard: with --motion none, the exported effect still renders th
       { name: 'none-forced-motion', kind: 'html', file, settleMs: 400,
         setGlobals: { motion: 'warp', tempo: 95, strength: 100 }, afterSetGlobalsMs: 50 },
       // An independent, motion-free reference rendered straight through the
-      // engine (motions: [] -- the true "no motion" shape, see
-      // test/engine/motions.test.js), to prove the baseline is not merely
-      // "unchanged" but actually correct.
+      // engine, using the CLI's own baked layer with motions replaced by an
+      // empty list (the true "no motion" shape, see test/engine/motions.test.js).
       { name: 'engine-still', kind: 'engine', timeSec: 0, doc: {
-        ...doc,
-        layers: [{ id: 'a1', type: 'image', asset: 'q', fit: 'cover', motions: [] }],
-        controls: []
+        assets: bakedDoc.assets,
+        layers: [{ ...bakedLayer, motions: [] }]
       } }
     ]);
 
@@ -182,7 +217,10 @@ test('regression guard: with --motion none, the exported effect still renders th
       + `mean difference was ${meanDifference(untouched.pixels, engineStill.pixels)}`);
 
     // The regression guard itself: touching the controls from a --motion
-    // none export must still change the picture.
+    // none export must still change the picture. This is only meaningful
+    // because `untouched`/`forced` above were rendered from the CLI's own
+    // output file -- if sfexport.js's bind paths regress, this is the
+    // assertion that goes red.
     assert.ok(maxDifference(untouched.pixels, forced.pixels) > 0,
       'the motion/tempo/strength controls had no visible effect on a --motion none export -- '
       + 'they exist on paper but are dead, exactly the regression this test guards against');

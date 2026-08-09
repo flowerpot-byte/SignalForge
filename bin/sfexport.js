@@ -97,28 +97,19 @@ async function buildImageDocument(options, name) {
       name: 'Picture',
       asset: 'picture',
       fit: options.fit,
-      // Always exactly one motion entry, even for --motion none, so the
+      // Always exactly one motion entry, whatever --motion was, so the
       // three bindings below always have something to write into --
       // setByPath (src/engine/bind.js) deliberately refuses to create a
       // missing branch, so a `motions` array without an entry would leave
       // the motion/tempo/strength controls silently dead.
       //
-      // A literal `kind: 'none'` entry cannot be the one baked here: it
-      // would be dropped right back out by normalizeDocument's
-      // normalizeMotion (document.js), both when this document is
-      // normalized at build time and again when the exported effect
-      // normalizes it once more on load -- an empty motions list already
-      // means "no motion", so a stored 'none' entry is treated as noise.
-      // "warp" is just a placeholder shape here for --motion none: it is
-      // never actually rendered as-is, because applyControls (bind.js)
-      // runs before every single frame, including the first, and always
-      // overwrites this entry's `kind` with the `motion` control's own
-      // default -- which for --motion none is the literal string 'none'.
-      // At that point the placeholder is gone, and a motions[0] whose kind
-      // is 'none' matches none of the render loop's per-kind lookups (see
-      // layers/image.js), which is exactly what "no motion" needs to look
-      // like -- no special-casing required there.
-      motions: [{ kind: options.motion === 'none' ? 'warp' : options.motion, speed: 15, amount: 30 }]
+      // For --motion none this bakes a real `kind: 'none'` entry, not a
+      // placeholder standing in for it. normalizeDocument's normalizeMotion
+      // (document.js) keeps "none" as an ordinary, inert entry instead of
+      // dropping it, so the document is honest about having no motion from
+      // the moment it is built -- true even if some future code renders
+      // `layer.motions` directly without going through applyControls first.
+      motions: [{ kind: options.motion, speed: 15, amount: 30 }]
     }],
     controls: [
       { property: 'motion', label: { de: 'Modus', en: 'Motion' }, type: 'combobox', values: [...MOTION_KINDS], default: options.motion, bind: ['a1.motions.0.kind'] },

@@ -60,7 +60,19 @@ function str(value, fallback) {
   return typeof value === 'string' ? value : fallback;
 }
 
-/** One motion entry, with its own speed and amount. */
+/**
+ * One motion entry, with its own speed and amount. "none" is kept as an
+ * ordinary, inert entry rather than special-cased away: it is a real member
+ * of MOTION_KINDS (it is the motion combobox's own default value), and
+ * render()'s per-kind lookups (layers/image.js) already ignore any entry
+ * whose kind isn't "drift", "warp" or "breathe" -- a stored "none" entry
+ * renders exactly like an empty list, no special-casing required. Dropping
+ * it used to be tempting because an empty list already means "no motion",
+ * but that shortcut is also what forced sfexport.js to bake a fake "warp"
+ * placeholder for `--motion none` (see buildImageDocument there): a dropped
+ * entry leaves nothing for the motion/tempo/strength controls' bind paths to
+ * write into. Keeping "none" gives those bindings a real, honest target.
+ */
 function normalizeMotion(raw, layerId, index, problems) {
   const input = raw && typeof raw === 'object' ? raw : {};
   const kind = str(input.kind, 'none');
@@ -68,8 +80,6 @@ function normalizeMotion(raw, layerId, index, problems) {
     problems.push(`Layer "${layerId}": unknown motion "${kind}" at position ${index}, dropped.`);
     return null;
   }
-  // An empty list already means "no motion", so a "none" entry is noise.
-  if (kind === 'none') return null;
   return {
     kind,
     speed: clamp(num(input.speed, 15), 0, 100),
@@ -80,6 +90,13 @@ function normalizeMotion(raw, layerId, index, problems) {
 /**
  * Read the motion list. Accepts the old singular `motion` field so documents
  * and effects exported before this change still load.
+ *
+ * render() (layers/image.js) picks the first entry matching a given kind via
+ * `motions.find(...)`, so two entries of the same kind would otherwise render
+ * according to array order -- a "depends on how the user sorted the list"
+ * surprise. Resolved here, once, explicitly: the first occurrence of a kind
+ * wins and every later one is dropped and reported, the same recovery style
+ * as an unknown kind above.
  */
 function normalizeMotions(input, layerId, problems) {
   const hasList = Array.isArray(input.motions);
@@ -88,9 +105,21 @@ function normalizeMotions(input, layerId, problems) {
     problems.push(`Layer "${layerId}": both motion and motions given, using motions.`);
   }
   const source = hasList ? input.motions : (hasSingle ? [input.motion] : []);
-  return source
-    .map((entry, index) => normalizeMotion(entry, layerId, index, problems))
-    .filter((entry) => entry !== null);
+
+  const seenKinds = new Set();
+  const result = [];
+  source.forEach((entry, index) => {
+    const motion = normalizeMotion(entry, layerId, index, problems);
+    if (motion === null) return;
+    if (seenKinds.has(motion.kind)) {
+      problems.push(`Layer "${layerId}": duplicate motion "${motion.kind}" at position ${index}, `
+        + 'dropped -- the first one wins.');
+      return;
+    }
+    seenKinds.add(motion.kind);
+    result.push(motion);
+  });
+  return result;
 }
 
 function normalizeLayer(raw, index, usedIds, problems) {
