@@ -1732,8 +1732,13 @@ function buildSource(asset, layer, state) {
   const gotW = Math.min(asset.width, wantX + wantW) - gotX;
   const gotH = Math.min(asset.height, wantY + wantH) - gotY;
 
-  const destX = BUFFER_PAD + rect.dx + (gotX - wantX) / scaleX;
-  const destY = BUFFER_PAD + rect.dy + (gotY - wantY) / scaleY;
+  // Anchor on the crop origin, NOT on the want origin. A source pixel s sits at
+  // BUFFER_PAD + rect.d? + (s - rect.s?) / scale — that is what puts the crop
+  // itself at BUFFER_PAD and lets whatever real content exists beyond it spill
+  // into the padding. Measuring from wantX instead shifts everything by one
+  // BUFFER_PAD and, in cover mode, pushes the right edge off the buffer.
+  const destX = BUFFER_PAD + rect.dx + (gotX - rect.sx) / scaleX;
+  const destY = BUFFER_PAD + rect.dy + (gotY - rect.sy) / scaleY;
   const destW = gotW / scaleX;
   const destH = gotH / scaleY;
 
