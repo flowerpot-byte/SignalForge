@@ -1,0 +1,62 @@
+// SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+// Copyright (C) 2026 Max
+// SPDX-License-Identifier: GPL-3.0-or-later
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const cli = join(root, 'bin', 'sfexport.js');
+
+// A 60x20 solid blue PNG. Verified real, not a placeholder.
+const BLUE_60x20 = 'iVBORw0KGgoAAAANSUhEUgAAADwAAAAUCAIAAABeYcl+AAAAKklEQVR42u3OAQ0AAAgDoGv/zlpDN0hAJZNvOg9JS0tLS0tLS0tLS0vftzy0ASdQ1Ru5AAAAAElFTkSuQmCC';
+
+test('the cli turns an image into an installed effect file', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    const stdout = execFileSync(process.execPath, [
+      cli, '--image', image, '--name', 'CLI Test', '--out', outDir, '--motion', 'warp'
+    ], { encoding: 'utf8', cwd: root });
+
+    const target = join(outDir, 'CLI Test.html');
+    assert.ok(existsSync(target), `expected ${target}\n${stdout}`);
+
+    const html = readFileSync(target, 'utf8');
+    assert.match(html, /<title>CLI Test<\/title>/);
+    assert.match(html, /<canvas id="exCanvas" width="320" height="200">/);
+    assert.match(html, /"kind":\s*"warp"/);
+    assert.ok(html.includes('SignalForgeEngine'));
+    // The picture must be embedded, not referenced.
+    assert.match(html, /"data":\s*"[A-Za-z0-9+/=]{100,}"/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the cli refuses to overwrite silently', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    const args = [cli, '--image', image, '--name', 'Twice', '--out', outDir];
+    execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root });
+    assert.throws(
+      () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      /already exists/
+    );
+    // --force gets through.
+    execFileSync(process.execPath, [...args, '--force'], { encoding: 'utf8', cwd: root });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

@@ -11,7 +11,8 @@
   "scripts": {
     "build:engine": "esbuild src/engine/index.js --bundle --format=iife --global-name=SignalForgeEngine --outfile=dist/engine.bundle.js",
     "pretest": "npm run build:engine",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "export": "node bin/sfexport.js"
   },
   "dependencies": {},
   "devDependencies": {
