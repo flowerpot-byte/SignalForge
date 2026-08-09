@@ -1,0 +1,14 @@
+{
+  "app.title": "SignalForge",
+  "layers.title": "Layers",
+  "inspector.title": "Settings",
+  "preview.dropHint": "Drop an image here",
+  "preview.cost": "Compute cost",
+  "footer.export": "Save to SignalRGB",
+  "footer.save": "Save project",
+  "footer.open": "Open project",
+  "footer.name": "Name",
+  "settings.language": "Language",
+  "settings.effectsFolder": "Effects folder",
+  "settings.chooseFolder": "Choose folder"
+}

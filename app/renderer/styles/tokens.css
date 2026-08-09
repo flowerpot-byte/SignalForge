@@ -1,0 +1,17 @@
+/* SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+   Copyright (C) 2026 Max
+   SPDX-License-Identifier: GPL-3.0-or-later */
+:root {
+  --bg-base:        #0b0d14;
+  --glass-fill:     rgba(255, 255, 255, 0.06);
+  --glass-stroke:   rgba(255, 255, 255, 0.12);
+  --glass-blur:     18px;
+  --text-strong:    rgba(255, 255, 255, 0.94);
+  --text-muted:     rgba(255, 255, 255, 0.58);
+  --accent:         #c94f7c;
+  --accent-soft:    rgba(201, 79, 124, 0.22);
+  --warn:           #e0a54a;
+  --radius:         14px;
+  --gap:            12px;
+  --panel-pad:      16px;
+}

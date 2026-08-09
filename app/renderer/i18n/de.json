@@ -1,0 +1,14 @@
+{
+  "app.title": "SignalForge",
+  "layers.title": "Ebenen",
+  "inspector.title": "Einstellungen",
+  "preview.dropHint": "Bild hierher ziehen",
+  "preview.cost": "Rechenlast",
+  "footer.export": "In SignalRGB speichern",
+  "footer.save": "Projekt speichern",
+  "footer.open": "Projekt oeffnen",
+  "footer.name": "Name",
+  "settings.language": "Sprache",
+  "settings.effectsFolder": "Effektordner",
+  "settings.chooseFolder": "Ordner waehlen"
+}
