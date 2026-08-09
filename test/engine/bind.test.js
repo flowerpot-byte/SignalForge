@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from '../../src/engine/bind.js';
+import { BINDABLE_DOCUMENT_FIELDS } from '../../src/engine/document.js';
 
 const base = () => ({
   brightness: 100,
@@ -157,4 +158,82 @@ test('a control can mix a layer binding and a document binding side by side', ()
   assert.equal(doc.layers[0].motion.speed, 77);
   assert.equal(doc.layers[1].motion.speed, 77);
   assert.equal(doc.brightness, 33);
+});
+
+// --- Finding 1: document-level bindings are gated by an explicit allowlist ---
+// (BINDABLE_DOCUMENT_FIELDS in document.js), not by "is this an own
+// property" the way a first attempt at this feature briefly allowed. A bare
+// binding to a real, own-property top-level field like `layers`, `controls`,
+// `assets` or `version` must still be ignored unless it is on that list. Use
+// a fixture that actually has all four as own properties, so this exercises
+// the allowlist gate rather than incidentally passing because the field is
+// missing.
+
+// Deliberately no pre-existing controls here (unlike base()): the point of
+// this fixture is to isolate what ONE pushed "evil" control's binding does.
+// If this reused base()'s `tempo`/`fade` controls, their own legitimate
+// layer bindings would fall back to their defaults on every applyControls
+// call below (since no value is supplied for them) and change `layers`
+// for reasons that have nothing to do with the allowlist being tested.
+const fullDoc = () => ({
+  brightness: 100,
+  layers: [
+    { id: 'a1', type: 'image', opacity: 1, motion: { kind: 'warp', speed: 15, amount: 30 } },
+    { id: 'b2', type: 'image', opacity: 1, motion: { kind: 'warp', speed: 15, amount: 30 } }
+  ],
+  controls: [],
+  version: 1,
+  assets: { thumb: { kind: 'image', mime: 'image/png', data: 'x' } }
+});
+
+test('brightness is on the document-bind allowlist', () => {
+  assert.ok(BINDABLE_DOCUMENT_FIELDS.includes('brightness'));
+});
+
+for (const field of ['layers', 'controls', 'assets', 'version']) {
+  test(`resolveBindingPath refuses an unlisted bare binding to the real own-property field "${field}"`, () => {
+    const doc = fullDoc();
+    assert.equal(Object.hasOwn(doc, field), true);
+    assert.equal(BINDABLE_DOCUMENT_FIELDS.includes(field), false);
+    assert.equal(resolveBindingPath(doc, field), null);
+  });
+
+  test(`applyControls ignores an unlisted bare binding and never overwrites "${field}"`, () => {
+    const input = fullDoc();
+    // Snapshot by value, not by reference: `controls` in particular is
+    // about to have a control pushed onto it, and applyControls only
+    // shallow-copies the document, so comparing against a live reference
+    // to the same array would trivially "pass" no matter what happened.
+    const before = structuredClone(input[field]);
+    input.controls.push({ property: 'evil', type: 'number', default: 1, bind: [field] });
+    const doc = applyControls(input, { evil: 12345 });
+    assert.notEqual(doc[field], 12345);
+    if (field === 'controls') {
+      // `before` predates the pushed control, so compare everything else.
+      assert.deepEqual(doc.controls.slice(0, before.length), before);
+    } else {
+      assert.deepEqual(doc[field], before);
+    }
+  });
+}
+
+test('resolveBindingPath rejects a bare "__proto__" binding via the allowlist, not just setByPath', () => {
+  assert.equal(resolveBindingPath(base(), '__proto__'), null);
+});
+
+test('resolveBindingPath rejects a bare "constructor" binding via the allowlist', () => {
+  assert.equal(resolveBindingPath(base(), 'constructor'), null);
+});
+
+test('resolveBindingPath rejects a bare "prototype" binding via the allowlist', () => {
+  assert.equal(resolveBindingPath(base(), 'prototype'), null);
+});
+
+test('a document-level bind to "constructor" is ignored and leaves Object.prototype untouched', () => {
+  const originalToString = Object.prototype.toString;
+  const input = base();
+  input.controls.push({ property: 'evil', type: 'number', default: 1, bind: ['constructor'] });
+  applyControls(input, { evil: 1 });
+  assert.equal(Object.prototype.toString, originalToString);
+  assert.equal(({}).toString(), '[object Object]');
 });

@@ -13,6 +13,7 @@ export {
   FIT_MODES,
   MOTION_KINDS,
   CONTROL_TYPES,
+  BINDABLE_DOCUMENT_FIELDS,
   clamp,
   normalizeDocument
 } from './document.js';

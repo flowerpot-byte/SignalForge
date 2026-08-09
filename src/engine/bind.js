@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import { BINDABLE_DOCUMENT_FIELDS } from './document.js';
+
 // Path segments that would reach off the object and onto its prototype
 // (or, via __proto__, mutate the shared Object.prototype itself). Never
 // walk through these, whether reading or writing.
@@ -55,21 +57,28 @@ export function resolveLayerPath(doc, path) {
  *  - "<layerId>.<rest>" addresses a field inside a layer, via resolveLayerPath
  *    above (e.g. "a1.motion.speed" -> "layers.0.motion.speed").
  *  - a bare name with no dot at all addresses a field on the document
- *    itself (e.g. "brightness", for a control with no per-layer meaning).
- *    The path returned is just that name, since document-level fields sit
- *    directly on the object applyControls already copies.
+ *    itself, but ONLY if it is listed in BINDABLE_DOCUMENT_FIELDS
+ *    (document.js) — e.g. "brightness", for a control with no per-layer
+ *    meaning. The path returned is just that name, since document-level
+ *    fields sit directly on the object applyControls already copies. A bare
+ *    name that isn't on the allowlist resolves to null, exactly like an
+ *    unknown layer id: without this gate, any bare bind entry would fall
+ *    through to setByPath's generic "is this an own property" check, which
+ *    would happily let a control overwrite `layers`, `controls`, `assets`
+ *    or `version` wholesale — the render loop's entire write surface, not
+ *    just a chosen field.
  *
  * These two shapes cannot collide: resolveLayerPath already requires a dot
  * (no dot -> null), so a bare name can never be mistaken for a layer id
  * followed by a path, and a layer id can never be mistaken for a document
  * field. setByPath still refuses __proto__/constructor/prototype and any
- * segment that isn't already an own property, so a document-level binding
- * gets exactly the same guards as a layer-level one — including that
- * "brightness" must already exist on the document (it does, unconditionally,
- * once normalizeDocument has run — see document.js).
+ * segment that isn't already an own property, so an allowlisted
+ * document-level binding gets exactly the same guards as a layer-level one
+ * on top of the allowlist gate here.
  */
 export function resolveBindingPath(doc, binding) {
-  return binding.includes('.') ? resolveLayerPath(doc, binding) : binding;
+  if (binding.includes('.')) return resolveLayerPath(doc, binding);
+  return BINDABLE_DOCUMENT_FIELDS.includes(binding) ? binding : null;
 }
 
 /**

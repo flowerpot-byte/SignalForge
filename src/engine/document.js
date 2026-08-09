@@ -19,6 +19,21 @@ export const FIT_MODES = Object.freeze(['cover', 'stretch', 'contain']);
 export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe']);
 export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combobox']);
 
+/**
+ * Top-level document fields a control's `bind` array may address directly,
+ * i.e. a bind entry with no dot (see `resolveBindingPath` in bind.js, which
+ * is the only place that reads this list). This is an allowlist, not a
+ * shape check: `brightness` is listed because it is meant to be
+ * controllable from an exported effect's UI. `layers`, `controls`,
+ * `assets` and `version` are deliberately NOT listed even though they are
+ * also own properties of a normalized document — a control silently
+ * overwriting one of those wholesale with a raw number would corrupt the
+ * render loop. Anything not in this list resolves to nothing, exactly like
+ * an unknown layer id, instead of falling through to a generic "is this an
+ * own property" check.
+ */
+export const BINDABLE_DOCUMENT_FIELDS = Object.freeze(['brightness']);
+
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
 
