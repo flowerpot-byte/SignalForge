@@ -105,6 +105,47 @@ Sättigung und ähnliche Filter müssen entweder beim Import ins Bild eingerechn
 
 ---
 
+## Kann ein Effekt von außen mit Live-Daten gefüttert werden?
+
+**Nein.** Damit ist echte Synchronisation mit irgendetwas Laufendem — Wallpaper, Musik,
+Sensoren — ausgeschlossen, solange SignalRGB nichts von sich aus anbietet.
+
+Der entscheidende Fund steht in der Konsole:
+
+```
+[blocked] The page at https://signalrgbmarketplace.pages.dev/ was not allowed to
+          display insecure content from http://127.0.0.1:47821/
+Fetch API cannot load http://127.0.0.1:47821/ due to access control checks.
+```
+
+**Effekte laufen nicht als lokale Datei.** SignalRGB lädt sie unter einer eigenen
+HTTPS-Herkunft (`signalrgbmarketplace.pages.dev`), obwohl die Datei auf der Platte liegt. Das
+erklärt beide Absagen mit einer Ursache:
+
+| Weg | Ergebnis | Warum |
+|---|---|---|
+| Nachbardatei per `fetch` | ❌ | Die Seite ist keine `file://`-Seite; die Datei liegt außerhalb ihrer Herkunft |
+| Nachbardatei per `XMLHttpRequest` | ❌ | dasselbe |
+| `http://127.0.0.1` per `fetch` | ❌ | **Mixed Content** — eine HTTPS-Seite darf kein unverschlüsseltes HTTP laden |
+| `http://127.0.0.1` per `XMLHttpRequest` | ❌ | dasselbe |
+
+Geprüft mit einem Server, der ausdrücklich `Access-Control-Allow-Origin: *` sendet. Es lag also
+nicht an fehlender Freigabe — die Anfrage wurde blockiert, **bevor** CORS überhaupt zum Zug kam.
+
+### Was das ausschließt, und was übrig bleibt
+
+Ein lokaler HTTPS-Server wäre theoretisch möglich, bräuchte aber ein Zertifikat, dem der Browser
+traut. Das hieße, auf jedem Rechner eine eigene Zertifizierungsstelle zu installieren — ein
+tiefer Eingriff ins System, für ein Beleuchtungswerkzeug nicht vertretbar, und für Freunde und
+Fremde erst recht nicht zumutbar. `ws://` scheitert an derselben Regel.
+
+**Übrig bleibt: alles vorher ausrechnen und in den Effekt hineinschreiben.** Der Effekt ist eine
+in sich geschlossene Datei, die nichts von der Außenwelt erfährt. Das ist die Grenze, innerhalb
+derer SignalForge arbeitet.
+
+Für das Wallpaper heißt das: Quelldatei lesen, einmal umrechnen, als Schleife einbetten. Kein
+Gleichlauf mit dem echten Wallpaper — und das darf auch nicht versprochen werden.
+
 ## Der Motorcheck bleibt
 
 `tools/motorcheck/` erzeugt den Prüfeffekt neu. Bei jedem neuen Browser-Baustein, den ein
