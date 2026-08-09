@@ -105,8 +105,19 @@ export async function prepareImageFile(imagePath, options = {}, { timeoutMs = DE
     // On the timeout path the child is killed rather than allowed to exit
     // on its own, so on Windows its handles on files in `dir` can take a
     // moment to actually release; retry past that instead of leaking the
-    // directory or letting a transient EBUSY escape from this finally block
-    // and mask the real rejection above.
-    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    // directory. `force: true` only swallows ENOENT, not EBUSY/EPERM once
+    // retries are exhausted, so rmSync can still throw here. A throw from a
+    // finally block replaces whatever the try block was about to
+    // resolve/reject with, which would hide the real outcome (e.g. the
+    // "prepare timed out" rejection this cleanup exists for) behind a
+    // filesystem error. Guard it the same way the 'close' handler above
+    // guards its own outFile parsing, so a cleanup failure can never mask
+    // the original result.
+    try {
+      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+    } catch {
+      // Best-effort cleanup only; the caller needs the real outcome above,
+      // not a leftover-temp-directory error.
+    }
   }
 }
