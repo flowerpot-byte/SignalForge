@@ -13,8 +13,16 @@ const COST_WINDOW = 30;
  * It loads the same bundle the exported effect embeds, so what is on screen
  * here is produced by the same code that will run inside SignalRGB. That is
  * the whole reason to bundle at all — see test/export/parity.test.js.
+ *
+ * @param {*} container
+ * @param {(key: string) => string} t
+ * @param {(callback: (stamp: number) => void) => void} [requestFrame] The
+ *   frame scheduler, defaulting to the real `window.requestAnimationFrame`.
+ *   Tests inject a fake so they can control exactly when frames run and
+ *   interleave a stale pending frame with a fresh `start()` — see
+ *   test/app/preview-loop.test.js.
  */
-export function createPreview(container, t) {
+export function createPreview(container, t, requestFrame = (cb) => window.requestAnimationFrame(cb)) {
   const SF = window.SignalForgeEngine;
 
   const canvas = document.createElement('canvas');
@@ -39,6 +47,17 @@ export function createPreview(container, t) {
   let lastFrame = -1e9;
   const samples = [];
 
+  // A plain `running` flag is not enough to kill a stale requestAnimationFrame
+  // chain: between a stop() and a fast start(), a frame already pending from
+  // the OLD chain would see `running === true` again (set by the new start())
+  // and reschedule itself, so two chains render in parallel and double the
+  // cost samples. Each start() mints a new generation and captures it in the
+  // scheduled closure; a frame whose captured generation is stale returns
+  // without rendering and without rescheduling, so it dies on its own instead
+  // of relying on the shared flag. stop() also bumps the generation so any
+  // frame already in flight is invalidated even before the next start().
+  let generation = 0;
+
   async function setDocument(next) {
     doc = SF.normalizeDocument(next).doc;
     assets = await SF.loadAssets(doc, {
@@ -46,9 +65,9 @@ export function createPreview(container, t) {
     });
   }
 
-  function frame(stamp) {
-    if (!running) return;
-    window.requestAnimationFrame(frame);
+  function frame(gen, stamp) {
+    if (gen !== generation) return;
+    requestFrame((nextStamp) => frame(gen, nextStamp));
     if (start === null) start = stamp;
     if (stamp - lastFrame < FRAME_GAP) return;
     lastFrame = stamp;
@@ -65,8 +84,17 @@ export function createPreview(container, t) {
 
   return {
     setDocument,
-    start() { if (!running) { running = true; window.requestAnimationFrame(frame); } },
-    stop() { running = false; },
+    start() {
+      if (running) return;
+      running = true;
+      generation += 1;
+      const gen = generation;
+      requestFrame((stamp) => frame(gen, stamp));
+    },
+    stop() {
+      running = false;
+      generation += 1;
+    },
     cost() {
       const ms = samples.length ? samples.reduce((a, b) => a + b, 0) / samples.length : 0;
       return { msPerFrame: ms, coreShare: coreShare(ms) };
