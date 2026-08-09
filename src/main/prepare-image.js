@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -43,7 +43,29 @@ export async function prepareImageFile(imagePath, options = {}) {
       let stderr = '';
       child.stderr.on('data', (chunk) => { stderr += chunk; });
       child.on('error', reject);
-      child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`prepare failed (${code})\n${stderr}`))));
+
+      // 'close' (not 'exit') waits for stdio to finish draining, so stderr
+      // above is guaranteed complete by the time we read it here. Same
+      // reasoning as test/harness/render.js.
+      child.on('close', (code) => {
+        if (code === 0) { resolve(); return; }
+
+        // prepare-image-runner.cjs writes the real error into outFile
+        // before exiting non-zero. Surface that instead of the bare exit
+        // code, without letting a bad outFile mask the original failure.
+        if (existsSync(outFile)) {
+          try {
+            const raw = JSON.parse(readFileSync(outFile, 'utf8'));
+            if (raw && raw.error) {
+              reject(new Error(`prepare failed (${code}): ${raw.error}`));
+              return;
+            }
+          } catch {
+            // outFile wasn't valid JSON (partial write); fall through.
+          }
+        }
+        reject(new Error(`prepare failed (${code})\n${stderr}`));
+      });
     });
 
     const asset = JSON.parse(readFileSync(outFile, 'utf8'));

@@ -60,3 +60,77 @@ test('the cli refuses to overwrite silently', () => {
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('"--name --force" does not let --force be swallowed as the name', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    const args = [cli, '--image', image, '--name', '--force', '--out', outDir];
+    assert.throws(
+      () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      /--name needs a value/
+    );
+    // Neither the folder nor a "--force.html" effect should exist: the bad
+    // arguments must be rejected before anything is written.
+    assert.ok(!existsSync(outDir), 'no output should have been written');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an unknown option is rejected by name, not silently ignored', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    const args = [cli, '--image', image, '--otu', outDir];
+    assert.throws(
+      () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      /unknown option: --otu/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('an invalid --motion value is rejected', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    const args = [cli, '--image', image, '--out', outDir, '--motion', 'zzz'];
+    assert.throws(
+      () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      /unknown --motion value.*zzz/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a prepare-time failure surfaces the real cause, not a bare exit code', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'broken.png');
+  const outDir = join(dir, 'Effects');
+  // Bytes that are not a PNG at all, just wearing the extension. The
+  // browser's image decoder must reject this, and that specific reason
+  // must reach the user instead of a bare "prepare failed (1)".
+  writeFileSync(image, Buffer.from('this is not an image, just text with a .png name', 'utf8'));
+
+  try {
+    const args = [cli, '--image', image, '--out', outDir];
+    assert.throws(
+      () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      /could not decode image/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

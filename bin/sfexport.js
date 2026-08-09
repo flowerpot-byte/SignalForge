@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { buildEffectHtml } from '../src/export/build-effect.js';
 import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
+import { MOTION_KINDS, FIT_MODES } from '../src/engine/document.js';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -24,17 +25,32 @@ Options:
   --force            Overwrite an existing effect of the same name.
 `;
 
+// Flags that take a value. --force is handled separately as the one
+// value-less flag.
+const VALUE_FLAGS = new Set(['image', 'project', 'name', 'motion', 'fit', 'out']);
+
 function parseArguments(argv) {
   const options = { motion: 'warp', fit: 'cover', force: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--force') { options.force = true; continue; }
-    const key = flag.startsWith('--') ? flag.slice(2) : null;
-    if (!key) throw new Error(`unexpected argument: ${flag}`);
+    if (!flag.startsWith('--')) throw new Error(`unexpected argument: ${flag}`);
+    const key = flag.slice(2);
+    if (!VALUE_FLAGS.has(key)) throw new Error(`unknown option: ${flag}`);
     i += 1;
     if (i >= argv.length) throw new Error(`${flag} needs a value`);
-    options[key] = argv[i];
+    const value = argv[i];
+    if (value.startsWith('--')) throw new Error(`${flag} needs a value, got "${value}"`);
+    options[key] = value;
   }
+
+  if (!MOTION_KINDS.includes(options.motion)) {
+    throw new Error(`unknown --motion value: "${options.motion}" (expected ${MOTION_KINDS.join('|')})`);
+  }
+  if (!FIT_MODES.includes(options.fit)) {
+    throw new Error(`unknown --fit value: "${options.fit}" (expected ${FIT_MODES.join('|')})`);
+  }
+
   return options;
 }
 
@@ -51,14 +67,25 @@ function resolveOutputFolder(explicit) {
   return found[0];
 }
 
-async function buildDocument(options) {
+/**
+ * Resolve the document's name (and, for `--project`, the already-parsed
+ * document) without touching Electron. Used to compute the target file
+ * path before paying for the expensive part of `--image` mode, so a run
+ * destined to fail the overwrite check fails fast instead of after the
+ * image has already been prepared.
+ */
+function resolveNameAndProject(options) {
   if (options.project) {
-    return JSON.parse(readFileSync(options.project, 'utf8'));
+    const project = JSON.parse(readFileSync(options.project, 'utf8'));
+    return { name: project.name, project };
   }
   if (!options.image) throw new Error(USAGE);
-
-  const asset = await prepareImageFile(options.image);
   const name = options.name || basename(options.image).replace(/\.[^.]+$/, '');
+  return { name, project: null };
+}
+
+async function buildImageDocument(options, name) {
+  const asset = await prepareImageFile(options.image);
   return {
     name,
     description: `Built from ${basename(options.image)} with SignalForge.`,
@@ -82,25 +109,30 @@ async function buildDocument(options) {
 
 async function main() {
   const options = parseArguments(process.argv.slice(2));
-  const doc = await buildDocument(options);
 
   const bundle = join(root, 'dist', 'engine.bundle.js');
   if (!existsSync(bundle)) throw new Error('dist/engine.bundle.js missing. Run: npm run build:engine');
   const engineSource = readFileSync(bundle, 'utf8');
 
+  const { name, project } = resolveNameAndProject(options);
+
   const folder = resolveOutputFolder(options.out);
   mkdirSync(folder, { recursive: true });
-  const target = join(folder, `${doc.name}.html`);
+  const target = join(folder, `${name}.html`);
 
   if (existsSync(target) && !options.force) {
     throw new Error(`"${target}" already exists. Pass --force to overwrite.`);
   }
 
+  // Only reached once the overwrite check has passed: this is the
+  // expensive step (an Electron launch) for `--image` mode.
+  const doc = project || await buildImageDocument(options, name);
+
   const html = buildEffectHtml({ doc, engineSource, lang: 'en' });
   writeFileSync(target, html, 'utf8');
   const kb = (statSync(target).size / 1024).toFixed(1);
   console.log(`Wrote ${target} (${kb} KB)`);
-  console.log('If SignalRGB does not list it, restart SignalRGB (see docs/erkenntnisse-video.md).');
+  console.log('If SignalRGB does not list it, restart SignalRGB (see docs/erkenntnisse-signalrgb-motor.md).');
 }
 
 main().catch((error) => {
