@@ -1,0 +1,47 @@
+// SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+// Copyright (C) 2026 Max
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/** Decode the base64 RGBA blob the harness page returns. */
+export function decodePixels(base64) {
+  return new Uint8Array(Buffer.from(base64, 'base64'));
+}
+
+export function pixelAt(pixels, width, x, y) {
+  const i = (y * width + x) * 4;
+  return { r: pixels[i], g: pixels[i + 1], b: pixels[i + 2], a: pixels[i + 3] };
+}
+
+export function meanBrightness(pixels) {
+  let sum = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    sum += (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+  }
+  return sum / (pixels.length / 4);
+}
+
+/** Largest per-channel difference between two equally sized frames. */
+export function maxDifference(a, b) {
+  if (a.length !== b.length) throw new Error('maxDifference: frames differ in size');
+  let max = 0;
+  for (let i = 0; i < a.length; i += 1) {
+    const d = Math.abs(a[i] - b[i]);
+    if (d > max) max = d;
+  }
+  return max;
+}
+
+/** Mean per-channel difference. Small values mean "visually identical". */
+export function meanDifference(a, b) {
+  if (a.length !== b.length) throw new Error('meanDifference: frames differ in size');
+  let sum = 0;
+  for (let i = 0; i < a.length; i += 1) sum += Math.abs(a[i] - b[i]);
+  return sum / a.length;
+}
+
+/** True when the colour is within tolerance of the expected one. */
+export function isColour(actual, expected, tolerance = 12) {
+  return Math.abs(actual.r - expected[0]) <= tolerance
+    && Math.abs(actual.g - expected[1]) <= tolerance
+    && Math.abs(actual.b - expected[2]) <= tolerance;
+}

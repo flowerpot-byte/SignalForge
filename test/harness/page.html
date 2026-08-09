@@ -1,0 +1,36 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>SignalForge render harness</title>
+<body style="margin:0;padding:0;background:#000">
+  <canvas id="exCanvas" width="320" height="200"></canvas>
+</body>
+<script src="../../dist/engine.bundle.js"></script>
+<script>
+  const canvas = document.getElementById('exCanvas');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  function grab() {
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    let binary = '';
+    const bytes = image.data;
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+    return { width: canvas.width, height: canvas.height, pixels: btoa(binary) };
+  }
+
+  window.__run = async function (job) {
+    const { createRenderer, loadAssets, normalizeDocument } = window.SignalForgeEngine;
+    const { doc } = normalizeDocument(job.doc);
+    const assets = await loadAssets(doc, {
+      resolveUrl: (asset) => (asset.data ? `data:${asset.mime};base64,${asset.data}` : asset.file)
+    });
+    const renderer = createRenderer();
+    // Render twice so any lazily built scratch buffers exist for the measured frame.
+    renderer.render(ctx, doc, assets, job.timeSec);
+    renderer.render(ctx, doc, assets, job.timeSec);
+    const result = grab();
+    renderer.dispose();
+    return result;
+  };
+
+  window.__grab = grab;
+</script>
