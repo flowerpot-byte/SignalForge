@@ -38,15 +38,21 @@ export function createSettings({ file, readFile, writeFile }) {
   return {
     all: () => ({ ...values }),
     get: (key) => values[key],
-    set(key, value) {
+    async set(key, value) {
       if (!Object.prototype.hasOwnProperty.call(SETTING_TYPES, key)) {
         throw new Error(`unknown setting: ${key}`);
       }
       if (typeof value !== SETTING_TYPES[key]) {
         throw new Error(`setting ${key} must be a ${SETTING_TYPES[key]}`);
       }
-      values[key] = value;
-      writeFile(file, JSON.stringify(values, null, 2));
+      // Write first, mutate `values` only once the write has actually
+      // succeeded. Applying the mutation before the write (as an earlier
+      // draft of this code did) lets `get()`/`all()` report a value that was
+      // never persisted if `writeFile` throws — a caller could tell the user
+      // "saved" for a change that silently evaporates on the next restart.
+      const next = { ...values, [key]: value };
+      await writeFile(file, JSON.stringify(next, null, 2));
+      values = next;
     }
   };
 }

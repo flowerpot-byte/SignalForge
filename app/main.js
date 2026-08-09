@@ -4,7 +4,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { createSettings } from '../src/main/settings.js';
 import { resolveEffectsTarget } from '../src/main/effects-target.js';
@@ -28,17 +28,30 @@ function currentTarget() {
 function writeFileAtomic(file, text) {
   const tempFile = `${file}.${process.pid}.tmp`;
   writeFileSync(tempFile, text, 'utf8');
-  renameSync(tempFile, file);
+  try {
+    renameSync(tempFile, file);
+  } catch (err) {
+    // The temp file is now orphaned garbage in userData — clean it up on a
+    // best-effort basis (it may already be gone, or removal may itself fail)
+    // before re-throwing the original error to the caller.
+    try {
+      unlinkSync(tempFile);
+    } catch {
+      // Nothing more we can do about the leftover temp file; the original
+      // error below is the one that matters to the caller.
+    }
+    throw err;
+  }
 }
 
 ipcMain.handle('sf:version', () => app.getVersion());
 ipcMain.handle('sf:settings:all', () => settings.all());
-ipcMain.handle('sf:settings:set', (_e, key, value) => { settings.set(key, value); return settings.all(); });
+ipcMain.handle('sf:settings:set', async (_e, key, value) => { await settings.set(key, value); return settings.all(); });
 ipcMain.handle('sf:effectsTarget', () => currentTarget());
 ipcMain.handle('sf:chooseFolder', async () => {
   const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
   if (result.canceled || result.filePaths.length === 0) return currentTarget();
-  settings.set('effectsFolder', result.filePaths[0]);
+  await settings.set('effectsFolder', result.filePaths[0]);
   return currentTarget();
 });
 
