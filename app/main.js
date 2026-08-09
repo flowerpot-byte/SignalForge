@@ -1,13 +1,46 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readFileSync, writeFileSync, renameSync, existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { createSettings } from '../src/main/settings.js';
+import { resolveEffectsTarget } from '../src/main/effects-target.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
+let settings;
+
+function currentTarget() {
+  return resolveEffectsTarget({
+    settings,
+    documentsPath: app.getPath('documents'),
+    homePath: homedir(),
+    exists: (p) => existsSync(p)
+  });
+}
+
+// Write via a temp file + rename so a crash mid-write can never leave a
+// truncated, unreadable settings.json behind — the rename is atomic, the
+// old file stays intact until the new one is fully on disk.
+function writeFileAtomic(file, text) {
+  const tempFile = `${file}.${process.pid}.tmp`;
+  writeFileSync(tempFile, text, 'utf8');
+  renameSync(tempFile, file);
+}
+
 ipcMain.handle('sf:version', () => app.getVersion());
+ipcMain.handle('sf:settings:all', () => settings.all());
+ipcMain.handle('sf:settings:set', (_e, key, value) => { settings.set(key, value); return settings.all(); });
+ipcMain.handle('sf:effectsTarget', () => currentTarget());
+ipcMain.handle('sf:chooseFolder', async () => {
+  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  if (result.canceled || result.filePaths.length === 0) return currentTarget();
+  settings.set('effectsFolder', result.filePaths[0]);
+  return currentTarget();
+});
 
 /**
  * The renderer gets no Node at all. Everything it needs arrives through the
@@ -43,6 +76,12 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  settings = createSettings({
+    file: join(app.getPath('userData'), 'settings.json'),
+    readFile: (f) => readFileSync(f, 'utf8'),
+    writeFile: writeFileAtomic
+  });
+
   const win = createWindow();
 
   if (process.env.SF_SELFTEST === '1') {

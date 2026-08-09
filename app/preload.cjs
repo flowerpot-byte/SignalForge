@@ -8,5 +8,11 @@ const { contextBridge, ipcRenderer } = require('electron');
  * purpose: nothing gets to the renderer that is not on this list.
  */
 contextBridge.exposeInMainWorld('sf', {
-  version: () => ipcRenderer.invoke('sf:version')
+  version: () => ipcRenderer.invoke('sf:version'),
+  settings: {
+    all: () => ipcRenderer.invoke('sf:settings:all'),
+    set: (key, value) => ipcRenderer.invoke('sf:settings:set', key, value)
+  },
+  effectsTarget: () => ipcRenderer.invoke('sf:effectsTarget'),
+  chooseFolder: () => ipcRenderer.invoke('sf:chooseFolder')
 });
