@@ -77,6 +77,61 @@ test('control property must be a valid javascript identifier', () => {
   assert.match(problems[0], /identifier/i);
 });
 
+test('unknown layer fit falls back to cover and is reported', () => {
+  const { doc, problems } = normalizeDocument({ layers: [{ id: 'x', type: 'image', fit: 'invalid-fit' }] });
+  assert.equal(doc.layers[0].fit, 'cover');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /fit/);
+});
+
+test('unknown motion kind falls back to none and is reported', () => {
+  const { doc, problems } = normalizeDocument({ layers: [{ id: 'x', type: 'image', motion: { kind: 'spin' } }] });
+  assert.equal(doc.layers[0].motion.kind, 'none');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /motion/);
+});
+
+test('unknown control type falls back to number and is reported', () => {
+  const { doc, problems } = normalizeDocument({ controls: [{ property: 'x', type: 'slider' }] });
+  assert.equal(doc.controls[0].type, 'number');
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /type/);
+});
+
+test('motion speed and amount are clamped into 0..100', () => {
+  const { doc } = normalizeDocument({ layers: [{ type: 'image', motion: { speed: 200, amount: -50 } }] });
+  assert.equal(doc.layers[0].motion.speed, 100);
+  assert.equal(doc.layers[0].motion.amount, 0);
+});
+
+test('normalizeAsset defaults and mutually excludes data vs file', () => {
+  const { doc } = normalizeDocument({
+    assets: {
+      withData: { data: 'base64stuff' },
+      withFile: { file: 'image.png' },
+      empty: {}
+    }
+  });
+
+  // Embedded asset with data
+  assert.equal(doc.assets.withData.kind, 'image');
+  assert.equal(doc.assets.withData.mime, 'image/png');
+  assert.equal(doc.assets.withData.data, 'base64stuff');
+  assert.equal(doc.assets.withData.file, undefined);
+
+  // Sibling asset with file
+  assert.equal(doc.assets.withFile.kind, 'image');
+  assert.equal(doc.assets.withFile.mime, 'image/png');
+  assert.equal(doc.assets.withFile.file, 'image.png');
+  assert.equal(doc.assets.withFile.data, undefined);
+
+  // Empty asset defaults to empty file
+  assert.equal(doc.assets.empty.kind, 'image');
+  assert.equal(doc.assets.empty.mime, 'image/png');
+  assert.equal(doc.assets.empty.file, '');
+  assert.equal(doc.assets.empty.data, undefined);
+});
+
 test('blend mode table maps onto canvas composite operations', () => {
   assert.equal(BLEND_MODES.normal, 'source-over');
   assert.equal(BLEND_MODES.add, 'lighter');
