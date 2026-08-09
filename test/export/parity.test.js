@@ -24,6 +24,16 @@ const DOC = {
   controls: []
 };
 
+// Every layer above is deliberately motion: 'none', and adding a moving one
+// would WEAKEN this test rather than strengthen it.
+//
+// The exported effect drives itself from its own requestAnimationFrame clock,
+// while the engine job renders at an explicit timeSec we hand it. With any
+// motion the two would be sampled at different phases, so the comparison would
+// measure clock alignment instead of engine equivalence — and would be flaky
+// for a reason that has nothing to do with what this test exists to prove.
+// With still layers the time is irrelevant and the comparison is exact.
+
 test('the exported effect renders the same pixels as the engine does', async () => {
   const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-'));
