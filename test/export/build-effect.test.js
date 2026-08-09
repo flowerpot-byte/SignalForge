@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { buildEffectHtml } from '../../src/export/build-effect.js';
-import { isValidIdentifier } from '../../src/engine/document.js';
 
 const ENGINE = 'window.SignalForgeEngine = {};';
 
@@ -92,20 +92,58 @@ test('a control property that is not a valid identifier throws and never reaches
   assert.fail('expected buildEffectHtml to throw for an invalid control property');
 });
 
-test('the rejection is driven by document.js\'s exported isValidIdentifier, not by the wording of its problems[] messages', () => {
+test('a control property that is not a valid identifier throws naming it, and a valid one does not', () => {
   const bad = structuredClone(doc);
   bad.controls[0].property = 'x; alert(1); //';
-
-  // Pin the mechanism directly: buildEffectHtml must reject exactly the
-  // properties isValidIdentifier rejects, independent of how normalizeDocument
-  // happens to phrase its advisory problem for the same property.
-  assert.equal(isValidIdentifier(bad.controls[0].property), false);
-  assert.throws(() => buildEffectHtml({ doc: bad, engineSource: ENGINE, lang: 'de' }));
+  assert.throws(
+    () => buildEffectHtml({ doc: bad, engineSource: ENGINE, lang: 'de' }),
+    /x; alert\(1\); \/\//
+  );
 
   const ok = structuredClone(doc);
   ok.controls[0].property = 'perfectlyFine';
-  assert.equal(isValidIdentifier(ok.controls[0].property), true);
   assert.doesNotThrow(() => buildEffectHtml({ doc: ok, engineSource: ENGINE, lang: 'de' }));
+});
+
+test('build-effect.js decides a control property is fatal by calling document.js\'s shared isValidIdentifier, not by reading normalizeDocument\'s advisory problems[] array', () => {
+  // This is a structural test in the style of test/engine/boundary.test.js
+  // (see docs/superpowers/plans/2026-08-09-signalforge-motor-und-export.md,
+  // task 11): it reads the source file itself, because no behavioural test
+  // against buildEffectHtml's output can tell these two implementations
+  // apart. normalizeDocument's problems[] array records the exact same
+  // "not a valid javascript identifier" wording that a problems-based
+  // implementation would string-match on, so an old, string-matching
+  // implementation classifies every example property in this file
+  // identically to the current isValidIdentifier-based one — any purely
+  // behavioural test stays green under both.
+  const source = readFileSync(new URL('../../src/export/build-effect.js', import.meta.url), 'utf8');
+
+  // Work on a copy with full-line "//" comments removed, because this file
+  // legitimately explains this very design in a comment that contains the
+  // word "problems" — a naive substring ban on the raw source would fail
+  // for that reason alone, which is not the regression this test guards
+  // against.
+  const code = source
+    .split(/\r?\n/)
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+
+  assert.match(
+    source,
+    /import\s*\{[^}]*\bisValidIdentifier\b[^}]*\}\s*from\s*['"]\.\.\/engine\/document\.js['"]/,
+    'build-effect.js must import isValidIdentifier from the engine document module'
+  );
+  assert.match(
+    code,
+    /\bisValidIdentifier\s*\(/,
+    'build-effect.js must call isValidIdentifier(...) to decide whether a control property is usable'
+  );
+  assert.doesNotMatch(
+    code,
+    /\bproblems\b/,
+    'build-effect.js must not read normalizeDocument\'s advisory problems[] array for validation; '
+      + 'that is exactly the string-matching regression this test exists to catch'
+  );
 });
 
 test('a property that merely looks unusual but is a valid identifier still builds', () => {
