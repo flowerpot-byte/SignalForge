@@ -14,4 +14,9 @@
   --radius:         14px;
   --gap:            12px;
   --panel-pad:      16px;
+  --glass-fill-hover: rgba(255, 255, 255, 0.11);
+  --backdrop-fallback: #243049;
+  --backdrop-seed-1: #2a3a5c;
+  --backdrop-seed-2: #4a2f52;
+  --backdrop-seed-3: #20404a;
 }

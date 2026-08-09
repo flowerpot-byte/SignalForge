@@ -67,7 +67,7 @@ button {
   padding: 8px 14px;
   cursor: pointer;
 }
-button:hover { background: rgba(255, 255, 255, 0.11); }
+button:hover { background: var(--glass-fill-hover); }
 button.primary { background: var(--accent-soft); border-color: var(--accent); }
 
 /* Focus must stay obvious on glass — never remove the ring without a

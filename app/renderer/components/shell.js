@@ -27,10 +27,14 @@ export function mountBackdrop(colours) {
     node.innerHTML = '<div></div><div></div><div></div>';
     document.body.prepend(node);
   }
+  // Fallback colour comes from tokens.css, not a literal here, so every
+  // colour in the project still lives in one place.
+  const fallback = getComputedStyle(document.documentElement)
+    .getPropertyValue('--backdrop-fallback').trim();
   const spots = [['6%', '4%'], ['52%', '38%'], ['24%', '62%']];
   node.querySelectorAll('div').forEach((blob, i) => {
     blob.style.left = spots[i][0];
     blob.style.top = spots[i][1];
-    blob.style.background = colours[i] ?? '#243049';
+    blob.style.background = colours[i] ?? fallback;
   });
 }
