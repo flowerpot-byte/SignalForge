@@ -75,9 +75,25 @@ const html = `<head>
       .then(function (r) { return r.text(); })
       .then(function (t) { report('fetch reads a sibling file', t.indexOf('LIVE-DATA-OK') >= 0 ? 'YES' : 'NO'); })
       .catch(function (e) { report('fetch reads a sibling file', 'THREW: ' + e); });
+
+    // The one route left after local file reads turned out to be blocked:
+    // a loopback server that explicitly allows the request. Needs
+    // tools/motorcheck/probe-server.mjs to be running.
+    fetch('http://127.0.0.1:47821/')
+      .then(function (r) { return r.text(); })
+      .then(function (t) { report('fetch reads localhost', t.indexOf('LIVE-HTTP-OK') >= 0 ? 'YES' : 'NO'); })
+      .catch(function (e) { report('fetch reads localhost', 'THREW: ' + e); });
   } else {
     report('fetch reads a sibling file', 'NO');
+    report('fetch reads localhost', 'NO');
   }
+
+  has('XHR reads localhost', function () {
+    var x = new XMLHttpRequest();
+    x.open('GET', 'http://127.0.0.1:47821/', false);
+    x.send(null);
+    return x.responseText.indexOf('LIVE-HTTP-OK') >= 0;
+  });
 
   // Paint the verdict so it is visible without opening the console:
   // green stripe per YES, red per NO, top to bottom.
