@@ -32,7 +32,12 @@ export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combo
  * an unknown layer id, instead of falling through to a generic "is this an
  * own property" check.
  */
-export const BINDABLE_DOCUMENT_FIELDS = Object.freeze(['brightness']);
+export const BINDABLE_DOCUMENT_FIELDS = Object.freeze([
+  'brightness',
+  'saturation',
+  'greenMagenta',
+  'blueYellow'
+]);
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
@@ -241,6 +246,14 @@ export function normalizeDocument(raw) {
     // the renderer (see engine.js). 100 = unchanged, matching every
     // document that predates this field so old previews/exports don't shift.
     brightness: clamp(num(input.brightness, 100), 0, 100),
+    // Colour post-processing, applied together with brightness in one pass
+    // over the finished frame (see engine.js applyFinish). Defaults match
+    // color.js's NEUTRAL_COLOR so a document that predates this field, or
+    // one where nobody touched these controls, renders byte-identical to
+    // before.
+    saturation: clamp(num(input.saturation, 100), 0, 200),
+    greenMagenta: clamp(num(input.greenMagenta, 0), -100, 100),
+    blueYellow: clamp(num(input.blueYellow, 0), -100, 100),
     layers,
     controls,
     assets

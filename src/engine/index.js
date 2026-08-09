@@ -19,6 +19,7 @@ export {
 } from './document.js';
 
 export { createRenderer, loadAssets } from './engine.js';
+export { adjustColor, isNeutral, NEUTRAL_COLOR } from './color.js';
 export { LAYER_RENDERERS, registerLayer } from './layers/index.js';
 export { computeSourceRect } from './util/fit.js';
 export { createWarpField, WARP_PEAK_FACTOR } from './motion/warp.js';
