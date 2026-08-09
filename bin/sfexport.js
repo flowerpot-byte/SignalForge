@@ -100,8 +100,10 @@ async function buildImageDocument(options, name) {
       motion: { kind: options.motion, speed: 15, amount: 30 }
     }],
     controls: [
+      { property: 'motion', label: { de: 'Modus', en: 'Motion' }, type: 'combobox', values: [...MOTION_KINDS], default: options.motion, bind: ['a1.motion.kind'] },
       { property: 'tempo', label: { de: 'Tempo', en: 'Speed' }, type: 'number', min: 1, max: 100, default: 15, bind: ['a1.motion.speed'] },
       { property: 'strength', label: { de: 'Staerke', en: 'Strength' }, type: 'number', min: 0, max: 100, default: 30, bind: ['a1.motion.amount'] },
+      { property: 'fit', label: { de: 'Bildausschnitt', en: 'Fit' }, type: 'combobox', values: [...FIT_MODES], default: options.fit, bind: ['a1.fit'] },
       { property: 'brightness', label: { de: 'Helligkeit', en: 'Brightness' }, type: 'number', min: 5, max: 100, default: 100, bind: ['brightness'] }
     ]
   };

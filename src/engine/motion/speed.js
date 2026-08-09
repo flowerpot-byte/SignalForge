@@ -40,33 +40,34 @@ const R0 = S0;
  * self-contained exponential ease between two fixed endpoints.
  *
  * Two different readings of "the tempo slider isn't good enough" were
- * raised, and which one is right has not been confirmed on hardware yet:
+ * raised. Hardware testing confirmed which one is right:
  *
- *  - Reading A, "the slider does too little": the whole range should feel
- *    wider — the same slider travel should produce a bigger change near
- *    BOTH extremes (very slow, very fast), even if that means the middle
- *    of the range (around the default) responds less per slider step.
- *    That means the low segment should be steep near speed 0 and flatten
- *    out approaching the default: LOW_SEGMENT_K NEGATIVE (concave).
- *  - Reading B, "I cannot set it finely enough" — the one implemented
- *    below. Only the low end is the complaint: the segment below the
- *    default should be flat near speed 0 (small slider moves near "almost
- *    stopped" barely change the rate, leaving room to dial in a precise
- *    slow setting) and steepen approaching the default: LOW_SEGMENT_K
- *    POSITIVE (convex). This matches the rationale the single-curve
- *    version it replaces was already built on (see git history) — the
- *    hardware-confirmed complaint was specifically about distinguishing
- *    slow, ambient settings, not about the fast end.
+ *  - Reading A, "the slider does too little" — the one implemented below.
+ *    The whole range should feel wider: the same slider travel should
+ *    produce a bigger change near BOTH extremes (very slow, very fast),
+ *    even if that means the middle of the range (around the default)
+ *    responds less per slider step. That means the low segment is steep
+ *    near speed 0 and flattens out approaching the default:
+ *    LOW_SEGMENT_K NEGATIVE (concave).
+ *  - Reading B, "I cannot set it finely enough". Only the low end would be
+ *    the complaint: the segment below the default flat near speed 0
+ *    (small slider moves near "almost stopped" barely change the rate,
+ *    leaving room to dial in a precise slow setting) and steepening
+ *    approaching the default: LOW_SEGMENT_K POSITIVE (convex). Rejected —
+ *    Max confirmed on hardware he meant Reading A instead.
  *
  * Both readings agree the high segment can stay compressed the same way
  * the single-curve version already had it (HIGH_SEGMENT_K positive) — the
- * top of the range was never the complaint either way.
+ * top of the range was never the complaint either way. That segment is
+ * already steep near speed 100 (see the table below), which is what gives
+ * Reading A its "bigger change near the fast extreme" too — no separate
+ * change needed there.
  *
- * To switch to reading A, flip ONE constant:
- *   const LOW_SEGMENT_K = -1.6;
+ * To switch back to reading B, flip ONE constant:
+ *   const LOW_SEGMENT_K = 1.6;
  * Nothing else in this file needs to change.
  */
-const LOW_SEGMENT_K = 1.6;
+const LOW_SEGMENT_K = -1.6;
 const HIGH_SEGMENT_K = 1.6;
 
 /**
@@ -98,18 +99,23 @@ function easeSegment(x, x0, x1, y0, y1, k) {
  *
  *   speed    old (speed/100)   speedToRate
  *   0        0.0000            0.0000
- *   1        0.0100            0.0043
- *   5        0.0500            0.0267
+ *   1        0.0100            0.0190
+ *   5        0.0500            0.0777
+ *   10       0.1000            0.1233
  *   15       0.1500            0.1500   <- default: identical to old, by construction
+ *   20       0.2000            0.1712
  *   30       0.3000            0.2202
  *   50       0.5000            0.3505
  *   100      1.0000            1.0000
  *
- * Below the default, the curve is flatter than the old linear mapping (a
- * given slider nudge near the very bottom changes the rate less), giving
- * more usable slider room exactly where the "I cannot set it finely
- * enough" complaint was aimed. Above the default it continues to compress
- * the top of the range, same as the single-curve version this replaces.
+ * Below the default, the curve is steeper than the old linear mapping near
+ * speed 0 (a given slider nudge near the very bottom changes the rate
+ * MORE than before) and flattens out approaching the default, giving a
+ * bigger felt change at the slow extreme — where the "the slider does too
+ * little" complaint was aimed. Above the default it continues to compress
+ * the middle of the top segment but steepens again near speed 100, same
+ * as the single-curve version this replaces, giving the fast extreme the
+ * same "bigger change" character without needing its own tuning.
  * Monotonic across the whole range, including across the join at the
  * default — verified in test/engine/speed.test.js with a fine-grained
  * sweep, not just per-segment.

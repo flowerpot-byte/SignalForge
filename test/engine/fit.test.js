@@ -61,6 +61,20 @@ test('matching aspect ratios crop nothing', () => {
   assert.equal(r.sh, 400);
 });
 
+test('an unrecognized fit value behaves exactly like "cover", not a crash', () => {
+  // applyControls (bind.js) writes a runtime control value straight into the
+  // document with no revalidation -- normalizeDocument, which is what
+  // catches an unknown fit and substitutes "cover", only ever runs once, on
+  // the document SignalRGB loads at startup, not on every frame's
+  // control-applied copy. So a stale or unexpected value handed back by
+  // SignalRGB's combobox reaches this function directly. It must fall back
+  // to sane (cover-shaped) output on its own, not throw and not render
+  // nothing.
+  const unknown = computeSourceRect({ srcW: 488, srcH: 200, ...CANVAS, fit: 'not-a-real-fit' });
+  const cover = computeSourceRect({ srcW: 488, srcH: 200, ...CANVAS, fit: 'cover' });
+  assert.deepEqual(unknown, cover);
+});
+
 test('zero or negative sizes are rejected loudly', () => {
   assert.throws(() => computeSourceRect({ srcW: 0, srcH: 10, ...CANVAS, fit: 'cover' }), /positive/);
 });

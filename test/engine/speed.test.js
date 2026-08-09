@@ -33,18 +33,27 @@ test('speedToRate(15), the tempo default, equals the old linear value exactly', 
   assert.equal(speedToRate(15), 0.15);
 });
 
-test('speedToRate is flatter than the old linear mapping near the very bottom of the range', () => {
-  // Reading B (the one implemented): the low segment starts flat at speed 0
-  // and only steepens as it approaches the default (speed 15) -- its
+test('speedToRate is steeper than the old linear mapping near the very bottom of the range', () => {
+  // Reading A (the one implemented): the low segment starts steep at speed 0
+  // and flattens out as it approaches the default (speed 15) -- its
   // average slope across [0, 15] is pinned to the old constant 1/100 (the
-  // chord from (0,0) to (15, 0.15) has exactly that slope), so a flatter
-  // start necessarily means a steeper finish, not an optional extra. This
-  // checks the "flatter start" half directly, near speed 1: small slider
-  // moves there should change the rate less than the old flat 1/100 slope
-  // did, freeing up slider room for fine adjustment at the slow end.
+  // chord from (0,0) to (15, 0.15) has exactly that slope), so a steeper
+  // start necessarily means a flatter finish, not an optional extra. This
+  // checks the "steeper start" half directly, near speed 1: small slider
+  // moves there should change the rate MORE than the old flat 1/100 slope
+  // did, giving a bigger felt change at the slow extreme.
   const step = 0.001;
   const slope = (speedToRate(1 + step) - speedToRate(1 - step)) / (2 * step);
-  assert.ok(slope < 1 / 100, `local slope near speed 1 (${slope}) is not flatter than the old constant 0.01`);
+  assert.ok(slope > 1 / 100, `local slope near speed 1 (${slope}) is not steeper than the old constant 0.01`);
+});
+
+test('speedToRate flattens out just below the default, the mirror of the steep start', () => {
+  // The low segment's average slope across [0, 15] is pinned to 1/100 (see
+  // above), so the steep start near speed 1 must be balanced by a flatter
+  // finish just below the default (speed 15) -- checked near speed 14.
+  const step = 0.001;
+  const slope = (speedToRate(14 + step) - speedToRate(14 - step)) / (2 * step);
+  assert.ok(slope < 1 / 100, `local slope near speed 14 (${slope}) is not flatter than the old constant 0.01`);
 });
 
 test('speedToRate compresses the top of the range', () => {

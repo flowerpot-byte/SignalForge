@@ -151,6 +151,50 @@ test('a document-level bind refuses a __proto__ binding and leaves Object.protot
   assert.equal(({}).toString(), '[object Object]');
 });
 
+test('applyControls writes a combobox string through to motion.kind untouched', () => {
+  const input = base();
+  input.controls.push({ property: 'motion', type: 'combobox', values: ['none', 'warp', 'drift', 'breathe'],
+    default: 'warp', bind: ['a1.motion.kind'] });
+  const doc = applyControls(input, { motion: 'drift' });
+  assert.equal(doc.layers[0].motion.kind, 'drift');
+  assert.equal(typeof doc.layers[0].motion.kind, 'string');
+});
+
+test('applyControls writes a combobox string through to fit untouched', () => {
+  const input = base();
+  input.layers[0].fit = 'cover';
+  input.controls.push({ property: 'fit', type: 'combobox', values: ['cover', 'stretch', 'contain'],
+    default: 'cover', bind: ['a1.fit'] });
+  const doc = applyControls(input, { fit: 'stretch' });
+  assert.equal(doc.layers[0].fit, 'stretch');
+});
+
+test('a combobox control with no value supplied falls back to its own default, not the number coercion path', () => {
+  // control.type !== 'number', so `Number(raw)` is never applied and the
+  // NaN-guard (`type === 'number' && !Number.isFinite(value)`) never fires
+  // for a combobox -- confirm the fallback-to-default path alone accounts
+  // for a missing value, the same as it does for a number control.
+  const input = base();
+  input.controls.push({ property: 'motion', type: 'combobox', values: ['none', 'warp'],
+    default: 'warp', bind: ['a1.motion.kind'] });
+  const doc = applyControls(input, {});
+  assert.equal(doc.layers[0].motion.kind, 'warp');
+});
+
+test('applyControls does not silently drop a combobox value that is not on the control\'s own values list '
+  + '-- writing it through is bind.js\'s job, not validation', () => {
+  // applyControls has no opinion on whether a value is one of the control's
+  // declared `values` -- that is normalizeDocument's job, and normalizeDocument
+  // never runs on the per-frame document applyControls produces (only once, on
+  // the document SignalRGB loads at startup). A stale or unexpected value from
+  // SignalRGB is written through exactly as handed over.
+  const input = base();
+  input.controls.push({ property: 'motion', type: 'combobox', values: ['none', 'warp'],
+    default: 'warp', bind: ['a1.motion.kind'] });
+  const doc = applyControls(input, { motion: 'not-a-real-motion-kind' });
+  assert.equal(doc.layers[0].motion.kind, 'not-a-real-motion-kind');
+});
+
 test('a control can mix a layer binding and a document binding side by side', () => {
   const input = base();
   input.controls.push({ property: 'brightness', type: 'number', default: 100, bind: ['brightness'] });

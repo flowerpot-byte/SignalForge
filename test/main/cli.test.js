@@ -41,6 +41,55 @@ test('the cli turns an image into an installed effect file', () => {
   }
 });
 
+test('the generated effect exposes motion and fit combobox controls with the engine\'s value lists', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    execFileSync(process.execPath, [
+      cli, '--image', image, '--name', 'Controls Test', '--out', outDir, '--motion', 'warp', '--fit', 'cover'
+    ], { encoding: 'utf8', cwd: root });
+
+    const html = readFileSync(join(outDir, 'Controls Test.html'), 'utf8');
+
+    // The engine's own value lists (MOTION_KINDS / FIT_MODES), not a second,
+    // hand-copied list that could drift out of sync with them.
+    assert.match(html, /<meta property="motion" label="Motion" type="combobox" values="none,warp,drift,breathe" default="warp"/);
+    assert.match(html, /<meta property="fit" label="Fit" type="combobox" values="cover,stretch,contain" default="cover"/);
+
+    // Both bindings must reach the layer, so a control change actually moves something.
+    assert.ok(html.includes('typeof motion'), 'bootstrap must read the "motion" global every frame');
+    assert.ok(html.includes('typeof fit'), 'bootstrap must read the "fit" global every frame');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the motion and fit control defaults follow --motion and --fit when the user never touches the sliders', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    execFileSync(process.execPath, [
+      cli, '--image', image, '--name', 'Defaults Test', '--out', outDir, '--motion', 'drift', '--fit', 'contain'
+    ], { encoding: 'utf8', cwd: root });
+
+    const html = readFileSync(join(outDir, 'Defaults Test.html'), 'utf8');
+    assert.match(html, /<meta property="motion"[^>]*default="drift"/);
+    assert.match(html, /<meta property="fit"[^>]*default="contain"/);
+    // The layer itself must also be baked in with the same values, matching
+    // the command line -- not just the control's advertised default.
+    assert.match(html, /"kind":\s*"drift"/);
+    assert.match(html, /"fit":\s*"contain"/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the cli refuses to overwrite silently', () => {
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
   const image = join(dir, 'blue.png');

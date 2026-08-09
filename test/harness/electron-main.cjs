@@ -26,6 +26,31 @@ async function main() {
       // Load an exported effect file and read its canvas back.
       await win.loadFile(job.file);
       await new Promise((resolve) => setTimeout(resolve, job.settleMs ?? 120));
+
+      // Simulate SignalRGB writing a control value: set a global variable of
+      // the same name the bootstrap's readControls() reads every frame
+      // (`typeof <property> !== 'undefined' ? <property> : undefined`).
+      //
+      // A hidden, offscreen BrowserWindow does not keep ticking its own
+      // requestAnimationFrame loop on its own account -- Chromium paints the
+      // first frame or two right after load and then stops scheduling more,
+      // since nothing ever makes the page "visible". Confirmed by hand:
+      // after 500ms of waiting post-load with no forced call, the bootstrap's
+      // own render() was invoked zero further times. So instead of waiting on
+      // a loop that will not run here, call the bootstrap's own top-level
+      // `update` function once directly (`var`/function declarations in a
+      // non-module <script> are global, so it is reachable as `update`) --
+      // the exact same function requestAnimationFrame would have called, not
+      // a reimplementation of it.
+      if (job.setGlobals) {
+        const assignments = Object.entries(job.setGlobals)
+          .map(([key, value]) => `window[${JSON.stringify(key)}] = ${JSON.stringify(value)};`)
+          .join(' ');
+        await win.webContents.executeJavaScript(assignments);
+        await win.webContents.executeJavaScript('update(performance.now()); undefined;');
+        await new Promise((resolve) => setTimeout(resolve, job.afterSetGlobalsMs ?? job.settleMs ?? 120));
+      }
+
       const value = await win.webContents.executeJavaScript(`(() => {
         const c = document.getElementById('exCanvas');
         const g = c.getContext('2d', { willReadFrequently: true });
