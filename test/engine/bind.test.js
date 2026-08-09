@@ -63,3 +63,47 @@ test('unknown bindings are ignored rather than throwing', () => {
   input.controls.push({ property: 'x', type: 'number', default: 1, bind: ['ghost.motion.speed'] });
   assert.doesNotThrow(() => applyControls(input, { x: 5 }));
 });
+
+test('setByPath refuses a __proto__ segment and leaves Object.prototype untouched', () => {
+  const originalToString = Object.prototype.toString;
+  const doc = { layers: [{ id: 'a1', opacity: 1 }] };
+  const result = setByPath(doc, 'layers.0.__proto__.toString', 'POLLUTED');
+  assert.equal(result, false);
+  assert.equal(Object.prototype.toString, originalToString);
+  assert.equal(({}).toString(), '[object Object]');
+});
+
+test('setByPath refuses a constructor segment', () => {
+  const doc = { layers: [{ id: 'a1', opacity: 1 }] };
+  const result = setByPath(doc, 'layers.0.constructor.prototype.polluted', 'BAD');
+  assert.equal(result, false);
+  assert.equal(({}).polluted, undefined);
+});
+
+test('setByPath refuses an inherited-only key that is not an own property', () => {
+  const doc = { layers: [{ id: 'a1', opacity: 1 }] };
+  const result = setByPath(doc, 'layers.0.toString', 'HACKED');
+  assert.equal(result, false);
+  assert.equal(Object.hasOwn(doc.layers[0], 'toString'), false);
+  assert.equal(doc.layers[0].toString, Object.prototype.toString);
+});
+
+test('getByPath returns undefined for a path containing __proto__ instead of walking into it', () => {
+  const doc = { layers: [{ id: 'a1', opacity: 1 }] };
+  assert.equal(getByPath(doc, 'layers.0.__proto__.toString'), undefined);
+});
+
+test('applyControls does not deep-copy assets', () => {
+  const doc = base();
+  doc.assets = { thumbnail: 'data:image/png;base64,verylongpayload' };
+  const result = applyControls(doc, { tempo: 90 });
+  assert.equal(result.assets, doc.assets);
+});
+
+test('applyControls still prevents a nested write from reaching the original document', () => {
+  const original = base();
+  const result = applyControls(original, { tempo: 90 });
+  assert.equal(original.layers[0].motion.speed, 15);
+  assert.equal(result.layers[0].motion.speed, 90);
+  assert.notEqual(result.layers[0].motion, original.layers[0].motion);
+});
