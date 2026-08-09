@@ -30,9 +30,16 @@ function controlMeta(control, lang) {
     `type="${attribute(control.type)}"`
   ];
   if (control.type === 'number') {
-    parts.push(`min="${control.min}"`, `max="${control.max}"`);
+    parts.push(`min="${attribute(control.min)}"`, `max="${attribute(control.max)}"`);
   }
   if (control.type === 'combobox') {
+    for (const value of control.values) {
+      if (value.includes(',')) {
+        throw new Error(`Control "${control.property}": combobox value "${value}" contains a comma. `
+          + 'SignalRGB\'s "values" attribute is comma-separated, so this value cannot be represented '
+          + 'and would silently split into two options.');
+      }
+    }
     parts.push(`values="${attribute(control.values.join(','))}"`);
   }
   parts.push(`default="${attribute(control.default)}"`);
@@ -61,7 +68,12 @@ function bootstrap(controls) {
     resolveUrl: function (asset) {
       return asset.data ? 'data:' + asset.mime + ';base64,' + asset.data : asset.file;
     }
-  }).then(function (loaded) { assets = loaded; });
+  }).then(function (loaded) { assets = loaded; }).catch(function (err) {
+    // Without this, a rejected load leaves assets === null forever: update()
+    // keeps returning early every frame and the effect is silently black,
+    // with nothing but an unhandled-rejection nobody is watching for.
+    console.log('SignalForge: failed to load assets, effect will stay blank.', err);
+  });
 
   function readControls() {
     var values = {};
@@ -92,7 +104,32 @@ ${reads}
  * bundle drives the preview, which is what makes the preview trustworthy.
  */
 export function buildEffectHtml({ doc: rawDoc, engineSource, lang = 'en' }) {
-  const { doc } = normalizeDocument(rawDoc);
+  const { doc, problems } = normalizeDocument(rawDoc);
+
+  // normalizeDocument only *records* an invalid control.property as an advisory
+  // problem — it doesn't reject it, because it's a general-purpose sanitizer also
+  // used for previews, where a stray property name is merely unfortunate. Here it
+  // is fatal: control.property is spliced unescaped into the bootstrap script below
+  // (`(typeof ${c.property} !== 'undefined') ? ...`), and an invalid identifier
+  // turns that into a SyntaxError that kills the whole bootstrap — asset loading,
+  // the render loop, everything, with no debugger attached to the host to see it.
+  // So we surface exactly this one category of problem as a hard build error,
+  // reusing the identifier check document.js already performed instead of
+  // duplicating its pattern here. Every other problem it records (duplicate layer
+  // ids renamed, unknown blend/fit/motion/type substituted with a safe default) is
+  // something it already recovered from, so we deliberately leave those as
+  // non-fatal and don't surface them.
+  const badProperty = problems.find((p) => /is not a valid javascript identifier/.test(p));
+  if (badProperty) {
+    throw new Error(`Cannot build effect: ${badProperty}`);
+  }
+
+  if (/<\/script/i.test(engineSource)) {
+    throw new Error('engineSource contains a literal "</script", which would truncate the '
+      + 'embedded <script> block. HTML-escaping is not an option here since this is live '
+      + 'JavaScript, not JSON, so the build must fail loudly instead of shipping a truncated effect.');
+  }
+
   const metas = doc.controls.map((control) => controlMeta(control, lang)).join('\n');
 
   return `<head>
