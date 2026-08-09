@@ -33,4 +33,14 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   assert.equal(report.windowOpened, true);
   assert.equal(report.bridge, true, 'window.sf must exist in the renderer');
   assert.equal(report.nodeInRenderer, false, 'the renderer must not reach Node');
+  assert.equal(
+    report.navigationBlocked,
+    true,
+    'a top-level navigation to an external URL must be blocked (will-navigate guard)'
+  );
+  assert.equal(
+    report.popupBlocked,
+    true,
+    'window.open must be denied and must not create a new window (setWindowOpenHandler guard)'
+  );
 });

@@ -30,6 +30,14 @@ function createWindow() {
     }
   });
   win.once('ready-to-show', () => win.show());
+
+  // Establish the process isolation boundary this whole app relies on: the
+  // window may only ever show what we load into it. Block any attempt to
+  // navigate it elsewhere (dropped files, pasted links, compromised content
+  // later tasks render) and deny any attempt to spawn a new window/tab.
+  win.webContents.on('will-navigate', (event) => { event.preventDefault(); });
+  win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
   win.loadFile(join(here, 'renderer', 'index.html'));
   return win;
 }
@@ -38,15 +46,36 @@ app.whenReady().then(async () => {
   const win = createWindow();
 
   if (process.env.SF_SELFTEST === '1') {
-    // Boot check for the test suite: prove the window came up and that the
-    // renderer has the bridge but no Node, then quit.
-    await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    const report = await win.webContents.executeJavaScript(
-      `({ windowOpened: true, bridge: typeof window.sf === 'object',
-          nodeInRenderer: typeof require === 'function' || typeof process === 'object' })`
-    );
-    process.stdout.write(JSON.stringify(report) + '\n');
-    app.quit();
+    try {
+      // Boot check for the test suite: prove the window came up, that the
+      // renderer has the bridge but no Node, and that the navigation/popup
+      // guards actually hold, then quit.
+      await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
+      const report = await win.webContents.executeJavaScript(
+        `({ windowOpened: true, bridge: typeof window.sf === 'object',
+            nodeInRenderer: typeof require === 'function' || typeof process === 'object' })`
+      );
+
+      const urlBeforeNav = win.webContents.getURL();
+      win.webContents
+        .executeJavaScript(`location.href = 'https://example.invalid/blocked'`)
+        .catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      report.navigationBlocked = win.webContents.getURL() === urlBeforeNav;
+
+      const windowCountBefore = BrowserWindow.getAllWindows().length;
+      const openReturnedNull = await win.webContents.executeJavaScript(
+        `window.open('https://example.invalid/popup') === null`
+      );
+      report.popupBlocked =
+        openReturnedNull === true && BrowserWindow.getAllWindows().length === windowCountBefore;
+
+      process.stdout.write(JSON.stringify(report) + '\n');
+      app.quit();
+    } catch (err) {
+      console.error('self-test failed:', err);
+      app.exit(1);
+    }
     return;
   }
 
