@@ -166,3 +166,227 @@ test('a non-neutral document does call getImageData and putImageData exactly onc
   assert.equal(getCalls, 1);
   assert.equal(putCalls, 1);
 });
+
+test('out-of-range saturation is clamped to 0..200', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      return { data: new Uint8ClampedArray(4) };
+    },
+    putImageData() {
+      pixelCalls += 1;
+    }
+  };
+
+  // Create a document with invalid saturation by bypassing normalizeDocument
+  // (simulating what applyControls does when a misconfigured control writes -500)
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: -500,
+    greenMagenta: 0,
+    blueYellow: 0
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // -500 should clamp to 0, which is different from neutral (100),
+  // so the pixel pass must run
+  assert.equal(pixelCalls, 2, 'clamped out-of-range saturation should not be neutral');
+});
+
+test('saturation beyond max range is clamped to 200', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      return { data: new Uint8ClampedArray(4) };
+    },
+    putImageData() {
+      pixelCalls += 1;
+    }
+  };
+
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: 5000,
+    greenMagenta: 0,
+    blueYellow: 0
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // 5000 should clamp to 200, which is different from neutral (100),
+  // so the pixel pass must run
+  assert.equal(pixelCalls, 2, 'clamped saturation > 200 should not be neutral');
+});
+
+test('non-finite greenMagenta falls back to 0 (neutral)', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      throw new Error('must not read pixels when document falls back to neutral');
+    },
+    putImageData() {
+      pixelCalls += 1;
+      throw new Error('must not write pixels when document falls back to neutral');
+    }
+  };
+
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: 100,
+    greenMagenta: NaN,
+    blueYellow: 0
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // NaN should fall back to 0, making the document neutral, so no pixel pass
+  assert.equal(pixelCalls, 0, 'non-finite greenMagenta should fall back to neutral and skip pixel pass');
+});
+
+test('out-of-range greenMagenta is clamped to -100..100', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      return { data: new Uint8ClampedArray(4) };
+    },
+    putImageData() {
+      pixelCalls += 1;
+    }
+  };
+
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: 100,
+    greenMagenta: 5000,
+    blueYellow: 0
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // 5000 should clamp to 100, which is different from neutral (0),
+  // so the pixel pass must run
+  assert.equal(pixelCalls, 2, 'clamped greenMagenta should not be neutral');
+});
+
+test('out-of-range blueYellow is clamped to -100..100', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      return { data: new Uint8ClampedArray(4) };
+    },
+    putImageData() {
+      pixelCalls += 1;
+    }
+  };
+
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: 100,
+    greenMagenta: 0,
+    blueYellow: -99999
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // -99999 should clamp to -100, which is different from neutral (0),
+  // so the pixel pass must run
+  assert.equal(pixelCalls, 2, 'clamped blueYellow should not be neutral');
+});
+
+test('non-finite blueYellow falls back to 0, and all non-finite fallbacks skip pixel pass', () => {
+  let pixelCalls = 0;
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    getImageData() {
+      pixelCalls += 1;
+      throw new Error('must not read pixels when all color fields fall back to neutral');
+    },
+    putImageData() {
+      pixelCalls += 1;
+      throw new Error('must not write pixels when all color fields fall back to neutral');
+    }
+  };
+
+  const doc = {
+    layers: [],
+    assets: {},
+    controls: [],
+    version: 1,
+    brightness: 100,
+    saturation: 100,
+    greenMagenta: 0,
+    blueYellow: Infinity
+  };
+
+  const renderer = createRenderer();
+  renderer.render(ctx, doc, new Map(), 0);
+
+  // Infinity should fall back to 0, making the document neutral, so no pixel pass
+  assert.equal(pixelCalls, 0, 'non-finite blueYellow should fall back to neutral and skip pixel pass');
+});

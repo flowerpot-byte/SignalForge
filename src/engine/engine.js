@@ -80,9 +80,9 @@ export async function loadAssets(doc, { resolveUrl, assetTimeoutMs = DEFAULT_ASS
 function applyFinish(ctx, doc) {
   const brightness = Number.isFinite(doc.brightness) ? clamp(doc.brightness, 0, 100) / 100 : 1;
   const color = {
-    saturation: doc.saturation,
-    greenMagenta: doc.greenMagenta,
-    blueYellow: doc.blueYellow
+    saturation: Number.isFinite(doc.saturation) ? clamp(doc.saturation, 0, 200) : 100,
+    greenMagenta: Number.isFinite(doc.greenMagenta) ? clamp(doc.greenMagenta, -100, 100) : 0,
+    blueYellow: Number.isFinite(doc.blueYellow) ? clamp(doc.blueYellow, -100, 100) : 0
   };
   if (brightness === 1 && isNeutral(color)) return;
 
