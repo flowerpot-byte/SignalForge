@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+scratch/
+*.log
+.DS_Store
+.superpowers/

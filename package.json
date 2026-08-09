@@ -1,0 +1,21 @@
+{
+  "name": "signalforge",
+  "version": "0.1.0",
+  "description": "Build SignalRGB lighting effects from images, videos, gradients and shapes.",
+  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build:engine": "esbuild src/engine/index.js --bundle --format=iife --global-name=SignalForgeEngine --outfile=dist/engine.bundle.js",
+    "pretest": "npm run build:engine",
+    "test": "node --test"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "electron": "43.3.0",
+    "esbuild": "0.28.2"
+  }
+}
