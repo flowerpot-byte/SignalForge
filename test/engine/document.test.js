@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeDocument, BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../src/engine/document.js';
+import { normalizeDocument, isValidIdentifier, BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT } from '../../src/engine/document.js';
 
 test('canvas size is fixed at 320x200', () => {
   assert.equal(CANVAS_WIDTH, 320);
@@ -75,6 +75,19 @@ test('control property must be a valid javascript identifier', () => {
   });
   assert.equal(problems.length, 1);
   assert.match(problems[0], /identifier/i);
+});
+
+test('isValidIdentifier accepts usable javascript identifiers', () => {
+  assert.equal(isValidIdentifier('speed'), true);
+  assert.equal(isValidIdentifier('_weird$Name123'), true);
+  assert.equal(isValidIdentifier('$'), true);
+});
+
+test('isValidIdentifier rejects strings that are not usable javascript identifiers', () => {
+  assert.equal(isValidIdentifier('2speed'), false);
+  assert.equal(isValidIdentifier(''), false);
+  assert.equal(isValidIdentifier('x; alert(1); //'), false);
+  assert.equal(isValidIdentifier('has space'), false);
 });
 
 test('unknown layer fit falls back to cover and is reported', () => {

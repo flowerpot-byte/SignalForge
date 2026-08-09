@@ -1,7 +1,7 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { CANVAS_WIDTH, CANVAS_HEIGHT, normalizeDocument } from '../engine/document.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, normalizeDocument, isValidIdentifier } from '../engine/document.js';
 
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
 
@@ -104,7 +104,7 @@ ${reads}
  * bundle drives the preview, which is what makes the preview trustworthy.
  */
 export function buildEffectHtml({ doc: rawDoc, engineSource, lang = 'en' }) {
-  const { doc, problems } = normalizeDocument(rawDoc);
+  const { doc } = normalizeDocument(rawDoc);
 
   // normalizeDocument only *records* an invalid control.property as an advisory
   // problem — it doesn't reject it, because it's a general-purpose sanitizer also
@@ -114,14 +114,15 @@ export function buildEffectHtml({ doc: rawDoc, engineSource, lang = 'en' }) {
   // turns that into a SyntaxError that kills the whole bootstrap — asset loading,
   // the render loop, everything, with no debugger attached to the host to see it.
   // So we surface exactly this one category of problem as a hard build error,
-  // reusing the identifier check document.js already performed instead of
-  // duplicating its pattern here. Every other problem it records (duplicate layer
-  // ids renamed, unknown blend/fit/motion/type substituted with a safe default) is
-  // something it already recovered from, so we deliberately leave those as
-  // non-fatal and don't surface them.
-  const badProperty = problems.find((p) => /is not a valid javascript identifier/.test(p));
-  if (badProperty) {
-    throw new Error(`Cannot build effect: ${badProperty}`);
+  // using document.js's exported isValidIdentifier() — the same predicate
+  // normalizeDocument used to decide this — instead of parsing its problems[]
+  // wording. Every other problem it records (duplicate layer ids renamed, unknown
+  // blend/fit/motion/type substituted with a safe default) is something it already
+  // recovered from, so we deliberately leave those as non-fatal and don't surface
+  // them.
+  const badControl = doc.controls.find((control) => !isValidIdentifier(control.property));
+  if (badControl) {
+    throw new Error(`Cannot build effect: control "${badControl.property}" is not a valid javascript identifier.`);
   }
 
   if (/<\/script/i.test(engineSource)) {

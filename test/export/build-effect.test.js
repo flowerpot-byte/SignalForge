@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildEffectHtml } from '../../src/export/build-effect.js';
+import { isValidIdentifier } from '../../src/engine/document.js';
 
 const ENGINE = 'window.SignalForgeEngine = {};';
 
@@ -89,6 +90,22 @@ test('a control property that is not a valid identifier throws and never reaches
   // malformed splice into the bootstrap script must still never appear.
   assert.ok(!html.includes("typeof x; alert(1); //"));
   assert.fail('expected buildEffectHtml to throw for an invalid control property');
+});
+
+test('the rejection is driven by document.js\'s exported isValidIdentifier, not by the wording of its problems[] messages', () => {
+  const bad = structuredClone(doc);
+  bad.controls[0].property = 'x; alert(1); //';
+
+  // Pin the mechanism directly: buildEffectHtml must reject exactly the
+  // properties isValidIdentifier rejects, independent of how normalizeDocument
+  // happens to phrase its advisory problem for the same property.
+  assert.equal(isValidIdentifier(bad.controls[0].property), false);
+  assert.throws(() => buildEffectHtml({ doc: bad, engineSource: ENGINE, lang: 'de' }));
+
+  const ok = structuredClone(doc);
+  ok.controls[0].property = 'perfectlyFine';
+  assert.equal(isValidIdentifier(ok.controls[0].property), true);
+  assert.doesNotThrow(() => buildEffectHtml({ doc: ok, engineSource: ENGINE, lang: 'de' }));
 });
 
 test('a property that merely looks unusual but is a valid identifier still builds', () => {

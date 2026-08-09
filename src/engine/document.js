@@ -22,6 +22,16 @@ export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combo
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
 
+/**
+ * Whether a string is a usable JavaScript identifier — the rule that decides
+ * whether a control's `property` can be spliced into generated code. This is
+ * the single definition of that rule; callers must use it directly instead
+ * of re-deriving or string-matching it.
+ */
+export function isValidIdentifier(value) {
+  return IDENTIFIER.test(value);
+}
+
 export function clamp(value, lo, hi) {
   return value < lo ? lo : value > hi ? hi : value;
 }
@@ -99,7 +109,7 @@ function normalizeLayer(raw, index, usedIds, problems) {
 function normalizeControl(raw, index, problems) {
   const input = raw && typeof raw === 'object' ? raw : {};
   const property = str(input.property, '');
-  if (!IDENTIFIER.test(property)) {
+  if (!isValidIdentifier(property)) {
     problems.push(`Control ${index}: "${property}" is not a valid javascript identifier.`);
   }
 
