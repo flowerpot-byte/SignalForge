@@ -3,33 +3,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * Build the three-column frame and hand back its empty regions.
+ * Build the two-column frame and hand back its empty regions.
  *
- * The two column headings are the only text the frame owns, and they are
- * written through `relabel()` rather than into the markup above: a language
- * switch must not rebuild this element, because rebuilding it would throw away
- * the preview canvas (and the render loop drawing into it) along with
- * everything else the columns are holding.
+ * There is no layer region, in the contract or in the markup. A layer list is
+ * a later task, and until it exists there is nothing honest to put in a third
+ * column: the empty panel that used to stand there was 260px of promise, and
+ * it was the single loudest reason the window read as unfinished. A region
+ * kept in the DOM but rendered as nothing would have been the same claim made
+ * more quietly, plus a name in this contract that nobody could use — so the
+ * whole thing is gone, and the width it held has gone to the picture. When the
+ * layer list is built it gets a region designed around what it actually needs.
+ *
+ * The column heading is the only text the frame owns, and it is written
+ * through `relabel()` rather than into the markup above: a language switch
+ * must not rebuild this element, because rebuilding it would throw away the
+ * preview canvas (and the render loop drawing into it) along with everything
+ * else the columns are holding.
  */
 export function mountShell(root, t) {
   root.innerHTML = `
-    <section class="panel" id="layers"><h2 id="layers-title"></h2><div id="layer-list"></div></section>
     <section class="panel" id="preview"><div id="preview-body"></div></section>
     <section class="panel" id="inspector"><h2 id="inspector-title"></h2><div id="inspector-body"></div></section>
     <section class="panel" id="footer"><div id="footer-body"></div></section>
   `;
-  const layersTitle = root.querySelector('#layers-title');
   const inspectorTitle = root.querySelector('#inspector-title');
 
   function relabel() {
-    layersTitle.textContent = t('layers.title');
     inspectorTitle.textContent = t('inspector.title');
   }
   relabel();
 
   return {
     relabel,
-    layers: root.querySelector('#layer-list'),
     preview: root.querySelector('#preview-body'),
     inspector: root.querySelector('#inspector-body'),
     footer: root.querySelector('#footer-body')

@@ -81,7 +81,7 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'the question must be a panel, not a curtain: the rest of the window stays reachable'
   );
   assert.ok(
-    /waehlen|choose/i.test(report.firstRunAsks),
+    /wählen|choose/i.test(report.firstRunAsks),
     `the question must offer the one button that answers it, got ${report.firstRunAsks}`
   );
 
@@ -106,9 +106,16 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // not just the one the control sits in — the settings column is rebuilt, the
   // frame and the footer are re-labelled in place, and the drop hint is
   // re-stated from its key.
-  assert.equal(report.inGerman.layers, 'Ebenen');
-  assert.equal(report.inEnglish.layers, 'Layers', 'the frame must follow the switch');
-  assert.equal(report.inEnglish.settings, 'Settings');
+  //
+  // What used to be checked here was the layer column's heading. That column
+  // is gone (it was an empty panel promising a list a later task will build —
+  // see mountShell), so the frame's own heading below covers the frame, and
+  // the settings column's section heading is checked in its place: it is a
+  // piece of text the column did not have before, so this proves one thing
+  // more than it did, not one thing less.
+  assert.equal(report.inGerman.section, 'Farbe');
+  assert.equal(report.inEnglish.section, 'Colour', 'the settings column\'s sections must follow the switch');
+  assert.equal(report.inEnglish.settings, 'Settings', 'and the frame');
   assert.equal(report.inEnglish.exportButton, 'Save to SignalRGB', 'the footer must follow it too');
   assert.equal(report.inEnglish.brightness, 'Brightness', 'and the settings column');
   assert.equal(report.inEnglish.hint, 'Drop an image here', 'and the line of feedback');
@@ -123,7 +130,7 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // And the answer to the question, through the real sf:chooseFolder handler.
   assert.match(
     report.targetAfterChoosing,
-    /gewaehlt|chosen/,
+    /gewählt|chosen/,
     'once the folder has been chosen the footer must show it as the chosen one'
   );
 
@@ -240,7 +247,7 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   );
   assert.match(
     report.targetShown,
-    /chosen|gewaehlt/,
+    /chosen|gewählt/,
     'the footer must show where the effect is going and how that was decided'
   );
   assert.match(

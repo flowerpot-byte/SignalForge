@@ -343,7 +343,9 @@ function driver(win) {
       throw new Error(`the window never reached: ${what}`);
     },
     message: () => js(`document.querySelector('.drop-message').textContent`),
-    cost: () => js(`document.querySelector('#preview-body > p.muted:not(.drop-message)').textContent`)
+    // The cost readout is a chip attached to the preview frame and has an id
+    // of its own now; it used to be a loose paragraph found by elimination.
+    cost: () => js(`document.getElementById('preview-cost').textContent`)
   };
 }
 
@@ -382,8 +384,8 @@ async function phaseOne(win, state) {
 
   // --- 1. language --------------------------------------------------------
   const words = () => d.js(`({
-    layers: document.getElementById('layers-title').textContent,
     settings: document.getElementById('inspector-title').textContent,
+    section: document.querySelector('#inspector-body .field-group > h3').textContent,
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,
     hint: document.querySelector('.drop-message').textContent,
@@ -414,9 +416,11 @@ async function phaseOne(win, state) {
   p['1'].shots.push(await d.shot('p1-c-german-again'));
   p['1'].storedAfterwards = await d.js(`window.sf.settings.all().then((s) => s.language)`);
   p['1'].result =
-    p['1'].inEnglish.layers === 'Layers' &&
+    p['1'].inEnglish.settings === 'Settings' &&
+    p['1'].inEnglish.section === 'Colour' &&
     p['1'].inEnglish.brightness === 'Brightness' &&
-    p['1'].backInGerman.layers === 'Ebenen' &&
+    p['1'].backInGerman.settings === 'Einstellungen' &&
+    p['1'].backInGerman.section === 'Farbe' &&
     p['1'].storedAfterwards === 'de' ? 'pass' : 'fail';
 
   // --- 2. drag a picture in ----------------------------------------------

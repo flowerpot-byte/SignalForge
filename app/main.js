@@ -487,8 +487,8 @@ async function selfTestFirstRun(win, effectsFolder) {
       return select.value;
     })()`);
     return read(`({
-      layers: document.getElementById('layers-title').textContent,
       settings: document.getElementById('inspector-title').textContent,
+      section: document.querySelector('#inspector-body .field-group > h3').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,
       hint: document.querySelector('.drop-message').textContent,
