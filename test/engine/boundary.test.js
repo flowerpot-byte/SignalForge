@@ -19,6 +19,14 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
  */
 const GUARDED = ['src/engine', 'src/export'];
 
+/**
+ * The one part of `src` that is allowed to reach into Node: the main process.
+ * Everything else under `src` is engine code by definition and has to be in
+ * GUARDED above — which is what `guardedFiles()` checks, so this list cannot
+ * grow by accident.
+ */
+const NODE_SIDE = 'src/main';
+
 const FORBIDDEN = [
   { pattern: /\brequire\s*\(/, why: 'CommonJS require' },
   { pattern: /from\s+['"]node:/, why: 'node: builtin import' },
@@ -40,9 +48,38 @@ function collect(relative) {
   return out;
 }
 
-test('the engine never reaches into Node', () => {
+/**
+ * Everything this file guards — and the proof that it is everything.
+ *
+ * There used to be a floor here instead: `files.length >= 9`, written when the
+ * tree held nine files. It held seventeen by the time anybody looked again, so
+ * eight of them could have been moved out of the guarded tree and this test
+ * would still have reported green. That is the third guard in this project to
+ * rot the same way, so the number is gone rather than raised: what is asserted
+ * now is the RULE the number was standing in for.
+ *
+ * The rule: `src/main` is the Node side of this app, and every other `.js`
+ * file under `src`, at any depth, is engine or export code that has to survive
+ * being bundled into a plain web page. So the walk of GUARDED must come out
+ * equal to a walk of `src` with the Node side taken off — which maintains
+ * itself when a file is added, and goes red the moment one is moved somewhere
+ * GUARDED does not reach.
+ */
+function guardedFiles() {
   const files = GUARDED.flatMap(collect);
-  assert.ok(files.length >= 9, `expected to scan the whole engine, only found ${files.length} files`);
+  const shouldBeGuarded = collect('src').filter((file) => !file.startsWith(`${NODE_SIDE}/`));
+  assert.deepEqual(
+    [...files].sort(),
+    [...shouldBeGuarded].sort(),
+    `everything under src/ apart from ${NODE_SIDE}/ has to be inside the guarded tree — `
+      + `either add the new directory to GUARDED, or it is main-process code and belongs `
+      + `under ${NODE_SIDE}/`
+  );
+  return files;
+}
+
+test('the engine never reaches into Node', () => {
+  const files = guardedFiles();
 
   const offences = [];
   for (const file of files) {
@@ -55,7 +92,7 @@ test('the engine never reaches into Node', () => {
 });
 
 test('the engine never reads the clock or rolls dice', () => {
-  const files = GUARDED.flatMap(collect);
+  const files = guardedFiles();
   const offences = [];
   for (const file of files) {
     const source = readFileSync(join(root, file), 'utf8');

@@ -21,12 +21,15 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
  * reports green — so a new file is covered the moment it exists, without
  * anybody having to remember this file.
  *
- * `app/renderer` is taken whole (stylesheets, components, index.html, the
- * language files); above it, `app/*.js` and `app/*.cjs` — the main process and
- * the preload. The main process paints too: it hands BrowserWindow a
- * background colour so the first frame is not a white flash.
+ * `app` is taken WHOLE — the renderer's stylesheets, components, index.html and
+ * language files, and the two files above them, the main process and the
+ * preload. (The main process paints too: it hands BrowserWindow a background
+ * colour so the first frame is not a white flash.) It used to be scanned in two
+ * halves, the subtree plus `app/*.js` and `app/*.cjs`, which is a scope that has
+ * to be remembered — one whole tree is a scope that cannot be forgotten, and it
+ * covers exactly the same files today.
  */
-const SCANNED_TREE = 'app/renderer';
+const SCANNED_TREE = 'app';
 const TOKENS = 'app/renderer/styles/tokens.css';
 
 /** Everything below `relative`, at any depth, whatever the extension. */
@@ -42,27 +45,29 @@ function collect(relative) {
   return out;
 }
 
-/** The main process and the preload: app/*.js and app/*.cjs, not the subtree. */
-function appEntryFiles() {
-  return readdirSync(join(root, 'app'), { withFileTypes: true })
-    .filter((entry) => entry.isFile() && /\.(js|cjs)$/.test(entry.name))
-    .map((entry) => `app/${entry.name}`);
-}
-
 // Hex colours (#abc, #aabbcc, with or without an alpha channel) or any of the
 // functional colour notations. Case-insensitive: without the flag, a literal
 // written RGB(...) or #AABBCC in capitals walked straight past this test.
 const COLOR_LITERAL = /#[0-9a-f]{3,8}\b|\brgba?\(|\bhsla?\(/i;
 
 test('no colour literal lives anywhere in the app outside tokens.css', () => {
-  const found = [...collect(SCANNED_TREE), ...appEntryFiles()];
+  const found = collect(SCANNED_TREE);
 
-  // A vacuous pass (nothing scanned, or a walk that quietly collapsed to one
-  // file) would be worthless.
-  assert.ok(
-    found.length >= 12,
-    `expected to scan the whole app, only found ${found.length} files: ${found.join(', ')}`
-  );
+  // A vacuous pass — nothing scanned, or a walk that quietly collapsed to one
+  // branch — would be worthless. This used to be the number `12`, written when
+  // the walk found twelve files; it found twenty-three by the time anybody
+  // looked again, so eleven of them could have vanished from the scan with
+  // this still reporting green. A count is the wrong shape for the job, so it
+  // is derived instead: every single entry of `app/` — every file and every
+  // directory in it — has to be represented in what was walked. That stays
+  // true as the app grows and needs nobody to remember it.
+  for (const entry of readdirSync(join(root, SCANNED_TREE), { withFileTypes: true })) {
+    const branch = `${SCANNED_TREE}/${entry.name}`;
+    assert.ok(
+      found.some((file) => file === branch || file.startsWith(`${branch}/`)),
+      `the walk brought back nothing from ${branch} — it has stopped scanning part of the app`
+    );
+  }
   // And tokens.css must genuinely be among what was walked — if it were ever
   // moved or renamed, the exclusion below would silently become a no-op and
   // this test would go on passing while guarding one file less.
