@@ -41,7 +41,7 @@ import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { prepareImageFile } from '../../src/main/prepare-image.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import { folderDialog, projectDialogs, searchRoots } from '../../app/main.js';
+import { folderDialog, projectDialogs, searchRoots, windowDisplay } from '../../app/main.js';
 import { driver, wait } from './driver.js';
 
 // This block has to run before app/main.js's own app.whenReady handler does,
@@ -75,6 +75,24 @@ searchRoots.home = () => runDir;
 
 /** Pictures only if a human asked for them; see SF_SELFTEST_SHOTS above. */
 const DRIVING = { shotsDir: process.env.SF_SELFTEST_SHOTS || null };
+
+/**
+ * The window appears only when somebody asked for photographs of it.
+ *
+ * `npm test` spawns this file (see test/app/boot.test.js) and asks for no
+ * photographs, so an ordinary test run shows nothing at all — which is the
+ * whole point: a run of the suite used to put this window in front of whoever
+ * was using the machine. Everything below is driven and read through the
+ * DevTools protocol and the DOM, none of which needs a window on screen, and
+ * this file deliberately asserts on controls rather than on rendered pixels
+ * (see selfTestProjects) for exactly that reason.
+ *
+ * With SF_SELFTEST_SHOTS the window IS shown, because `driver.shot()` waits
+ * for two real animation frames and a window nobody is showing never produces
+ * any. test/harness/shots.js is the file for photographing this app without a
+ * window; this one keeps the simple behaviour for the human who asked.
+ */
+windowDisplay.show = Boolean(DRIVING.shotsDir);
 
 /**
  * A 4x4 PNG, one colour per quarter — the smallest thing that is a real,

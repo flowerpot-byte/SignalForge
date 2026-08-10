@@ -23,7 +23,14 @@ import { app, BrowserWindow } from 'electron';
 import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { SINGLE_INSTANCE_TEST_ENV } from '../../src/main/single-instance.js';
-import '../../app/main.js';
+import { windowDisplay } from '../../app/main.js';
+
+// Never on screen. This harness is spawned twice by `npm test` and the winning
+// instance used to put a real window in front of whoever was using the
+// machine. Nothing this test reads needs one: it counts windows, minimises one
+// and reads back whether it was restored, all of which a window that was never
+// shown answers exactly the same way.
+windowDisplay.show = false;
 
 const out = process.env.SF_SINGLE_INSTANCE_OUT;
 if (!out) throw new Error('SF_SINGLE_INSTANCE_OUT must name a folder to work in');
@@ -71,6 +78,33 @@ app.on('before-quit', () => {
 
 app.whenReady().then(() => {
   process.stdout.write(`harness ready windowCount=${BrowserWindow.getAllWindows().length}\n`);
+
+  /**
+   * Keep the window off the screen even while it is being minimised and
+   * restored.
+   *
+   * `windowDisplay.show = false` above is not enough by itself, and that is
+   * measured rather than assumed: minimize() and restore() are Win32
+   * show-state changes, so calling them on a window that was never shown puts
+   * it back ON the screen — which is how a window still appeared during a full
+   * `npm test`, a second or so of it, once per run. Three answers, because one
+   * of them alone leaves a gap:
+   *
+   *  - no taskbar button, so the minimised state shows nothing either;
+   *  - fully transparent, so a frame that does slip through is a frame of
+   *    nothing;
+   *  - hidden again the instant it is restored, which is app/main.js's own
+   *    second-instance handler doing exactly what it should.
+   *
+   * None of it touches what the test reads: isMinimized() is false for a
+   * hidden window just as it is for a restored one, and the count of windows
+   * is unchanged.
+   */
+  const [win] = BrowserWindow.getAllWindows();
+  if (!win) return;
+  win.setSkipTaskbar(true);
+  win.setOpacity(0);
+  win.on('restore', () => win.hide());
 });
 
 // A file, polled for, rather than a line on stdin: measured by hand, an
