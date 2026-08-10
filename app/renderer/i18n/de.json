@@ -6,6 +6,8 @@
   "preview.dropUnsupported": "Nicht unterstuetzter Dateityp",
   "preview.dropFailed": "Bild konnte nicht geladen werden",
   "preview.cost": "Rechenlast",
+  "preview.canvasLabel": "Bildvorschau",
+  "preview.cropLabel": "Bildausschnitt - mit den Pfeiltasten verschieben, mit Umschalt in groesseren Schritten",
   "inspector.fit": "Bildausschnitt",
   "inspector.fit.cover": "Fuellen",
   "inspector.fit.stretch": "Verzerren",

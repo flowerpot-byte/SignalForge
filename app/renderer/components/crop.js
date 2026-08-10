@@ -34,6 +34,59 @@ export function offsetFromDrag({ startOffset, dx, dy, canvasWidth, canvasHeight,
 }
 
 /**
+ * How far one arrow-key press moves the picture, in CANVAS pixels.
+ *
+ * Deliberately a distance on screen and not a slice of the offset range: the
+ * user is pushing a picture about, and the same offset step is worth wildly
+ * different distances depending on how much of the picture is cropped away. A
+ * fixed number of canvas pixels means one press always looks like the same
+ * nudge, whatever picture is loaded.
+ *
+ * Why 4 and 40, measured rather than guessed. The canvas is 320 x 200 and is
+ * shown at roughly twice that size, so 4 canvas pixels is about 8 pixels under
+ * the eye — small enough to place a subject exactly (1.25 % of the width),
+ * large enough to see that something happened. One canvas pixel would be
+ * invisible at a glance.
+ *
+ * The press count is what settles the second number. The acceptance
+ * walkthrough's picture is 800 x 200; at `cover` the engine crops 480 of its
+ * columns away, which is 480 canvas pixels of travel from one end to the
+ * other. At 4 pixels a press that is 120 presses end to end — unreasonable.
+ * Shift multiplies by ten, so 40 pixels a press brings the same journey down
+ * to 12, which is not. Shift-as-the-bigger-step is the nudge convention every
+ * drawing program uses (arrow one unit, Shift+arrow ten).
+ */
+export const CROP_KEY_STEP = 4;
+export const CROP_KEY_STEP_COARSE = CROP_KEY_STEP * 10;
+
+/**
+ * The drag one key press stands for, in canvas pixels, or null when the key is
+ * none of this control's business.
+ *
+ * The result goes straight into offsetFromDrag() above — there is deliberately
+ * no second piece of arithmetic for the keyboard, because two mappings are two
+ * chances for the keyboard and the mouse to disagree about which way is right.
+ * ArrowRight therefore hands over exactly what a rightward mouse drag hands
+ * over (dx > 0), which is what makes the picture move the same way for both.
+ *
+ * A held Ctrl, Alt or Meta means the press belongs to a shortcut somewhere
+ * else, so it is passed through untouched. `event` is read, not stored: this
+ * takes a plain object just as happily as a real KeyboardEvent, which is what
+ * lets it be tested without a DOM.
+ */
+export function dragFromKey(event) {
+  if (event.ctrlKey || event.altKey || event.metaKey) return null;
+  const step = event.shiftKey ? CROP_KEY_STEP_COARSE : CROP_KEY_STEP;
+  switch (event.key) {
+    case 'ArrowRight': return { dx: step, dy: 0 };
+    case 'ArrowLeft': return { dx: -step, dy: 0 };
+    case 'ArrowDown': return { dx: 0, dy: step };
+    case 'ArrowUp': return { dx: 0, dy: -step };
+    default: return null;
+  }
+}
+
+/**
  * How far the crop window can travel from the centre, per axis, in canvas
  * pixels — i.e. what an offset change of exactly 1 is worth on screen.
  *
@@ -82,14 +135,27 @@ export function cropSlack({ sourceWidth, sourceHeight, canvasWidth, canvasHeight
  * asset's kind, mime and bytes) — the importer hands it back and the caller
  * remembers it.
  *
- * `onChange(offset)` gets the new offset on every pointermove. It is
- * deliberately just a value handed over, with no re-render triggered here:
- * the preview's own frame loop is already running and picks the new offset up
- * on its next frame, so a drag never renders a second time in parallel with
- * it.
+ * `onChange(offset)` gets the new offset on every pointermove and on every
+ * arrow-key press. It is deliberately just a value handed over, with no
+ * re-render triggered here: the preview's own frame loop is already running
+ * and picks the new offset up on its next frame, so a drag never renders a
+ * second time in parallel with it.
+ *
+ * `t(key)` supplies the canvas's accessible name. It defaults to handing the
+ * key straight back so this module stays usable — and testable — without the
+ * language files.
+ *
+ * Returns `{ refresh }`. Whether there is anything to move at all depends on
+ * the picture and on the fit mode, and both can change long after this ran;
+ * the caller says so by calling refresh(). A language switch is the third
+ * reason to call it, because the accessible name is a translated string.
  */
-export function mountCrop(canvas, { getLayer, onChange }) {
+export function mountCrop(canvas, { getLayer, onChange, t = (key) => key }) {
   let drag = null;
+  /** What the canvas is currently telling assistive technology, so that the
+   *  attributes are only rewritten when the answer actually changes rather
+   *  than on every single pointermove. */
+  let announced = { movable: null, label: null };
 
   function slackNow() {
     const layer = getLayer();
@@ -119,10 +185,41 @@ export function mountCrop(canvas, { getLayer, onChange }) {
     };
   }
 
-  /** Show a hand only where dragging actually does something. */
-  function restCursor() {
+  /**
+   * Say — to the eye, to the tab order and to a screen reader — whether there
+   * is anything to move right now.
+   *
+   * The tab stop is the point of this. With `contain` or `stretch`, or with no
+   * picture at all, nothing is croppable, and a tab stop that does nothing is
+   * worse than no tab stop: somebody working through the window with the
+   * keyboard would land on a canvas, find that no key does anything, and have
+   * no way of telling that apart from a control they have not understood yet.
+   * So the canvas joins the tab order exactly when a press would move
+   * something, expressed by adding and removing the tabindex attribute rather
+   * than parking it at -1 — -1 would leave the canvas focusable by a click,
+   * which is a focus trap of a smaller kind.
+   *
+   * `application` is the role while it is movable, because that is precisely
+   * what it then is: an element that handles its own keys and needs a screen
+   * reader to pass arrow presses through to it instead of using them to walk
+   * the document. It is a heavy role to reach for over a whole region; over a
+   * single canvas with no content inside it, it is the honest one. When there
+   * is nothing to move it goes back to being a picture, and says so.
+   */
+  function syncAffordance() {
     const { slackX, slackY } = slackNow();
-    canvas.style.cursor = slackX > 0 || slackY > 0 ? 'grab' : '';
+    const movable = slackX > 0 || slackY > 0;
+    // Set every time, not only on a change: a drag leaves 'grabbing' behind
+    // and this is what puts the open hand back.
+    canvas.style.cursor = movable ? 'grab' : '';
+
+    const label = t(movable ? 'preview.cropLabel' : 'preview.canvasLabel');
+    if (movable === announced.movable && label === announced.label) return;
+    announced = { movable, label };
+    canvas.setAttribute('role', movable ? 'application' : 'img');
+    canvas.setAttribute('aria-label', label);
+    if (movable) canvas.setAttribute('tabindex', '0');
+    else canvas.removeAttribute('tabindex');
   }
 
   canvas.addEventListener('pointerdown', (event) => {
@@ -145,7 +242,7 @@ export function mountCrop(canvas, { getLayer, onChange }) {
   });
 
   canvas.addEventListener('pointermove', (event) => {
-    if (!drag) { restCursor(); return; }
+    if (!drag) { syncAffordance(); return; }
     if (event.pointerId !== drag.pointerId) return;
 
     const factor = toCanvasPixels();
@@ -166,9 +263,49 @@ export function mountCrop(canvas, { getLayer, onChange }) {
     // releasing a pointer that is no longer captured throws — so ask first.
     if (canvas.hasPointerCapture(drag.pointerId)) canvas.releasePointerCapture(drag.pointerId);
     drag = null;
-    restCursor();
+    syncAffordance();
   };
 
   canvas.addEventListener('pointerup', endDrag);
   canvas.addEventListener('pointercancel', endDrag);
+
+  /**
+   * The same movement, from the keyboard.
+   *
+   * The current offset is read fresh on every press rather than remembered
+   * from the first one, so presses accumulate through the caller's document
+   * exactly the way successive drags do — and a press after the settings
+   * column has moved the picture starts from where the picture actually is.
+   *
+   * Only a press this control genuinely owns is swallowed. A key that is not
+   * an arrow, an arrow with a modifier that belongs to a shortcut, and an
+   * arrow along an axis with no slack are all left alone, so nothing else in
+   * the window loses a key to a canvas that had no use for it. Along an axis
+   * that does have slack the press is consumed even at the very end of the
+   * travel — otherwise arriving at the edge would suddenly start scrolling
+   * the panel instead, which is a strange thing for a picture to do.
+   */
+  canvas.addEventListener('keydown', (event) => {
+    const step = dragFromKey(event);
+    if (!step) return;
+
+    const { layer, slackX, slackY } = slackNow();
+    if (!layer) return;
+    if (!(step.dx !== 0 ? slackX > 0 : slackY > 0)) return;
+
+    event.preventDefault();
+    onChange(offsetFromDrag({
+      startOffset: { x: layer.offset.x, y: layer.offset.y },
+      dx: step.dx,
+      dy: step.dy,
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      slackX,
+      slackY
+    }));
+  });
+
+  syncAffordance();
+
+  return { refresh: syncAffordance };
 }

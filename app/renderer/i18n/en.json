@@ -6,6 +6,8 @@
   "preview.dropUnsupported": "Unsupported file type",
   "preview.dropFailed": "Could not load the image",
   "preview.cost": "Compute cost",
+  "preview.canvasLabel": "Image preview",
+  "preview.cropLabel": "Image section - move it with the arrow keys, hold Shift for bigger steps",
   "inspector.fit": "Fit",
   "inspector.fit.cover": "Cover",
   "inspector.fit.stretch": "Stretch",

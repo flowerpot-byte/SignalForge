@@ -171,7 +171,12 @@ async function boot() {
     return { ...layer, sourceWidth: sourceSize.width, sourceHeight: sourceSize.height };
   }
 
-  mountCrop(preview.canvas, {
+  // Whether the canvas is a tab stop at all depends on whether there is
+  // anything to move — which changes when a picture arrives and when the fit
+  // mode changes, so crop.refresh() is called at both (and on a language
+  // switch, because the canvas's accessible name is a translated string).
+  const crop = mountCrop(preview.canvas, {
+    t: (k) => i18n.t(k),
     getLayer: draggableLayer,
     // Writes straight into the live document; the preview's frame loop shows
     // it on its next frame (see components/preview.js).
@@ -205,6 +210,12 @@ async function boot() {
         return;
       }
       if (Array.isArray(value)) await preview.setDocument(doc);
+      // The fit dropdown decides whether anything is croppable at all, so the
+      // canvas's tab stop has to follow it. Called for every change rather
+      // than only for the fit: it is a little arithmetic and two attribute
+      // reads, and a list of "which paths matter" here is a list that goes
+      // stale the moment a new one is added.
+      crop.refresh();
     },
     /**
      * The one change above that can genuinely fail is the one that reloads
@@ -247,6 +258,8 @@ async function boot() {
           assets: { image: result.asset }
         });
         sourceSize = { width: result.asset.width, height: result.asset.height };
+        // There is something to move now, so the canvas becomes a tab stop.
+        crop.refresh();
         // The column had nothing but the document-wide sliders until now.
         inspector.refresh();
         footer.setName(preview.document().name);
@@ -302,6 +315,9 @@ async function boot() {
     await preview.setDocument(doc);
     const layer = doc.layers.find((entry) => entry.id === IMAGE_LAYER);
     sourceSize = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
+    // A project brings its own picture and its own fit mode, so whether the
+    // canvas is a tab stop is decided fresh here too.
+    crop.refresh();
     inspector.refresh();
     footer.setName(doc.name);
     preview.start();
@@ -400,6 +416,9 @@ async function boot() {
     regions.relabel();
     firstRun.relabel();
     footer.relabel();
+    // The canvas's accessible name is a translated string like any other; it
+    // is just the only one nobody can see.
+    crop.refresh();
     // Rebuilt rather than re-labelled: which fields exist depends on the
     // document, and mountInspector puts the keyboard focus back by itself.
     inspector.refresh();
