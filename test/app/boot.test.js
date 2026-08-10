@@ -197,4 +197,9 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'a name containing / \\ : ? must be sanitised into a plain file name in the chosen folder'
   );
   assert.match(report.sanitisedMessage, /a-b-c-d\.html/);
+  assert.equal(
+    report.nameFieldAfterSanitised,
+    'a-b-c-d',
+    'after a successful export the name field must show the name actually used, not the raw text still typed'
+  );
 });

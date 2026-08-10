@@ -543,6 +543,10 @@ async function selfTestExport(win, folder) {
   await setName('a/b:c?d');
   out.sanitisedMessage = await clickAndWait(EXPORT);
   out.filesAfterSanitised = readdirSync(folder);
+  // The name field must be left showing what actually landed on disk, not
+  // the raw text that was typed — see the "sanitised name echoed back" check
+  // in test/app/boot.test.js.
+  out.nameFieldAfterSanitised = await read(`document.getElementById('footer-name').value`);
   await shoot('10-sanitised-name');
 
   return out;

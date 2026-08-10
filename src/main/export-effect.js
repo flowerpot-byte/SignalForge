@@ -77,7 +77,12 @@ export function effectFileName(name) {
  * already there" is a question to ask the user, not a failure, and the caller
  * has to be able to tell it apart from a genuine write error.
  *
- *   { ok: true,  path, bytes }
+ *   { ok: true,  path, bytes, name }        `name` is the sanitised name actually
+ *                                            used for the file, without its extension —
+ *                                            the caller needs it to echo back into the
+ *                                            name field when the document's own name
+ *                                            had to be cleaned up before it could be
+ *                                            written
  *   { ok: false, reason: 'exists', path }   the file is there and force was not set
  *   { ok: false, reason: 'name' }           nothing usable left in the document's name
  *   { ok: false, reason: 'empty' }          nothing to export yet
@@ -117,5 +122,5 @@ export function exportEffect({ doc, folder, engineSource, lang = 'en', force = f
 
   io.mkdir(folder);
   io.writeFile(path, html);
-  return { ok: true, path, bytes: io.size(path) };
+  return { ok: true, path, bytes: io.size(path), name: fileName };
 }

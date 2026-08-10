@@ -50,6 +50,7 @@ test('the effect lands in the folder it was given, under the document\'s name', 
 
   assert.equal(result.ok, true, result.message);
   assert.equal(result.path, join(FOLDER, 'Sunset.html'));
+  assert.equal(result.name, 'Sunset', 'a successful export must report the name actually used');
   assert.deepEqual(io.madeFolders, [FOLDER], 'the target folder must be created if it is missing');
 
   const html = io.files.get(result.path);
@@ -118,6 +119,14 @@ test('a name containing path separators cannot reach out of the chosen folder', 
       );
     }
   }
+});
+
+test('a sanitised name is reported back, not the raw one the document still carries', () => {
+  const { result } = runExport('a/b:c?d');
+
+  assert.equal(result.ok, true, result.message);
+  assert.equal(result.name, 'a-b-c-d', 'the caller needs the cleaned-up name to echo back into the name field');
+  assert.equal(result.path, join(FOLDER, 'a-b-c-d.html'));
 });
 
 test('a name with nothing usable left in it is refused instead of guessed at', () => {

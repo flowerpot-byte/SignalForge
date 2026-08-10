@@ -9,8 +9,15 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 
-/** Everything here has to survive being bundled into a plain web page. */
-const GUARDED = ['src/engine', 'src/export/build-effect.js'];
+/**
+ * Everything here has to survive being bundled into a plain web page.
+ *
+ * The whole `src/export` directory is guarded, not just build-effect.js:
+ * every file in it (today build-effect.js and effect-controls.js) ends up
+ * inside the exported effect, so every file in it must stay Node-free, not
+ * just the one that happened to be guarded first.
+ */
+const GUARDED = ['src/engine', 'src/export'];
 
 const FORBIDDEN = [
   { pattern: /\brequire\s*\(/, why: 'CommonJS require' },

@@ -295,6 +295,12 @@ async function boot() {
       // that a new file appears in SignalRGB's list at once.
       const kb = (result.bytes / 1024).toFixed(1);
       showMessage(`${i18n.t('export.done')}: ${result.path} (${kb} KB)`);
+      // The name field must show what actually ended up on disk. When the
+      // document's own name held a character effectFileName had to clean up
+      // (a "/", a ":", ...), leaving the original text in the field would
+      // read as a promise the export did not keep — the file on disk is
+      // named after result.name, not after whatever is still typed here.
+      footer.setName(result.name);
       return;
     }
 
