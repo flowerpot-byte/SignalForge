@@ -31,6 +31,42 @@ test('no value is left empty', () => {
   }
 });
 
+/**
+ * The unsaved-changes question guards FOUR gestures, not one.
+ *
+ * It was written for "open project" and its words said so — "Opening another
+ * project throws them away", over a button reading "Discard and open". It was
+ * then extended to the three starting tiles and to importing a picture, and
+ * ever since, pressing the gradient tile with unsaved work described a gesture
+ * nobody had made. A dialog that stands in front of losing work is the one
+ * dialog whose words are actually read, so its words have to be true for every
+ * door that opens it.
+ *
+ * Hence: no word naming one particular gesture. This is deliberately a short,
+ * explicit list rather than a clever rule — it catches the exact drift that
+ * happened, and it goes red the moment "and open" comes back.
+ */
+test('the unsaved-changes question names no single gesture', () => {
+  const GESTURE_WORDS = {
+    de: ['öffn', 'importier', 'lade'],
+    en: ['open', 'import', 'load']
+  };
+  for (const name of ['de', 'en']) {
+    const words = load(name);
+    for (const key of ['body', 'save', 'discard', 'cancel']) {
+      const value = words[`project.unsaved.${key}`].toLowerCase();
+      for (const gesture of GESTURE_WORDS[name]) {
+        assert.ok(
+          !value.includes(gesture),
+          `${name}.project.unsaved.${key} names one gesture ("${gesture}") although the same `
+            + `question guards opening a project, all three starting tiles and importing a `
+            + `picture: "${words[`project.unsaved.${key}`]}"`
+        );
+      }
+    }
+  }
+});
+
 // Which language the window opens in. A stored choice is the user's own and
 // always wins; only when there is none does the system's language get a say,
 // which is what "first start" means here — the settings file has no language
