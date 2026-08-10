@@ -20,6 +20,7 @@ Read `C:\Users\Max\claud\signalforge\README.md` for the public description, `C:\
 - Generate a review diff: `C:\Users\Max\.claude\plugins\cache\superpowers-marketplace\superpowers\6.1.1\skills\subagent-driven-development\scripts\review-package <base> <head>`
 - `npm test` currently: 271 pass, 0 fail (about 10 seconds). `pretest` rebuilds `dist/engine.bundle.js`; several tests launch real Electron. `npm test` also arms the effects-folder sandbox in every test process via `--import ./test/support/effects-sandbox.js` — a test that redirects `userData` but forgets to name a sandbox folder now fails loudly instead of writing into the real SignalRGB folder.
 - Full-window walkthrough (real mouse and keyboard through CDP, 11 points, screenshots): `test/harness/walkthrough.js`. It is deliberately not a `*.test.js`, so `npm test` does not run it — run it by hand when the interface changes.
+- Self-test: `test/harness/selftest.js`, a second Electron entry of the same shape — it imports the real `app/main.js`, drives the window it opens, and prints one line of JSON that `test/app/boot.test.js` judges. Both harnesses share one driver, `test/harness/driver.js`. Until 10.08.2026 this driver lived inside `app/main.js` behind `SF_SELFTEST`; that variable is gone, running the file is the signal.
 - Prototype kept for reference only, do not develop: `C:\Users\Max\claud\signalrgb-effekt`
 
 ## Running state
@@ -48,7 +49,6 @@ Build plan 2 is finished. What is open is his, not the code's:
 
 ## Deliberately deferred, with reasons
 
-- **The self-test driver still lives in `app/main.js`** (~380 lines of the 806). `test/harness/walkthrough.js` later solved the same problem properly from outside. The split is designed but was left undone so Max sees the working app before it is reshuffled.
 - **The crop cannot be moved by keyboard** — the preview canvas is not in the tab order. Everything else in the window is keyboard-complete, so this is the single hole. Roughly `tabindex="0"` plus arrow keys calling the same `offsetFromDrag`.
 - **No unsaved-changes guard when opening a project.** The two open paths that can destroy a file are already safe; this is the one that succeeds and still loses work. Behaviour Max should choose.
 - **No `requestSingleInstanceLock`** — two windows share one `settings.json` and one effects folder, last writer wins.

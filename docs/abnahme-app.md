@@ -63,8 +63,11 @@ Zwei Werkzeuge, beide im Repository, beide wiederholbar:
   Chrome-DevTools-Protokoll, also so, wie sie vom Betriebssystem kämen, und nicht als
   JavaScript, das Funktionen direkt aufruft. Läuft in zwei Durchgängen als zwei getrennte
   Prozesse, damit „App neu starten" wirklich heißt, dass sie angehalten und neu gestartet wurde.
-- **Der Selbsttest in `app/main.js`** (`SF_SELFTEST=1`), der ohnehin Teil von `npm test` ist und
-  jetzt zusätzlich den echten ersten Start abdeckt.
+- **Der Selbsttest `test/harness/selftest.js`** — ein zweiter eigener Electron-Start derselben
+  Bauart: er lädt ebenfalls das echte `app/main.js` und bedient dessen Fenster von außen. Er ist
+  Teil von `npm test` und deckt zusätzlich den echten ersten Start ab. (Bis zum 10.08.2026 lag er
+  in `app/main.js` selbst, hinter `SF_SELFTEST=1`; beide Werkzeuge teilen sich jetzt einen
+  gemeinsamen Treiber, `test/harness/driver.js`.)
 
 **Was echt bedient wurde und was nicht** — genau aufgeschrieben, weil ein Durchlauf, der mehr
 behauptet, als er getan hat, schlimmer ist als einer, der seine Kanten zugibt. Dasselbe steht
