@@ -261,12 +261,20 @@ function driver(win) {
    * still working. The switches set at the top of this file are what stops
    * that happening; this is what makes it say so if it happens anyway.
    */
-  const settle = () => Promise.race([
-    js(`new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)))`),
-    new Promise((_, reject) => setTimeout(
-      () => reject(new Error('the window stopped producing animation frames')), 15_000
-    ))
-  ]);
+  const settle = () => {
+    let timer;
+    // The timeout is a watchdog, not part of the result: once the race is
+    // decided (either way) it must not go on holding the Electron main
+    // process alive for up to 15s past the end of a run — which would read
+    // as a hang of its own, indistinguishable from the thing this is meant
+    // to detect.
+    return Promise.race([
+      js(`new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)))`),
+      new Promise((_, reject) => { timer = setTimeout(
+        () => reject(new Error('the window stopped producing animation frames')), 15_000
+      ); })
+    ]).finally(() => clearTimeout(timer));
+  };
 
   return {
     js,
