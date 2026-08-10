@@ -34,65 +34,47 @@
  * "found nothing" is a fact rather than an accident of this machine.
  */
 import { app, BrowserWindow } from 'electron';
-import { readFileSync, writeFileSync, readdirSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { readFileSync, writeFileSync, readdirSync, mkdtempSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { prepareImageFile } from '../../src/main/prepare-image.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import { folderDialog, projectDialogs, searchRoots, windowDisplay } from '../../app/main.js';
+import { folderDialog, projectDialogs } from '../../app/main.js';
 import { driver, wait } from './driver.js';
-
-// This block has to run before app/main.js's own app.whenReady handler does,
-// and it does: importing that module only REGISTERS the handler, and every
-// module body finishes before the ready event fires.
-const runDir = mkdtempSync(join(tmpdir(), 'signalforge-selftest-run-'));
-const effectsFolder = join(runDir, 'Effects');
-mkdirSync(effectsFolder, { recursive: true });
-
-// The settings, and the effects folder, in a throwaway directory. Two reasons,
-// both of them about not touching the machine this runs on: a test must not
-// rewrite the settings of the app its owner actually uses, and the effects
-// folder it exports into must provably not be the real SignalRGB one.
-app.setPath('userData', runDir);
-// The sandbox app/main.js must stay inside (src/main/effects-target.js). Set
-// through the environment because app/main.js reads it at call time, not at
-// import time — an ES import runs before every statement in this file, so
-// setting it earlier is not possible. With it set, even a settings file that
-// named somewhere real would be refused rather than written into.
-process.env[SANDBOX_ENV] = runDir;
-// The effects folder is deliberately NOT seeded: this starts from a settings
-// file that does not exist, so it goes through the genuine first start — no
-// folder found, the window asks, the answer is given through the real
-// sf:chooseFolder handler (see selfTestFirstRun). Pointing the search for an
-// existing installation at the throwaway directory is what makes "found
-// nothing" a fact rather than an accident of the machine this runs on, and is
-// a second guarantee that nothing here can reach the real SignalRGB folder
-// even if a later change stopped setting one.
-searchRoots.documents = () => runDir;
-searchRoots.home = () => runDir;
+import { harnessSandbox } from './sandbox.js';
 
 /** Pictures only if a human asked for them; see SF_SELFTEST_SHOTS above. */
 const DRIVING = { shotsDir: process.env.SF_SELFTEST_SHOTS || null };
 
 /**
- * The window appears only when somebody asked for photographs of it.
+ * The throwaway directory and the sandbox around it (see test/harness/
+ * sandbox.js), and — the one thing this file decides for itself — whether a
+ * window appears at all.
  *
- * `npm test` spawns this file (see test/app/boot.test.js) and asks for no
- * photographs, so an ordinary test run shows nothing at all — which is the
- * whole point: a run of the suite used to put this window in front of whoever
- * was using the machine. Everything below is driven and read through the
- * DevTools protocol and the DOM, none of which needs a window on screen, and
- * this file deliberately asserts on controls rather than on rendered pixels
- * (see selfTestProjects) for exactly that reason.
+ * It appears only when somebody asked for photographs of it. `npm test` spawns
+ * this file (see test/app/boot.test.js) and asks for no photographs, so an
+ * ordinary test run shows nothing at all — which is the whole point: a run of
+ * the suite used to put this window in front of whoever was using the machine.
+ * Everything below is driven and read through the DevTools protocol and the
+ * DOM, none of which needs a window on screen, and this file deliberately
+ * asserts on controls rather than on rendered pixels (see selfTestProjects) for
+ * exactly that reason.
  *
  * With SF_SELFTEST_SHOTS the window IS shown, because `driver.shot()` waits
  * for two real animation frames and a window nobody is showing never produces
  * any. test/harness/shots.js is the file for photographing this app without a
  * window; this one keeps the simple behaviour for the human who asked.
+ *
+ * The effects folder the sandbox makes is deliberately NOT seeded into the
+ * settings: this starts from a settings file that does not exist, so it goes
+ * through the genuine first start — no folder found, the window asks, and the
+ * answer is given through the real sf:chooseFolder handler (see
+ * selfTestFirstRun).
  */
-windowDisplay.show = Boolean(DRIVING.shotsDir);
+const { runDir, effectsFolder } = harnessSandbox('selftest-run', {
+  show: Boolean(DRIVING.shotsDir)
+});
 
 /**
  * A 4x4 PNG, one colour per quarter — the smallest thing that is a real,

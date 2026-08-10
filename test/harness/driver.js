@@ -26,6 +26,44 @@ import { join } from 'node:path';
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * The frame pump, installed in the page.
+ *
+ * A window Chromium is not showing does not tick requestAnimationFrame, and
+ * the preview's render loop is a requestAnimationFrame chain — so with no help
+ * the canvas in every picture would be empty and every measurement would be of
+ * a frame that was never drawn. `createPreview` reaches
+ * `window.requestAnimationFrame` through a closure at the moment it schedules
+ * a frame, so replacing that function puts every subsequent frame into a queue
+ * that is drained from out here, one pump at a time. It is the same trick
+ * test/harness/electron-main.cjs plays on the exported effect, for the same
+ * reason.
+ *
+ * It is also why `settle()` below is not used by the harnesses that pump:
+ * settle() waits for two REAL animation frames, which in a hidden window never
+ * arrive.
+ *
+ * This lived, verbatim and forty lines at a time, in four separate harnesses —
+ * the fifth duplication in a project that has been bitten by exactly this four
+ * times. It lives here now, and the callers reach it through `installPump()`
+ * and `pump()` on the driver.
+ */
+export const PUMP = `(() => {
+  window.__sfQueue = [];
+  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
+  window.__sfPump = (n) => {
+    for (let i = 0; i < n; i += 1) {
+      const due = window.__sfQueue;
+      window.__sfQueue = [];
+      // performance.now() is real time, so the effect's own clock advances
+      // between pumped frames exactly as it would between real ones.
+      due.forEach((cb) => cb(performance.now()));
+    }
+    return true;
+  };
+  return true;
+})()`;
+
+/**
  * What the preview canvas currently shows, as numbers.
  *
  * `hash` answers "is this the very same picture"; the channel means answer
@@ -124,6 +162,14 @@ export function driver(win, { shotsDir = null, shotLabel = null } = {}) {
     send,
     settle,
     message,
+    /**
+     * Take the render loop's frames over, for a window nobody is showing. Has
+     * to be done once the page exists and before anything is measured or
+     * photographed; every frame scheduled after it waits for `pump()`.
+     */
+    installPump: () => js(PUMP),
+    /** Run `frames` of what the page has queued up since the last call. */
+    pump: (frames = 1) => js(`window.__sfPump(${Number(frames)})`),
     async shot(name) {
       if (!shotsDir) return null;
       await settle();

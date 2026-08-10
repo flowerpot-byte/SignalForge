@@ -9,24 +9,21 @@
  *
  * The same shape as selftest.js and walkthrough.js — it imports the real
  * app/main.js, which registers every IPC handler and opens the real window —
- * with one difference that is the whole point of the file: it sets
- * `windowDisplay.show = false` first, so the window is created, loaded, driven
- * and captured but never appears on screen and never takes the focus. Judging
- * how this app LOOKS used to mean a window jumping in front of whoever is
- * using the machine, once per run. It does not any more.
+ * with one difference that is the whole point of the file: it asks
+ * test/harness/sandbox.js for `show: false` first, so the window is created,
+ * loaded, driven and captured but never appears on screen and never takes the
+ * focus. Judging how this app LOOKS used to mean a window jumping in front of
+ * whoever is using the machine, once per run. It does not any more.
  *
  * WHY THERE IS A FRAME PUMP
  *
  * A window Chromium is not showing does not tick requestAnimationFrame, and
  * the preview's render loop is a requestAnimationFrame chain — so with no help
- * the canvas in every picture would be empty. `createPreview` reaches
- * `window.requestAnimationFrame` through a closure at the moment it schedules
- * a frame, so replacing that function in the page before anything is loaded
- * puts every subsequent frame into a queue this file drains from the outside.
- * That is the same trick test/harness/electron-main.cjs plays on the exported
- * effect, for the same reason, and it is why `driver.settle()` is not used
- * here: settle() waits for two REAL animation frames, which in a hidden window
- * never arrive.
+ * the canvas in every picture would be empty. `d.installPump()` and `d.pump()`
+ * (see test/harness/driver.js, which says at length how and why) take those
+ * frames over from the outside; it is why `driver.settle()` is not used here,
+ * because settle() waits for two REAL animation frames and a hidden window
+ * never produces any.
  *
  * WHY THE PICTURE ARRIVES BY OPENING A PROJECT
  *
@@ -43,50 +40,21 @@
  * directory, exactly as the self-test arranges them.
  */
 import { app, BrowserWindow } from 'electron';
-import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import { searchRoots, projectDialogs, folderDialog, windowDisplay } from '../../app/main.js';
+import { projectDialogs, folderDialog } from '../../app/main.js';
 import { driver, wait } from './driver.js';
+import { harnessSandbox } from './sandbox.js';
 
-const runDir = mkdtempSync(join(tmpdir(), 'signalforge-shots-'));
-const effectsFolder = join(runDir, 'Effects');
-mkdirSync(effectsFolder, { recursive: true });
-
-app.setPath('userData', runDir);
-process.env[SANDBOX_ENV] = runDir;
-searchRoots.documents = () => runDir;
-searchRoots.home = () => runDir;
-
-// The one line this file exists for.
-windowDisplay.show = false;
+// The throwaway directory, the sandbox around the effects folder, and the one
+// setting this file exists for: `show: false`. All of it in test/harness/
+// sandbox.js, which is where the five Electron harnesses share it.
+const { runDir, effectsFolder } = harnessSandbox('shots', { show: false });
 
 const OUT = resolve(process.argv[2] || join(process.cwd(), 'work', 'redesign-shots', 'signalrgb'));
 mkdirSync(OUT, { recursive: true });
-
-/**
- * A frame pump installed in the page. Everything the app schedules from now on
- * lands in a queue instead of in Chromium's compositor, and `__sfPump(n)` runs
- * n frames of it by hand.
- */
-const PUMP = `(() => {
-  window.__sfQueue = [];
-  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
-  window.__sfPump = (n) => {
-    for (let i = 0; i < n; i += 1) {
-      const due = window.__sfQueue;
-      window.__sfQueue = [];
-      // performance.now() is real time, so the effect's own clock advances
-      // between pumped frames exactly as it would between real ones.
-      due.forEach((cb) => cb(performance.now()));
-    }
-    return true;
-  };
-  return true;
-})()`;
 
 /**
  * A picture worth looking at, drawn in the window's own canvas and handed back
@@ -144,7 +112,7 @@ async function main() {
   await win.webContents.debugger.attach('1.3');
 
   await d.until(`document.getElementById('footer-export') !== null`, 'the window is built', 300);
-  await d.js(PUMP);
+  await d.installPump();
 
   /**
    * One photograph. Pumps a few frames first so what is captured is the state
@@ -160,7 +128,7 @@ async function main() {
       win.setContentSize(at[0], at[1]);
       await wait(300);
     }
-    await d.js(`window.__sfPump(${frames})`);
+    await d.pump(frames);
     await wait(200);
     const file = join(OUT, `${name}.png`);
     // Captured twice, and only the second one kept. capturePage() on a window
@@ -212,7 +180,7 @@ async function main() {
   );
   // Enough frames that the rolling cost average has something in it and the
   // drift motion has visibly moved.
-  await d.js(`window.__sfPump(60)`);
+  await d.pump(60);
   notes.canvas = await d.stats();
   notes.cost = await d.cost();
   await shot('03-picture-loaded');
@@ -287,7 +255,7 @@ async function main() {
   writeFileSync(wideFile, serializeProject(wide), 'utf8');
   projectDialogs.open = async () => ({ canceled: false, filePaths: [wideFile] });
   await d.clickAndWait('footer-open');
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
 
   const canvas = await d.box('#preview-canvas');
   // Twenty canvas pixels, expressed in the screen pixels this canvas is
@@ -295,7 +263,7 @@ async function main() {
   const perCanvasPixel = canvas.width / 320;
   const before = (await d.stats()).brightestColumn;
   await d.drag(canvas.cx, canvas.cy, canvas.cx - 20 * perCanvasPixel, canvas.cy);
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   const after = (await d.stats()).brightestColumn;
   notes.crop = {
     cssPixelsPerCanvasPixel: Number(perCanvasPixel.toFixed(4)),

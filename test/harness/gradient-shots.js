@@ -24,28 +24,17 @@
  * window that cannot be rehearsed without a human, and it is left alone.
  */
 import { app, BrowserWindow } from 'electron';
-import { writeFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import {
-  searchRoots, projectDialogs, folderDialog, discardDialog, windowDisplay
-} from '../../app/main.js';
+import { projectDialogs, folderDialog, discardDialog } from '../../app/main.js';
 import { driver, wait } from './driver.js';
+import { harnessSandbox } from './sandbox.js';
 
-const runDir = mkdtempSync(join(tmpdir(), 'signalforge-gradient-shots-'));
-const effectsFolder = join(runDir, 'Effects');
-mkdirSync(effectsFolder, { recursive: true });
-
-app.setPath('userData', runDir);
-process.env[SANDBOX_ENV] = runDir;
-searchRoots.documents = () => runDir;
-searchRoots.home = () => runDir;
-
-// The one line this file exists for.
-windowDisplay.show = false;
+// The throwaway directory, the sandbox around the effects folder, and the one
+// setting this file exists for: `show: false`. See test/harness/sandbox.js.
+const { runDir, effectsFolder } = harnessSandbox('gradient-shots', { show: false });
 
 /**
  * And the line that keeps a REAL modal question off the machine's screen.
@@ -67,34 +56,20 @@ discardDialog.ask = async () => ({ response: 1 });
 const OUT = resolve(process.argv[2] || join(process.cwd(), 'work', 'gradient-shots'));
 mkdirSync(OUT, { recursive: true });
 
-const PUMP = `(() => {
-  window.__sfQueue = [];
-  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
-  window.__sfPump = (n) => {
-    for (let i = 0; i < n; i += 1) {
-      const due = window.__sfQueue;
-      window.__sfQueue = [];
-      due.forEach((cb) => cb(performance.now()));
-    }
-    return true;
-  };
-  return true;
-})()`;
-
 async function main() {
   const [win] = BrowserWindow.getAllWindows();
   const d = driver(win);
   const notes = {};
 
   await d.until(`document.getElementById('footer-export') !== null`, 'the window is built', 300);
-  await d.js(PUMP);
+  await d.installPump();
 
   async function shot(name, { size = null, frames = 10 } = {}) {
     if (size) {
       win.setContentSize(size[0], size[1]);
       await wait(300);
     }
-    await d.js(`window.__sfPump(${frames})`);
+    await d.pump(frames);
     await wait(200);
     const file = join(OUT, `${name}.png`);
     // Twice, and only the second kept: the first capture of a window nobody is
@@ -136,7 +111,7 @@ async function main() {
       `the ${tile} effect is on the stage`,
       200
     );
-    await d.js(`window.__sfPump(6)`);
+    await d.pump(6);
   }
 
   /** What the window is showing, in numbers rather than in a picture. */
@@ -172,7 +147,7 @@ async function main() {
   // clicking the swatch, which would open a real modal picker.
   const solidSwatch = await d.js(`document.querySelector('#inspector-body input[type=color]').id`);
   await d.setInput(solidSwatch, '#12c2a0');
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   notes.solidRecoloured = await state();
   await shot('03-solid-recoloured');
 
@@ -189,14 +164,14 @@ async function main() {
 
   // Turn it: the angle slider is the one control a radial gradient does not get.
   await d.setInput('sf-layers-0-angle', '90');
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   notes.turned = await state();
   await shot('06-linear-turned');
 
   // A third colour stop, added by the button in the section heading.
   await d.js(`document.getElementById('sf-layers-0-stop-add').click(), true`);
   await wait(150);
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   notes.threeStops = await state();
   await shot('07-three-stops');
 
@@ -214,10 +189,10 @@ async function main() {
   await d.until(`document.getElementById('sf-layers-0-motions-0-speed') !== null`, 'a motion was added', 100);
   await d.setInput('sf-layers-0-motions-0-speed', '80');
   await d.setInput('sf-layers-0-motions-0-amount', '100');
-  await d.js(`window.__sfPump(10)`);
+  await d.pump(10);
   const before = await d.stats();
   await shot('09-radial-with-motion');
-  await d.js(`window.__sfPump(40)`);
+  await d.pump(40);
   const after = await d.stats();
   notes.motion = {
     kind: await d.js(`document.getElementById('sf-layers-0-kind-0').value`),
@@ -235,7 +210,7 @@ async function main() {
   await d.until(`document.getElementById('sf-layers-0-color') !== null`, 'a solid took over', 100);
   projectDialogs.open = async () => ({ canceled: false, filePaths: [saved] });
   await d.clickAndWait('footer-open');
-  await d.js(`window.__sfPump(6)`);
+  await d.pump(6);
   notes.reopened = await state();
   await shot('11-gradient-reopened');
 
@@ -265,7 +240,7 @@ async function main() {
   writeFileSync(wideFile, serializeProject(wide), 'utf8');
   projectDialogs.open = async () => ({ canceled: false, filePaths: [wideFile] });
   await d.clickAndWait('footer-open');
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   notes.picture = await state();
 
   await win.webContents.debugger.attach('1.3');
@@ -273,7 +248,7 @@ async function main() {
   const perCanvasPixel = canvas.width / 320;
   const markerBefore = (await d.stats()).brightestColumn;
   await d.drag(canvas.cx, canvas.cy, canvas.cx - 20 * perCanvasPixel, canvas.cy);
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
   const markerAfter = (await d.stats()).brightestColumn;
   notes.crop = { markerBefore, markerAfter, moved: markerAfter - markerBefore };
   await shot('13-picture-still-works');

@@ -57,27 +57,13 @@
  * installation is pointed at it too.
  */
 import { app, BrowserWindow, dialog } from 'electron';
-import { writeFileSync, readFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import {
-  projectDialogs, discardDialog, searchRoots, DISCARD_ANSWERS, windowDisplay
-} from '../../app/main.js';
+import { projectDialogs, discardDialog, DISCARD_ANSWERS } from '../../app/main.js';
 import { driver, wait } from './driver.js';
-
-// This block has to run before app/main.js's own app.whenReady handler does,
-// and it does: importing that module only REGISTERS the handler, and every
-// module body finishes before the ready event fires.
-const runDir = mkdtempSync(join(tmpdir(), 'signalforge-unsaved-'));
-const effectsFolder = join(runDir, 'Effects');
-mkdirSync(effectsFolder, { recursive: true });
-app.setPath('userData', runDir);
-process.env[SANDBOX_ENV] = runDir;
-searchRoots.documents = () => runDir;
-searchRoots.home = () => runDir;
+import { harnessSandbox } from './sandbox.js';
 
 /**
  * Whether the picture is dragged onto the preview rather than picked.
@@ -89,15 +75,18 @@ searchRoots.home = () => runDir;
  */
 const DROP_IMPORT = process.env.SF_UNSAVED_DROP_IMPORT === '1';
 
-// The one line that keeps a full test run out of the machine owner's way.
+// The throwaway directory and the sandbox around it (see test/harness/
+// sandbox.js), plus the one setting that keeps a full test run out of the
+// machine owner's way.
 //
-// Shown only when the drag-and-drop import was asked for, and then from the
-// very first paint rather than part-way through: Chromium's drag pipeline
-// wants a window that has been on screen and focused for a while, and a window
-// raised at the last moment made the drop take a minute and a half longer than
-// one that was there all along. So a run that asks for the drop gets exactly
-// the window this harness used to have, and every other run gets none.
-windowDisplay.show = DROP_IMPORT;
+// A window is shown only when the drag-and-drop import was asked for, and then
+// from the very first paint rather than part-way through: Chromium's drag
+// pipeline wants a window that has been on screen and focused for a while, and
+// a window raised at the last moment made the drop take a minute and a half
+// longer than one that was there all along. So a run that asks for the drop
+// gets exactly the window this harness used to have, and every other run gets
+// none.
+const { runDir, effectsFolder } = harnessSandbox('unsaved', { show: DROP_IMPORT });
 
 // The effects folder is named up front, unlike in the self-test: the
 // first-start question is not what this harness is about, and a panel sitting
@@ -123,30 +112,6 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 const SHOTS = process.env.SF_UNSAVED_SHOTS || null;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 const REAL_DIALOG = process.env.SF_UNSAVED_REAL === '1';
-
-/**
- * A frame pump installed in the page, copied from test/harness/shots.js
- * because the reason is the same one: a window that is never shown gets no
- * animation frames from Chromium, and the preview's render loop is a
- * requestAnimationFrame chain. `createPreview` reaches
- * `window.requestAnimationFrame` through a closure at the moment it schedules
- * a frame, so replacing that function puts every subsequent frame into a queue
- * this file drains by hand. It is also why `driver.settle()` is not used
- * anywhere below: settle() waits for two REAL frames, which never arrive here.
- */
-const PUMP = `(() => {
-  window.__sfQueue = [];
-  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
-  window.__sfPump = (n) => {
-    for (let i = 0; i < n; i += 1) {
-      const due = window.__sfQueue;
-      window.__sfQueue = [];
-      due.forEach((cb) => cb(performance.now()));
-    }
-    return true;
-  };
-  return true;
-})()`;
 
 /**
  * A 4x4 PNG, one colour per quarter — the same one the self-test uses. Written
@@ -232,7 +197,7 @@ app.whenReady().then(async () => {
     // waits for real animation frames that a hidden window never produces.
     const d = driver(win);
     await d.until(`document.getElementById('footer-open') !== null`, 'the window is built', 200);
-    await d.js(PUMP);
+    await d.installPump();
 
     /**
      * Two painted frames, driven from out here.
@@ -242,7 +207,7 @@ app.whenReady().then(async () => {
      * and in a window nobody is showing the only thing that runs it is this.
      */
     const settle = async (frames = 4) => {
-      await d.js(`window.__sfPump(${frames})`);
+      await d.pump(frames);
       await wait(80);
     };
 

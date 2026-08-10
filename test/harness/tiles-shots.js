@@ -29,24 +29,16 @@
  *    the 16:10 frame inside the space the stage column gives it.
  */
 import { app, BrowserWindow, nativeImage } from 'electron';
-import { writeFileSync, readFileSync, mkdtempSync, mkdirSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { SANDBOX_ENV } from '../../src/main/effects-target.js';
-import { searchRoots, folderDialog, discardDialog, windowDisplay } from '../../app/main.js';
+import { folderDialog, discardDialog } from '../../app/main.js';
 import { driver, wait } from './driver.js';
+import { harnessSandbox } from './sandbox.js';
 
-const runDir = mkdtempSync(join(tmpdir(), 'signalforge-tiles-shots-'));
-const effectsFolder = join(runDir, 'Effects');
-mkdirSync(effectsFolder, { recursive: true });
+// The throwaway directory, the sandbox around the effects folder, and the one
+// setting this file exists for: `show: false`. See test/harness/sandbox.js.
+const { effectsFolder } = harnessSandbox('tiles-shots', { show: false });
 
-app.setPath('userData', runDir);
-process.env[SANDBOX_ENV] = runDir;
-searchRoots.documents = () => runDir;
-searchRoots.home = () => runDir;
-
-// The one line this file exists for.
-windowDisplay.show = false;
 // Nobody is there to answer a native message box; everything this run throws
 // away it made itself, seconds earlier.
 discardDialog.ask = async () => ({ response: 1 });
@@ -56,20 +48,6 @@ mkdirSync(OUT, { recursive: true });
 
 /** The reference this whole redesign is measured against, if it is on disk. */
 const REFERENCE = process.argv[3] || null;
-
-const PUMP = `(() => {
-  window.__sfQueue = [];
-  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
-  window.__sfPump = (n) => {
-    for (let i = 0; i < n; i += 1) {
-      const due = window.__sfQueue;
-      window.__sfQueue = [];
-      due.forEach((cb) => cb(performance.now()));
-    }
-    return true;
-  };
-  return true;
-})()`;
 
 /** WCAG relative luminance of an 8-bit sRGB triple. */
 function luminance([r, g, b]) {
@@ -159,7 +137,7 @@ async function main() {
   const notes = {};
 
   await d.until(`document.getElementById('footer-export') !== null`, 'the window is built', 300);
-  await d.js(PUMP);
+  await d.installPump();
 
   /** Capture, twice, and hand back the nativeImage as well as the file. */
   async function shot(name, { size = null, frames = 8 } = {}) {
@@ -167,7 +145,7 @@ async function main() {
       win.setContentSize(size[0], size[1]);
       await wait(300);
     }
-    await d.js(`window.__sfPump(${frames})`);
+    await d.pump(frames);
     await wait(200);
     // Twice, and only the second kept: the first capture of a window nobody is
     // showing is what commits the canvas's own layer, so a single one comes
@@ -252,7 +230,7 @@ async function main() {
   if (hidden !== 'hidden') throw new Error(`the names could not be hidden for the measurement: ${hidden}`);
   const bare = await shot('00-strip-without-names');
   await hide('');
-  await d.js(`window.__sfPump(4)`);
+  await d.pump(4);
 
   notes.contrast = {};
   for (const [key, value] of Object.entries(boxes.tiles)) {
