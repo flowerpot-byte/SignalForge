@@ -27,6 +27,31 @@ const here = dirname(fileURLToPath(import.meta.url));
  */
 const ENGINE_BUNDLE = join(here, '..', 'dist', 'engine.bundle.js');
 
+/**
+ * The one place every colour in this project lives.
+ *
+ * The window is created with a background colour so the first paint is the
+ * app's own dark rather than a white flash, and that colour is --bg-base —
+ * the very same one the stylesheet gives the page. Writing the value here as
+ * well would be a second copy of it in a project whose rule is that colours
+ * exist once (test/app/color-literals.test.js enforces that rule over this
+ * file too), and the renderer already reads its backdrop seeds out of this
+ * same file rather than repeating them. So: read it.
+ *
+ * A missing or unreadable token yields null and the window is simply created
+ * without the hint — a white flash on startup is not worth refusing to start
+ * over.
+ */
+const TOKENS_CSS = join(here, 'renderer', 'styles', 'tokens.css');
+
+function backgroundFromTokens() {
+  try {
+    return /--bg-base:\s*([^;]+);/.exec(readFileSync(TOKENS_CSS, 'utf8'))?.[1].trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 let settings;
 
 /**
@@ -320,13 +345,14 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
  * enumerated bridge in preload.cjs — see app/preload.cjs.
  */
 function createWindow() {
+  const background = backgroundFromTokens();
   const win = new BrowserWindow({
     width: 1280,
     height: 820,
     minWidth: 1040,
     minHeight: 700,
     show: false,
-    backgroundColor: '#0b0d14',
+    ...(background ? { backgroundColor: background } : {}),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(here, 'preload.cjs'),
@@ -813,6 +839,12 @@ app.whenReady().then(async () => {
         `({ windowOpened: true, bridge: typeof window.sf === 'object',
             nodeInRenderer: typeof require === 'function' || typeof process === 'object' })`
       );
+
+      // Read back rather than assumed: the background colour is taken out of
+      // tokens.css (see backgroundFromTokens), and a read that quietly found
+      // nothing would show up only as a white flash somebody happened to
+      // notice on startup.
+      report.windowBackground = win.getBackgroundColor();
 
       const urlBeforeNav = win.webContents.getURL();
       win.webContents

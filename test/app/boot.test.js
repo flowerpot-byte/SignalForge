@@ -4,12 +4,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+
+/**
+ * The app's own dark, read from the one file colours live in — deliberately
+ * not written out here, because a copy in this test would be exactly the
+ * duplication the window's background was just freed from.
+ */
+const BG_BASE = /--bg-base:\s*([^;]+);/
+  .exec(readFileSync(join(root, 'app', 'renderer', 'styles', 'tokens.css'), 'utf8'))[1].trim();
 
 test('the app boots, opens a window and exposes its bridge', async () => {
   const child = spawn(require_('electron'), [join(root, 'app', 'main.js'), '--sf-selftest'], {
@@ -33,6 +42,12 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   assert.equal(report.windowOpened, true);
   assert.equal(report.bridge, true, 'window.sf must exist in the renderer');
   assert.equal(report.nodeInRenderer, false, 'the renderer must not reach Node');
+  assert.equal(
+    String(report.windowBackground).toLowerCase(),
+    BG_BASE.toLowerCase(),
+    'the window must open on the app\'s own background, read from tokens.css — a mismatch means ' +
+      'that read failed and the first frame is a white flash'
+  );
   assert.equal(
     report.navigationBlocked,
     true,
