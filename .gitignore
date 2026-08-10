@@ -5,3 +5,7 @@ scratch/
 *.log
 .DS_Store
 .superpowers/
+
+# What electron-builder writes: the unpacked app and the installer. Built from
+# what is in here, so it belongs to nobody's history.
+release/

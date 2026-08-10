@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Build SignalRGB lighting effects from images, videos, gradients and shapes.",
   "license": "GPL-3.0-or-later",
+  "author": "Max",
   "type": "module",
   "private": true,
   "main": "app/main.js",
@@ -16,8 +17,51 @@
     "test": "node --test --import ./test/support/effects-sandbox.js --import ./test/support/single-instance-test.js \"test/**/*.test.js\"",
     "test:import": "node --test --import ./test/support/effects-sandbox.js --import ./test/support/single-instance-test.js --import ./test/support/drop-import-test.js \"test/**/*.test.js\"",
     "start": "npm run build:engine && electron app/main.js",
-    "export": "node bin/sfexport.js"
+    "export": "node bin/sfexport.js",
+    "build:icon": "electron tools/icon/build-icon.mjs",
+    "predist": "npm run build:engine",
+    "dist": "electron-builder --win nsis",
+    "predist:dir": "npm run build:engine",
+    "dist:dir": "electron-builder --win --dir"
   },
+  "build": {
+    "appId": "de.maxblu.signalforge",
+    "productName": "SignalForge",
+    "copyright": "Copyright (C) 2026 Max. Licence GPL-3.0-or-later.",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "app/**/*",
+      "src/**/*",
+      "dist/engine.bundle.js",
+      "package.json",
+      "LICENSE"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "SignalForge-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SignalForge",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false
+    }
+  },
+  "dependencies": {},
   "devDependencies": {
     "electron": "43.3.0",
     "electron-builder": "^26.15.3",
