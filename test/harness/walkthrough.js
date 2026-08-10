@@ -21,7 +21,8 @@
  *  - Genuine CDP input: dragging the picture in (a real drag carrying a real
  *    file path), the crop drag (press, a run of moves, release), every button
  *    press at its own coordinates, the pointer move that makes the grab cursor
- *    appear, and Tab and the arrow keys.
+ *    appear, Tab and the arrow keys, and — point 11 — tabbing to the preview
+ *    canvas and moving the crop there with plain and Shift-held arrows.
  *  - Set on the element, with the same event a person's gesture fires: the
  *    dropdowns (a <select>'s popup is drawn by the operating system and is out
  *    of reach of page input) and the sliders (these steps are about exact
@@ -86,6 +87,15 @@ mkdirSync(effectsFolder, { recursive: true });
 // footer back before pressing any export button, so a future mistake of the
 // same shape stops the run instead of writing somewhere real.
 app.setPath('userData', userDataDir);
+// A window that ends up behind another one is "occluded", and Chromium then
+// stops giving it animation frames. Everything here waits for two of those
+// before it photographs anything, so a run that happens to lose the foreground
+// half way through does not fail — it hangs, silently, forever. That happened.
+// These three switches keep the renderer running at full speed whatever is in
+// front of it; they belong to this harness and change nothing about the app.
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+app.commandLine.appendSwitch('disable-renderer-backgrounding');
+app.commandLine.appendSwitch('disable-background-timer-throttling');
 // The fourth guard, and the only one that is not specific to this file: name
 // the sandbox app/main.js must stay inside (src/main/effects-target.js). It is
 // set here rather than passed in because app/main.js reads it at call time, not
@@ -242,8 +252,21 @@ function driver(win) {
   const js = (expression) => win.webContents.executeJavaScript(expression);
   const send = (method, params) => dbg.sendCommand(method, params);
 
-  /** Two frames, so the compositor has actually painted what we are shooting. */
-  const settle = () => js(`new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)))`);
+  /**
+   * Two frames, so the compositor has actually painted what we are shooting.
+   *
+   * With a deadline on it, because there is one way this can never finish: a
+   * window Chromium has decided is not worth animating hands out no frames at
+   * all, and a run that waits forever for one looks exactly like a run that is
+   * still working. The switches set at the top of this file are what stops
+   * that happening; this is what makes it say so if it happens anyway.
+   */
+  const settle = () => Promise.race([
+    js(`new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)))`),
+    new Promise((_, reject) => setTimeout(
+      () => reject(new Error('the window stopped producing animation frames')), 15_000
+    ))
+  ]);
 
   return {
     js,
@@ -288,8 +311,17 @@ function driver(win) {
       await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, buttons: 0, ...common });
       await wait(60);
     },
-    async key(key, code, virtualKey) {
-      const base = { key, code, windowsVirtualKeyCode: virtualKey, nativeVirtualKeyCode: virtualKey };
+    /**
+     * A real key press. `modifiers` is the protocol's own bitmask —
+     * Alt 1, Ctrl 2, Meta 4, Shift 8 — which is what turns an arrow into the
+     * crop's coarse step.
+     */
+    async key(key, code, virtualKey, modifiers = 0) {
+      const base = {
+        key, code, modifiers,
+        windowsVirtualKeyCode: virtualKey,
+        nativeVirtualKeyCode: virtualKey
+      };
       await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
       await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
       await wait(40);
@@ -695,7 +727,10 @@ async function phaseOne(win, state) {
     && p['10'].workUntouched && p['10'].pictureStillThere ? 'pass' : 'fail';
 
   // --- 11. the keyboard alone ---------------------------------------------
-  p['11'] = { name: 'operate it with the keyboard alone - is the focus visible everywhere?', shots: [] };
+  p['11'] = {
+    name: 'operate it with the keyboard alone - focus visible everywhere, and the crop movable?',
+    shots: []
+  };
   await d.js(`document.getElementById('footer-name').focus()`);
   const stops = [];
   for (let i = 0; i < 18; i += 1) {
@@ -727,8 +762,136 @@ async function phaseOne(win, state) {
   p['11'].brightnessAfterArrows = afterKeys;
   p['11'].shots.push(await d.shot('p11-b-keyboard-changed-a-slider'));
   await slider('sf-brightness', 100);
+
+  // And the caret in the name field, so "the canvas takes the arrow keys" is
+  // not quietly true of the whole window: a text field must still get its own.
+  await d.js(`(() => {
+    const f = document.getElementById('footer-name');
+    f.focus();
+    f.setSelectionRange(f.value.length, f.value.length);
+  })()`);
+  p['11'].caretAtEnd = await d.js(`document.getElementById('footer-name').selectionStart`);
+  for (let i = 0; i < 3; i += 1) await d.key('ArrowLeft', 'ArrowLeft', 37);
+  p['11'].caretAfterArrows = await d.js(`document.getElementById('footer-name').selectionStart`);
+  p['11'].nameFieldStillTakesArrows =
+    p['11'].caretAfterArrows === p['11'].caretAtEnd - 3;
+
+  // --- 11b. moving the crop with the keyboard alone -----------------------
+  //
+  // The one thing point 11 used to have to leave open. Everything here is
+  // driven by real key events through the protocol; what is measured is where
+  // the white marker bar ends up in the rendered canvas, which is the same
+  // measurement point 3 judges the mouse drag by — so "the arrow keys agree
+  // with the mouse" is a comparison of like with like.
+  //
+  // Both motions are stilled first and put back afterwards. They are still
+  // running from point 5, and warp moves the marker bar by itself; leaving
+  // them on would mean measuring them instead of the keyboard.
+  await slider('sf-layers-0-motions-0-amount', 0);
+  await slider('sf-layers-0-motions-1-amount', 0);
+  await wait(250);
+
+  // Tabbed to, deliberately, not focused from script: that the canvas is a
+  // stop in the tab order at all is the whole point.
+  await d.js(`document.getElementById('footer-name').focus()`);
+  let presses = 0;
+  let reached = false;
+  while (presses < 40 && !reached) {
+    await d.key('Tab', 'Tab', 9);
+    presses += 1;
+    reached = await d.js(`document.activeElement.id === 'preview-canvas'`);
+  }
+  p['11'].canvasReachedByTab = reached;
+  p['11'].canvasTabPresses = presses;
+  p['11'].canvas = await d.js(`(() => {
+    const c = document.getElementById('preview-canvas');
+    return {
+      tabindex: c.getAttribute('tabindex'),
+      role: c.getAttribute('role'),
+      label: c.getAttribute('aria-label'),
+      focusRingShown: document.querySelector(':focus-visible') === c,
+      outline: getComputedStyle(c).outlineWidth
+    };
+  })()`);
+  p['11'].shots.push(await d.shot('p11-c-canvas-focused'));
+
+  // How far the panel is scrolled, before and after a run of arrow presses:
+  // focusing the canvas and then moving the crop must not shift the column
+  // under the user.
+  const scrollNow = () => d.js(`(() => {
+    const p = document.getElementById('preview');
+    return { top: p.scrollTop, left: p.scrollLeft };
+  })()`);
+  p['11'].scrollBeforeArrows = await scrollNow();
+
+  // A known starting point, arrived at with the keys themselves: the picture
+  // is 800 x 200 with 240 canvas pixels of slack, so Shift-left far enough
+  // pins it against one end, and six coarse presses back (6 x 40 = 240) land
+  // exactly in the middle.
+  for (let i = 0; i < 30; i += 1) await d.key('ArrowLeft', 'ArrowLeft', 37, 8);
+  const cropAtEdge = await d.stats();
+  for (let i = 0; i < 5; i += 1) await d.key('ArrowLeft', 'ArrowLeft', 37, 8);
+  const cropPastEdge = await d.stats();
+  p['11'].cropStopsAtTheEdge = cropAtEdge.hash === cropPastEdge.hash;
+  p['11'].shots.push(await d.shot('p11-d-crop-at-the-edge'));
+
+  for (let i = 0; i < 6; i += 1) await d.key('ArrowRight', 'ArrowRight', 39, 8);
+  const centred = await d.stats();
+  p['11'].barCentred = centred.brightestColumn;
+
+  // Five presses right: four canvas pixels each, so the marker must travel
+  // twenty columns, and to the RIGHT — the same way the mouse moves it.
+  for (let i = 0; i < 5; i += 1) await d.key('ArrowRight', 'ArrowRight', 39);
+  const afterRight = await d.stats();
+  p['11'].barAfterFiveRight = afterRight.brightestColumn;
+  p['11'].shots.push(await d.shot('p11-e-crop-moved-right-by-arrows'));
+
+  for (let i = 0; i < 10; i += 1) await d.key('ArrowLeft', 'ArrowLeft', 37);
+  const afterLeft = await d.stats();
+  p['11'].barAfterTenLeft = afterLeft.brightestColumn;
+  p['11'].shots.push(await d.shot('p11-f-crop-moved-left-by-arrows'));
+
+  p['11'].scrollAfterArrows = await scrollNow();
+  p['11'].panelDidNotScroll =
+    p['11'].scrollAfterArrows.top === p['11'].scrollBeforeArrows.top &&
+    p['11'].scrollAfterArrows.left === p['11'].scrollBeforeArrows.left;
+
+  p['11'].cropStepRight = p['11'].barAfterFiveRight - p['11'].barCentred;
+  p['11'].cropStepLeft = p['11'].barAfterTenLeft - p['11'].barAfterFiveRight;
+  // The direction first, because that is the claim that matters, and then the
+  // distance: 5 x 4 = 20 canvas pixels one way, 10 x 4 = 40 back. One column
+  // of tolerance for the resampling of a bar that is eight pixels wide.
+  p['11'].arrowsAgreeWithTheMouse =
+    p['11'].cropStepRight > 0 && p['11'].cropStepLeft < 0 &&
+    Math.abs(p['11'].cropStepRight - 20) <= 1 && Math.abs(p['11'].cropStepLeft + 40) <= 1;
+
+  // With no picture to crop there must be no tab stop either. Checked by
+  // switching the fit to one that crops nothing, which is the case a user
+  // actually reaches.
+  await setSelect('sf-layers-0-fit', 'contain');
+  p['11'].canvasWhenNothingToCrop = await d.js(`(() => {
+    const c = document.getElementById('preview-canvas');
+    return { tabindex: c.getAttribute('tabindex'), role: c.getAttribute('role') };
+  })()`);
+  await setSelect('sf-layers-0-fit', 'cover');
+  p['11'].canvasWhenCroppableAgain = await d.js(
+    `document.getElementById('preview-canvas').getAttribute('tabindex')`
+  );
+  p['11'].tabStopFollowsTheFitMode =
+    p['11'].canvasWhenNothingToCrop.tabindex === null &&
+    p['11'].canvasWhenCroppableAgain === '0';
+
+  // Put point 5's motions back the way they were.
+  await slider('sf-layers-0-motions-0-amount', 100);
+  await slider('sf-layers-0-motions-1-amount', 100);
+
   p['11'].result = p['11'].everyStopShowsTheRing && p['11'].reachedEveryKind
-    && Number(afterKeys) === Number(beforeKeys) - 5 ? 'pass' : 'fail';
+    && Number(afterKeys) === Number(beforeKeys) - 5
+    && p['11'].nameFieldStillTakesArrows
+    && p['11'].canvasReachedByTab && p['11'].canvas.focusRingShown
+    && p['11'].canvas.role === 'application' && Boolean(p['11'].canvas.label)
+    && p['11'].arrowsAgreeWithTheMouse && p['11'].cropStopsAtTheEdge
+    && p['11'].panelDidNotScroll && p['11'].tabStopFollowsTheFitMode ? 'pass' : 'fail';
 
   // --- 8a. save the project, then let the app really stop -----------------
   p['8'] = { name: 'save a project, restart the app, open it - is everything still there?', shots: [] };
