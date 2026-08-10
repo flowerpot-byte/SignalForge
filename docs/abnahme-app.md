@@ -13,6 +13,17 @@ Bildausschnitt ließ sich nicht mit der Tastatur verschieben — **ist geschloss
 unten ist entsprechend erweitert, und der Durchlauf wurde danach in beiden Durchgängen noch
 einmal komplett gefahren.
 
+> **Wichtiger Nachtrag vom 11.08.2026 — dieses Protokoll beschreibt ein Fenster, das es so
+> nicht mehr gibt.** Max hat das Aussehen danach dreimal bemängelt und schließlich verlangt,
+> es *genauso wie SignalRGB* zu bauen. Die Oberfläche wurde daraufhin vollständig neu
+> gebaut (Glasoptik entfernt, Icon-Leiste, Karten je Reglergruppe, Wiedergabe-Leiste,
+> Startkacheln), und es kamen Effekte ohne Bild sowie eine Verpackung als Windows-Programm
+> hinzu. **Die Ergebnisse und Bilder unten gelten für den Stand davor.** Die elf Punkte
+> gehören noch einmal durchgespielt, sobald Max das neue Aussehen beurteilt hat — mehrere
+> davon brauchen ein sichtbares Fenster und warten darauf, dass er nicht am Rechner sitzt.
+> Sein eigener Prüfpunkt unten bleibt unverändert offen und wird von niemand anderem
+> ausgefüllt.
+
 ---
 
 ## Testsatz
