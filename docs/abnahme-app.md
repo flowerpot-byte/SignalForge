@@ -60,18 +60,29 @@ Zwei Werkzeuge, beide im Repository, beide wiederholbar:
 - **Der Selbsttest in `app/main.js`** (`SF_SELFTEST=1`), der ohnehin Teil von `npm test` ist und
   jetzt zusätzlich den echten ersten Start abdeckt.
 
-**Was dabei nicht echt ist, und warum** — beides steht auch im Quelltext an der Stelle, an der
-es passiert:
+**Was echt bedient wurde und was nicht** — genau aufgeschrieben, weil ein Durchlauf, der mehr
+behauptet, als er getan hat, schlimmer ist als einer, der seine Kanten zugibt. Dasselbe steht
+auch im Quelltext an der Stelle, an der es passiert:
 
-- Die drei Dateidialoge (Ordner wählen, Projekt speichern, Projekt öffnen) sind ersetzt. Ein
+- **Echte Eingaben:** das Hineinziehen des Bildes (ein echtes Ziehen mit einem echten
+  Dateipfad), das Ziehen des Ausschnitts (Drücken, viele Bewegungen, Loslassen), jeder
+  Knopfdruck an seinen eigenen Koordinaten, die Mausbewegung, die die Greifhand erscheinen
+  lässt, sowie Tabulator und Pfeiltasten.
+- **Am Element gesetzt, mit demselben Ereignis, das eine Handbewegung auslöst:** die
+  Auswahlfelder (deren aufklappende Liste zeichnet das Betriebssystem, sie ist von der Seite
+  aus nicht erreichbar) und die Schieberegler (dort geht es um genaue Werte — 0, 30, 100 —,
+  die eine Maus, die irgendwo auf der Schiene landet, nicht zusichern kann). Punkt 11 schließt
+  diese Lücke von der anderen Seite: dort wird ein Regler mit echten Pfeiltasten bewegt und
+  nachgesehen, ob sich die Zahl wirklich ändert.
+- **Ersetzt:** die drei Dateidialoge (Ordner wählen, Projekt speichern, Projekt öffnen). Ein
   Dialog des Betriebssystems würde auf einen Menschen warten, und ein Lauf, der auf einen
   Menschen wartet, prüft nichts.
-- Punkt 10 (`.mp4`) wirft das Ablege-Ereignis in der Seite selbst. Diese Absage wird am
+- **In der Seite erzeugt:** das Ablegen der `.mp4` in Punkt 10. Diese Absage wird am
   Dateinamen entschieden, bevor irgendetwas die Festplatte anfasst — ein echtes Ziehen nähme
   denselben Weg.
 
-Alles andere ist die App selbst: der echte Import, der echte Ausschnitt, jeder Regler, der
-echte Export, die echte Projektdatei.
+Was die App selbst tut, tut in jedem Fall sie: der echte Import, die echte
+Ausschnitt-Rechnung, die echte Zeichenschleife, der echte Export, die echte Projektdatei.
 
 **Kein Zugriff auf den echten SignalRGB-Ordner.** Es wurde in einen Wegwerf-Ordner exportiert.
 Der Beleg dafür steht mit im Bericht (`report-1.json`, Feld `exportTargetOnScreen`).

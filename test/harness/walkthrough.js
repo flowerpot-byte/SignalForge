@@ -14,14 +14,27 @@
  * That distinction has caught real bugs in this project before: a handler can
  * be "called successfully" and still be unreachable with an actual pointer.
  *
- * Two things are not the real thing, both for the same reason, and both are
- * named here rather than buried: the three OS file dialogs are replaced
- * through the seams app/main.js exports (a modal dialog would sit waiting for
- * a human, and an unattended run would simply hang), and the ".mp4 is
- * refused" step dispatches a drop event built in the page instead of an OS
- * drag, because that path is decided by the file's name before anything
- * touches the disk. Everything else — the import, the crop, every slider, the
- * export, the project file — is the app's own code doing its own work.
+ * What is driven by genuine input events, and what is not, spelled out rather
+ * than buried, because a walkthrough that claims more than it did is worse
+ * than one that admits its edges:
+ *
+ *  - Genuine CDP input: dragging the picture in (a real drag carrying a real
+ *    file path), the crop drag (press, a run of moves, release), every button
+ *    press at its own coordinates, the pointer move that makes the grab cursor
+ *    appear, and Tab and the arrow keys.
+ *  - Set on the element, with the same event a person's gesture fires: the
+ *    dropdowns (a <select>'s popup is drawn by the operating system and is out
+ *    of reach of page input) and the sliders (these steps are about exact
+ *    values — 0, 30, 100 — which a mouse landing on a track cannot promise).
+ *    Point 11 closes that gap from the other side: it moves a slider with real
+ *    arrow keys and checks the number really changed.
+ *  - Stubbed: the three OS file dialogs, through the seams app/main.js
+ *    exports. A modal dialog would sit waiting for a human.
+ *  - Built in the page: the ".mp4 is refused" drop, because that refusal is
+ *    decided by the file's name before anything touches the disk.
+ *
+ * Everything the app itself does — the import, the crop arithmetic, the render
+ * loop, the export, the project file — is its own code doing its own work.
  *
  * Run it in two phases, as two separate processes, because "restart the app
  * and open the project again" is only worth anything if the app really does
