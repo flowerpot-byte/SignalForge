@@ -166,7 +166,7 @@ Ebenfalls offen:
 - Ob überhaupt ein generischer Verlauf angezeigt wird, wenn ein Bild fehlt, oder etwas anderes (die
   einzige Quelle dafür ist der eine Forumsbeitrag).
 
-**Probe, die das klären würde** (nicht ausgeführt — Vorschlag zur Freigabe):
+**Probe, die das klären würde** (Stand 10.08.2026: ausgeführt, siehe Nachtrag unten):
 
 Zwei Wegwerf-Dateipaare kurz in `Documents\WhirlwindFX\Effects` legen, in SignalRGBs Effektliste
 nachsehen, danach sofort wieder löschen:
@@ -182,6 +182,15 @@ zerstört nichts — beide Dateien werden danach sofort wieder entfernt, genau w
 Wegwerf-Effekten aus dem Video-Test. Diese Probe wurde **nicht** durchgeführt, weil das Aufgabenlimit
 für diese Messung ausdrücklich keinen Sondiereffekt und keine Bedienung von SignalRGB erlaubt,
 solange Max wach am Rechner ist und nicht ausdrücklich zugestimmt hat.
+
+**Nachtrag 10.08.2026:** Max hat diese eine Probe ausdrücklich freigegeben. Drei Dateien liegen
+jetzt in `Documents\WhirlwindFX\Effects` — `SF Probe Mit Bild.html` + `SF Probe Mit Bild.png`
+(512×288, magentafarben mit großem weißem „SF") und `SF Probe Ohne Bild.html` ohne Bilddatei —,
+beide mit `bin/sfexport.js` gebaut. SignalRGB wurde dabei nicht gestartet oder bedient; die beiden
+vorhandenen Dateien (`MaxAmbient.html`, `SF Bergabend.html`) sind unverändert (Hash-Vergleich
+davor/danach identisch). Die Probe wartet auf Max' Blick in SignalRGBs eigene Effektliste — Details
+in `work/titelbild-probe.md`. Das Ergebnis (Nachbardatei-Hypothese bestätigt oder widerlegt) ist
+noch offen und wird hier nachgetragen, sobald Max berichtet hat.
 
 ---
 
