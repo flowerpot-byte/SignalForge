@@ -9,7 +9,7 @@ import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
 import { mountFooter } from './components/footer.js';
 import { mountFirstRun } from './components/firstrun.js';
-import { mountSidebar, DESTINATIONS } from './components/sidebar.js';
+import { mountSidebar } from './components/sidebar.js';
 import { mountGallery } from './components/gallery.js';
 import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
@@ -89,17 +89,37 @@ async function boot() {
    * opaque rectangle the size of the window with nothing in it read as a hole
    * rather than as a screen waiting for something.
    */
-  function showPicture(has) {
-    regions.preview.classList.toggle('has-picture', has);
-    sidebar.setHasPicture(has);
-    // The two picture-dependent destinations only exist once there is a
-    // picture, so somebody standing on one of them when a project without one
-    // is opened has to be moved off it rather than left looking at an empty
-    // column. Going the other way, a picture that has just arrived puts the
-    // column on "Bild", which is where its fit and its crop are.
-    if (has && !hasPicture) showSection('image');
-    if (!has && DESTINATIONS.some((d) => d.key === section && d.needsPicture)) showSection('colour');
-    hasPicture = has;
+  /**
+   * Say — to the stylesheet, to the left column and to the crop — what is on
+   * the stage now.
+   *
+   * `arrive` is the section to go to when something has just been started or
+   * opened; leave it out for a refresh that must not move anybody.
+   *
+   * The class is still called `has-picture` although a solid colour is not a
+   * picture: what it actually means, and always meant, is "there is something
+   * on the stage, so stop inviting a file to be dropped on it". The stylesheet
+   * and the harness both know that name, and renaming it would be a change to
+   * three files that means nothing.
+   *
+   * Which destinations exist is asked of the settings column rather than
+   * worked out here (see mountInspector's sections()), because that is the one
+   * place that decides which controls a layer type has.
+   */
+  function showContent(arrive = null) {
+    const doc = preview.document();
+    regions.preview.classList.toggle('has-picture', doc.layers.length > 0);
+    const sections = inspector.sections();
+    sidebar.setAvailable(sections);
+    if (arrive && sections.has(arrive)) {
+      showSection(arrive);
+    } else if (section !== 'settings' && !sections.has(section)) {
+      // Somebody standing on a destination the new document does not have —
+      // "Bild" after opening a gradient — must be moved off it rather than
+      // left looking at an empty column. "Farbe" is the one section every
+      // document has.
+      showSection('colour');
+    }
   }
   const regions = mountShell(document.getElementById('app'));
 
@@ -111,7 +131,6 @@ async function boot() {
    * that is waiting for something.
    */
   let section = 'colour';
-  let hasPicture = false;
 
   /** Mark the group the left column is pointing at, without moving anything. */
   function markSection() {
@@ -222,6 +241,29 @@ async function boot() {
   // The id the dropped picture always gets. One layer for now; the layer
   // list is a later task.
   const IMAGE_LAYER = 'image';
+
+  /**
+   * The id a solid or a gradient layer gets. Deliberately not IMAGE_LAYER:
+   * these documents are saved and read by people, and a gradient stored under
+   * a layer called "image" is a lie in a file somebody may open in an editor.
+   */
+  const COLOUR_LAYER = 'fill';
+
+  /**
+   * The one layer, whatever it is — the document has exactly one for now, and
+   * every lookup below asks for it this way rather than by a fixed id. A
+   * project whose picture layer was named something else (an effect exported
+   * by the command line calls it "a1") used to arrive with no measurable
+   * picture at all, because the lookup was by the name this window happens to
+   * use.
+   */
+  const onlyLayer = (doc = preview.document()) => doc.layers[0] ?? null;
+
+  /** That layer, but only when it is a picture — otherwise nothing. */
+  const pictureLayer = (doc = preview.document()) => {
+    const layer = onlyLayer(doc);
+    return layer && layer.type === 'image' ? layer : null;
+  };
 
   /**
    * Whether the document on screen holds work that is in no file yet.
@@ -336,9 +378,21 @@ async function boot() {
     }
   }
 
+  /**
+   * The picture that can be dragged, or nothing.
+   *
+   * "Nothing" is what a solid or a gradient effect gives, and it is what makes
+   * the crop drag INERT rather than present-but-dead on such a document:
+   * mountCrop's syncAffordance() takes the canvas out of the tab order, puts
+   * its role back to "img", drops the grab cursor and refuses pointerdown as
+   * soon as this returns null (see components/crop.js). There is nothing to
+   * hide, because a crop control that is not there is not drawn in the first
+   * place — the "Bild" section of the settings column simply does not exist
+   * for a layer type with no picture in it.
+   */
   function draggableLayer() {
     if (!sourceSize) return null;
-    const layer = preview.document().layers.find((entry) => entry.id === IMAGE_LAYER);
+    const layer = pictureLayer();
     if (!layer) return null;
     return { ...layer, sourceWidth: sourceSize.width, sourceHeight: sourceSize.height };
   }
@@ -365,7 +419,9 @@ async function boot() {
     // the crop — the mouse drag and the arrow keys — arrive here, so this one
     // line covers both of them.
     onChange: (offset) => {
-      preview.setLayerOffset(IMAGE_LAYER, offset);
+      const layer = pictureLayer();
+      if (!layer) return;
+      preview.setLayerOffset(layer.id, offset);
       markChanged();
     },
     announce: (message) => { cropAnnouncement.textContent = message; }
@@ -475,17 +531,85 @@ async function boot() {
         // picture is already on screen and the chip is allowed to arrive a
         // frame later.
         retintFromAsset(result.asset);
-        showPicture(true);
         // There is something to move now, so the canvas becomes a tab stop.
         crop.refresh();
         // The column had nothing but the document-wide sliders until now.
         inspector.refresh();
+        showContent('image');
         showName(preview.document().name);
         preview.start();
       } catch (err) {
         console.error('image import failed:', err);
         showMessage(`${i18n.t('preview.dropFailed')}: ${err.message || err}`, true);
       }
+  }
+
+  /**
+   * What each tile in the starting gallery actually makes.
+   *
+   * Deliberately as little as it can possibly be: a type, and for a gradient
+   * the one word that says which way it runs. Every other field — the colour,
+   * the stops, their positions, the angle — is left out so that
+   * normalizeDocument fills it in (see DEFAULT_SOLID_COLOR and
+   * DEFAULT_GRADIENT_STOPS in src/engine/document.js).
+   *
+   * That is not brevity for its own sake. It is what keeps every colour in
+   * this app out of app/renderer entirely: the window never names a colour, it
+   * shows and edits the ones the document carries. test/app/color-literals.js
+   * scans this whole tree, and it passes because there is genuinely nothing
+   * here to find rather than because anything was hidden from it.
+   */
+  const STARTERS = Object.freeze({
+    solid: { type: 'solid' },
+    linear: { type: 'gradient', shape: 'linear' },
+    radial: { type: 'gradient', shape: 'radial' }
+  });
+
+  /**
+   * Begin an effect that has no picture in it.
+   *
+   * The counterpart of importFile above, and it follows the same order for the
+   * same reasons — document first, then the crop (which now has nothing to
+   * drag and says so), then the column, then the name, then the loop.
+   *
+   * Like the picture tile and like a drop, this replaces what is on screen
+   * without asking. That is deliberate consistency, not an oversight: all four
+   * tiles are the same gesture, and one of them stopping to ask while the
+   * others do not would be the surprising thing. Opening a project still asks,
+   * because that one comes with a file dialog attached.
+   */
+  async function startEffect(kind) {
+    const starter = STARTERS[kind];
+    if (!starter) {
+      console.error('gallery: no such effect kind', kind);
+      return;
+    }
+    try {
+      showMessage('');
+      await preview.setDocument({
+        // The tile's own word, which is a translated string the user can then
+        // type over. A name is not optional: it becomes the file SignalRGB
+        // lists, and the export refuses an empty one rather than inventing
+        // "Untitled" (see src/main/export-effect.js).
+        name: i18n.t(`gallery.${kind}`),
+        layers: [{ id: COLOUR_LAYER, ...starter, motions: [] }]
+      });
+      // Nothing to crop: this is what makes the canvas stop being a tab stop
+      // and the drag inert (see draggableLayer above).
+      sourceSize = null;
+      // No picture, so no colours to take a thumbnail from. Back to the
+      // resting outline rather than leaving the last picture's tint behind.
+      retintThumbnail(null);
+      markChanged();
+      crop.refresh();
+      inspector.refresh();
+      showContent('fill');
+      showName(preview.document().name);
+      preview.start();
+    } catch (err) {
+      console.error('could not start an effect:', err);
+      showMessage(`${i18n.t('gallery.startFailed')}: ${err.message || err}`, true);
+    }
   }
 
   mountDrop(regions.preview, {
@@ -495,12 +619,12 @@ async function boot() {
     }
   });
 
-  // The starting gallery, under the stage: how an effect begins. Only the
-  // "own picture" tile does anything today; the solid-colour and gradient
-  // tiles are on screen and marked as unbuilt, because they need layer types
-  // the engine does not have yet (see components/gallery.js).
+  // The starting gallery, under the stage: how an effect begins. All four
+  // tiles do something now — a picture through the same import path a drop
+  // uses, and the other three straight into a document (see startEffect).
   const gallery = mountGallery(regions.preview, {
     t: (k) => i18n.t(k),
+    onStart: startEffect,
     // A dialog can only offer what the importer accepts, but `accept` is a
     // hint the operating system is free to ignore ("all files" is one click
     // away in every file dialog there is), so the same judgement the drop
@@ -595,7 +719,11 @@ async function boot() {
     const sizes = await measureEmbeddedAssets(doc);
 
     await preview.setDocument(doc);
-    const layer = doc.layers.find((entry) => entry.id === IMAGE_LAYER);
+    // Whatever the one layer is: a project that carries a gradient has no
+    // asset to measure, and a project whose picture layer is called something
+    // other than this window's own name for it (a document built by the
+    // command line calls it "a1") still has to be measurable.
+    const layer = pictureLayer(doc);
     const measured = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
     sourceSize = measured ? { width: measured.width, height: measured.height } : null;
     // The pictures were decoded a few lines up to be measured, so the colours
@@ -603,11 +731,14 @@ async function boot() {
     // with no picture in it puts the seed colours back rather than leaving
     // the previous project's tint behind.
     retintThumbnail(measured ? measured.image : null);
-    showPicture(Boolean(measured));
     // A project brings its own picture and its own fit mode, so whether the
     // canvas is a tab stop is decided fresh here too.
     crop.refresh();
     inspector.refresh();
+    // Land on the section that says what this project IS: its fill for a
+    // colour effect, its picture for a picture. showContent falls back to the
+    // one section every document has if the document has neither.
+    showContent(measured ? 'image' : 'fill');
     showName(doc.name);
     preview.start();
     // What is on screen came out of a file and has not been touched since.

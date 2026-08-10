@@ -407,41 +407,6 @@ html, body {
 .tile-art-linear { background: linear-gradient(115deg, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
 .tile-art-radial { background: radial-gradient(circle at 32% 30%, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
 
-/* A tile for something that is NOT built yet.
-   Four marks at once, none of them carrying the honesty alone: the button is
-   genuinely disabled (so it cannot be pressed and is not a tab stop), its edge
-   is dashed against every working tile's solid one, it sits on the page rather
-   than on a card, and it carries a badge that says so in words — inside the
-   button, so the badge is part of the accessible name.
-   Deliberately no opacity: dimming the whole tile would have taken the badge's
-   own contrast down with it, and the badge is the part that has to be read. */
-.tile-soon {
-  background: transparent;
-  border-style: dashed;
-  border-color: var(--track-empty);
-  color: var(--text-muted);
-  cursor: default;
-}
-.tile-soon .tile-art { filter: saturate(0.4); }
-/* Top right, opposite the art and clear of the label: at the bottom it sat on
-   top of the tile's own name and cut it in half at 1040px. */
-.tile-badge {
-  position: absolute;
-  top: var(--space-3);
-  right: var(--space-3);
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 2px var(--space-2) 2px 5px;
-  border-radius: var(--radius-pill);
-  background: var(--surface-sunk);
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-.tile-badge .icon { width: 11px; height: 11px; }
 
 /* ---------------------------------------------------------------------------
    The first-start question. A card at the top of the stage column, not a
@@ -600,6 +565,30 @@ html, body {
 .motion-row select { width: 100%; }
 .motion .control + .control { margin-top: var(--space-3); }
 
+/* A colour stop is the same card as a motion, minus the dropdown — so where a
+   motion has a row with its kind on the left and its remove button on the
+   right, a stop has only the button. It is pulled up level with the legend
+   rather than costing a row of its own: the legend is a short word and the
+   space beside it is otherwise empty for the whole width of the column. */
+.stop { position: relative; }
+.stop-row {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  margin: 0;
+}
+/* And the colour row gets out of its way. A fieldset positions an absolutely
+   placed child from below its legend, not from the top of the card, so the
+   button lands level with the FIRST control rather than beside the legend —
+   which is exactly where that control's swatch is (photographed doing it:
+   work/gradient-shots, first run). Rather than fight the fieldset, the row is
+   given room at its right end, so the stop reads "Farbe [swatch] [-]" on one
+   line and costs no extra height.
+   The colour row is the one addressed, by name: a stop card holds exactly one
+   `.control-row` (its swatch) and one plain `.control` (its position slider),
+   so this cannot drift onto the wrong one. */
+.stop .control-row { padding-right: calc(var(--space-5) + var(--space-1)); }
+
 /* ---------------------------------------------------------------------------
    The transport bar: what is loaded, where it is going, and the one button the
    whole app exists for.
@@ -687,6 +676,40 @@ input[type="text"] {
 }
 input[type="text"]:hover { border-color: var(--track-empty); }
 input[type="text"]:disabled { color: var(--text-muted); cursor: default; }
+
+/* The colour picker.
+   The browser's own control, on purpose (see colorField in
+   components/field.js): what is styled here is the BOX — its size, its
+   corners, the sunken edge every other control in a card has — while the
+   swatch inside it is the document's own colour and the picker that opens on
+   click belongs to Windows and cannot be styled at all. That is the trade for
+   not hand-building a colour picker, and it is worth taking.
+
+   `appearance: none` is what removes Chromium's own grey chrome around the
+   swatch; without it the control arrives with a light-grey frame that belongs
+   to no palette in this window. The inner padding is 2px so the swatch reads
+   as a colour chip inside a well rather than as a rectangle with a line drawn
+   round it. Nothing here names a colour: the swatch IS the value. */
+input[type="color"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 56px;
+  height: 24px;
+  padding: 2px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  cursor: pointer;
+  transition: border-color 120ms ease-out;
+}
+input[type="color"]:hover { border-color: var(--track-empty); }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius) - 2px);
+}
+/* The colour card puts its swatch where a dropdown would be. */
+.control-row > input[type="color"] { grid-column: 2; justify-self: end; }
 
 select {
   font: inherit;

@@ -10,9 +10,11 @@
 // meaningful. src/engine/document.js imports nothing at all, so it loads in
 // the browser as a plain ES module just as it does in node:test, where this
 // file is imported with no DOM whatsoever.
-import { FIT_MODES, MOTION_KINDS } from '../../../src/engine/document.js';
+import {
+  FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
+} from '../../../src/engine/document.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
-import { createField, createMotions } from './field.js';
+import { createField, createMotions, createStops } from './field.js';
 import { icon } from './icons.js';
 
 /** A range plus the one thing a slider needs that a baked control does not. */
@@ -48,7 +50,12 @@ const RANGES = Object.freeze({
   brightness: withStep(CONTROL_RANGES.brightness),
   saturation: withStep(CONTROL_RANGES.saturation),
   greenMagenta: withStep(CONTROL_RANGES.greenMagenta),
-  blueYellow: withStep(CONTROL_RANGES.blueYellow)
+  blueYellow: withStep(CONTROL_RANGES.blueYellow),
+  angle: withStep(CONTROL_RANGES.angle),
+  // The one range in this table the exported effect does not also offer, and
+  // src/export/effect-controls.js says why at length: a stop position needs a
+  // gradient to be seen against, and SignalRGB's panel has none.
+  stop: withStep(CONTROL_RANGES.stop)
 });
 
 /** The fields that belong to the document itself, in the order they appear. */
@@ -65,6 +72,7 @@ const DOCUMENT_FIELDS = Object.freeze(['saturation', 'greenMagenta', 'blueYellow
  * checked in plain node (test/app/inspector.test.js).
  */
 export const SECTION_TITLES = Object.freeze({
+  fill: 'inspector.section.fill',
   image: 'inspector.section.image',
   motions: 'inspector.motions',
   colour: 'inspector.section.colour'
@@ -72,14 +80,22 @@ export const SECTION_TITLES = Object.freeze({
 
 /** The glyph that leads each section's heading, and the left column's entry. */
 const SECTION_GLYPHS = Object.freeze({
+  fill: 'solid',
   image: 'image',
   motions: 'motion',
   colour: 'colour'
 });
 
-/** "layers.0.motions.1.speed" -> 1, or null for anything that is not a motion field. */
-function motionIndexOf(path) {
-  const match = /^layers\.\d+\.motions\.(\d+)\./.exec(path);
+/**
+ * "layers.0.motions.1.speed" -> 1, or null for anything that is not an entry
+ * of that list. One function for both repeating lists in the column — the
+ * motions and a gradient's colour stops — because they are drawn the same way:
+ * a card per entry, the entry's own controls inside it, and its number in the
+ * legend so the repeated labels are told apart by something a screen reader
+ * announces and not only by where they sit.
+ */
+function entryIndexOf(path, list) {
+  const match = new RegExp(`^layers\\.\\d+\\.${list}\\.(\\d+)\\.`).exec(path);
   return match ? Number(match[1]) : null;
 }
 
@@ -112,16 +128,69 @@ export function describeInspector(doc, layerId) {
   const fields = [];
   const index = doc.layers.findIndex((layer) => layer.id === layerId);
   const layer = index < 0 ? null : doc.layers[index];
+  const at = `layers.${index}`;
+
+  // What the layer is made of, for the two types that are made of colour.
+  if (layer && layer.type === 'solid') {
+    fields.push({
+      path: `${at}.color`, type: 'color', section: 'fill', labelKey: 'inspector.colour'
+    });
+  }
+
+  if (layer && layer.type === 'gradient') {
+    fields.push({
+      path: `${at}.shape`, type: 'select', section: 'fill',
+      labelKey: 'inspector.shape', values: [...GRADIENT_SHAPES]
+    });
+    // Only while it means something. A radial gradient runs outwards from the
+    // middle and has no angle to turn, so offering the slider would be
+    // offering a control that provably does nothing — and this column's whole
+    // rule is that a control which is there can be used. (The EXPORTED effect
+    // does keep it whatever the shape, and src/export/effect-controls.js says
+    // why: over there the shape can be switched from the same panel, so a
+    // hidden angle would be a dead end rather than a tidy-up.)
+    if (layer.shape === 'linear') {
+      fields.push({
+        path: `${at}.angle`, type: 'number', section: 'fill',
+        labelKey: 'inspector.angle', ...RANGES.angle
+      });
+    }
+    // The list itself carries no label of its own: unlike the motion list it
+    // has no per-entry dropdown to name, and the heading it lives under
+    // already says what these are. What it does carry is the two limits, so
+    // the add and remove buttons can say "no more" by being disabled rather
+    // than by a change that normalizeDocument then quietly undoes.
+    fields.push({
+      path: at, type: 'stops', section: 'fill',
+      min: MIN_GRADIENT_STOPS, max: MAX_GRADIENT_STOPS
+    });
+    layer.stops.forEach((_, i) => {
+      fields.push({
+        path: `${at}.stops.${i}.color`, type: 'color', section: 'fill',
+        labelKey: 'inspector.stopColour'
+      });
+      fields.push({
+        path: `${at}.stops.${i}.at`, type: 'number', section: 'fill',
+        labelKey: 'inspector.stopAt', ...RANGES.stop
+      });
+    });
+  }
 
   if (layer && layer.type === 'image') {
-    const at = `layers.${index}`;
     fields.push({
       path: `${at}.fit`, type: 'select', section: 'image',
       labelKey: 'inspector.fit', values: [...FIT_MODES]
     });
+  }
+
+  // Motions belong to the layer, not to the picture: every type that carries a
+  // motions list gets the list, the add button and a card per entry. Which
+  // kinds are on offer is the engine's answer and not this file's — a solid
+  // colour cannot be seen to drift or warp, so it is offered neither.
+  if (layer && Array.isArray(layer.motions)) {
     fields.push({
       path: at, type: 'motions', section: 'motions',
-      labelKey: 'inspector.motions', values: [...MOTION_KINDS]
+      labelKey: 'inspector.motions', values: [...motionKindsFor(layer.type)]
     });
     layer.motions.forEach((_, i) => {
       fields.push({
@@ -281,13 +350,18 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
 
     const fields = describeInspector(doc, layerId);
 
-    // With no picture the column holds nothing but the four colour sliders,
-    // and stops. That read as truncated rather than as short: two thirds of
+    // With nothing started at all the column holds nothing but the four colour
+    // sliders, and stops. That read as truncated rather than as short: most of
     // the settings were missing with no sign that they exist or that anything
     // brings them back. One sentence, in the place the missing sections will
-    // take, naming them — not two greyed-out stand-in sections, which would be
-    // a picture of an interface rather than the interface.
-    if (!fields.some((field) => field.section === 'image')) {
+    // take, naming what brings them — not greyed-out stand-in sections, which
+    // would be a picture of an interface rather than the interface.
+    //
+    // Said only when the document is genuinely empty. It used to appear
+    // whenever there was no "image" section, which as of the colour layers
+    // would mean printing "choose something below" over a gradient's own
+    // controls.
+    if (doc.layers.length === 0) {
       const note = document.createElement('p');
       note.className = 'section-note';
       note.textContent = t('inspector.awaitingImage');
@@ -297,21 +371,23 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
     let sectionName = null;
     let section = null;
     let sectionActions = null;
-    // The motion rows, and the button that adds another, taken from
-    // createMotions when the motion list itself comes past and put in their
-    // places as the sliders that belong to them arrive.
-    let motionRows = [];
-    let addMotion = null;
-    let motionIndex = null;
-    let motionCard = null;
+    // The repeating list currently open — 'motions' or 'stops' — with its
+    // rows and the button that adds another, taken when the list itself comes
+    // past and put in their places as the controls that belong to them arrive.
+    let listName = null;
+    let listRows = [];
+    let listAdd = null;
+    let entryIndex = null;
+    let entryCard = null;
 
     /** The add button goes into the heading of the section it adds to. */
-    const closeMotions = () => {
-      if (addMotion && sectionActions) sectionActions.append(addMotion);
-      addMotion = null;
-      motionRows = [];
-      motionIndex = null;
-      motionCard = null;
+    const closeList = () => {
+      if (listAdd && sectionActions) sectionActions.append(listAdd);
+      listName = null;
+      listAdd = null;
+      listRows = [];
+      entryIndex = null;
+      entryCard = null;
     };
 
     /**
@@ -329,7 +405,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
 
     for (const field of fields) {
       if (field.section !== sectionName) {
-        closeMotions();
+        closeList();
         sectionName = field.section;
         const opened = openSection(sectionName);
         section = opened.group;
@@ -339,9 +415,13 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
       const value = SF.getByPath(doc, field.path);
       const report = (path, next) => {
         const result = onChange(path, next);
-        // A slider must never pull the ground out from under the drag it
-        // is in the middle of; everything else may.
-        if (field.type === 'number') return;
+        // A slider must never pull the ground out from under the drag it is in
+        // the middle of, and neither must a colour picker: the native one
+        // reports every colour the pointer passes over while it is open, and
+        // rebuilding the column under it would take the input the OS dialog is
+        // attached to out of the document. Neither changes which fields exist,
+        // so neither needs a redraw. Everything else may.
+        if (field.type === 'number' || field.type === 'color') return;
         Promise.resolve(result).then(render, (err) => {
           console.error('inspector change failed:', err);
           // Deliberately no redraw: the change did not take, so the column
@@ -352,43 +432,67 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
         });
       };
 
-      if (field.type === 'motions') {
-        const motions = createMotions(field, { t, value, onChange: report });
-        motionRows = motions.rows;
-        addMotion = motions.add;
+      if (field.type === 'motions' || field.type === 'stops') {
+        const list = field.type === 'motions'
+          ? createMotions(field, { t, value, onChange: report })
+          : createStops(field, { t, value, onChange: report });
+        closeList();
+        listName = field.type;
+        listRows = list.rows;
+        listAdd = list.add;
         continue;
       }
 
       const element = createField(widenToInclude(field, value), { t, value, onChange: report });
       if (!element) continue;
 
-      // A motion is one card: the dropdown that says what kind it is, and the
-      // two sliders that steer it. The card is a fieldset with the motion's
-      // name as its legend, so the repeated "Tempo"/"Staerke" labels are told
-      // apart by something a screen reader announces and not only by where
-      // they sit on screen.
-      const motion = motionIndexOf(field.path);
-      if (motion === null) {
+      // An entry of a repeating list is one card: for a motion, the dropdown
+      // that says what kind it is and the two sliders that steer it; for a
+      // colour stop, the colour and where along the ramp it sits. The card is
+      // a fieldset with the entry's number as its legend, so the repeated
+      // "Tempo"/"Farbe" labels are told apart by something a screen reader
+      // announces and not only by where they sit on screen.
+      const entry = listName ? entryIndexOf(field.path, listName) : null;
+      if (entry === null) {
         section.append(card(element));
         continue;
       }
-      if (motion !== motionIndex) {
-        motionIndex = motion;
-        motionCard = document.createElement('fieldset');
-        motionCard.className = 'motion';
+      if (entry !== entryIndex) {
+        entryIndex = entry;
+        entryCard = document.createElement('fieldset');
+        entryCard.className = listName === 'stops' ? 'motion stop' : 'motion';
         const legend = document.createElement('legend');
-        legend.textContent = `${t('inspector.motion')} ${motion + 1}`;
-        motionCard.append(legend);
-        if (motionRows[motion]) motionCard.append(motionRows[motion]);
-        section.append(motionCard);
+        const word = listName === 'stops' ? 'inspector.stop' : 'inspector.motion';
+        legend.textContent = `${t(word)} ${entry + 1}`;
+        entryCard.append(legend);
+        if (listRows[entry]) entryCard.append(listRows[entry]);
+        section.append(entryCard);
       }
-      motionCard.append(element);
+      entryCard.append(element);
     }
 
-    closeMotions();
+    closeList();
     restoreFocus(focused);
   }
 
   render();
-  return { refresh: render };
+  return {
+    refresh: render,
+    /**
+     * Which sections the document currently HAS, as a set of names.
+     *
+     * The left column needs this: which destinations exist depends entirely on
+     * what kind of layer is loaded (a gradient has a "Fläche" and no "Bild", a
+     * picture the other way round), and the one place that already works that
+     * out is describeInspector. Handing the answer out here means the left
+     * column and the settings column can never disagree about which sections
+     * exist — the alternative was a second rule in main.js listing which layer
+     * type implies which destination, i.e. the same knowledge written twice.
+     */
+    sections() {
+      const doc = getDocument();
+      const layerId = doc.layers.length > 0 ? doc.layers[0].id : null;
+      return new Set(describeInspector(doc, layerId).map((field) => field.section));
+    }
+  };
 }

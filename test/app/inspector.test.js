@@ -74,14 +74,25 @@ test('no slider offers a value the engine would clamp away', () => {
 // `amount`. Crossing those two would leave speed offering 0..100 and strength
 // 1..100, which no test of "the two tables are equal" would ever notice.
 test('every slider offers exactly the range the matching exported control offers', () => {
-  const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1');
+  // Two documents, because no single layer type has every slider: the angle
+  // and the stop positions belong to a gradient, and everything else is on
+  // offer whatever is loaded. Taken together they must account for every entry
+  // in the shared table.
+  const fields = [
+    ...describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1'),
+    ...describeInspector(normalizeDocument({
+      layers: [{ id: 'g1', type: 'gradient', motions: [{ kind: 'warp' }] }]
+    }).doc, 'g1')
+  ];
   const pairs = [
     ['layers.0.motions.0.speed', 'tempo'],
     ['layers.0.motions.0.amount', 'strength'],
     ['brightness', 'brightness'],
     ['saturation', 'saturation'],
     ['greenMagenta', 'greenMagenta'],
-    ['blueYellow', 'blueYellow']
+    ['blueYellow', 'blueYellow'],
+    ['layers.0.angle', 'angle'],
+    ['layers.0.stops.0.at', 'stop']
   ];
 
   for (const [path, property] of pairs) {
@@ -123,10 +134,14 @@ test('the paths point at the layer that was asked for, not always the first', ()
   assert.ok(paths.includes('layers.1.motions.0.speed'));
 });
 
-test('a layer that is not an image contributes nothing of its own', () => {
-  // normalizeDocument gives a non-image layer no fit, offset or motions at
-  // all, so offering those controls would write to paths that do not exist.
-  const doc = normalizeDocument({ layers: [{ id: 'a1', type: 'gradient' }] }).doc;
+test('a layer type nothing here knows about contributes nothing of its own', () => {
+  // normalizeDocument gives a layer of an unknown type no fit, offset, colour
+  // or motions at all, so offering those controls would write to paths that do
+  // not exist. "shapes" is the next type in the plan and has no renderer, no
+  // normalizer branch and no controls yet — which is exactly what makes it the
+  // honest stand-in here. ("gradient" used to play this part, and cannot any
+  // more: it is a real layer type with real controls of its own.)
+  const doc = normalizeDocument({ layers: [{ id: 'a1', type: 'shapes' }] }).doc;
   const fields = describeInspector(doc, 'a1');
   assert.equal(fields.filter((f) => f.path.startsWith('layers.')).length, 0);
   assert.ok(fields.length > 0);

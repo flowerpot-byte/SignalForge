@@ -13,31 +13,13 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  * Dragging a file in was the ONLY entrance, which meant somebody who wanted a
  * plain colour or a gradient simply could not begin.
  *
- * WHAT IS REAL HERE AND WHAT IS NOT
- *
- * The picture tile is wired up and works: it hands a real `File` to the same
- * import path a drop uses, so the file dialog and drag-and-drop end up in
- * exactly the same place. The solid-colour and gradient tiles are NOT built —
- * they need layer types the engine does not have yet, which is a separate and
- * much larger piece of work than this one.
- *
- * They are still on screen, because a starting gallery with one tile in it
- * teaches nothing about where this is going. They are marked as unbuilt in
- * four ways at once, so that no one of them has to carry the honesty on its
- * own:
- *
- *   1. the tile is a real `<button disabled>` — it cannot be pressed, cannot
- *      be tabbed to, and reports itself as disabled to a screen reader;
- *   2. it carries a visible badge, in words, in the window's language
- *      ("Bald" / "Soon") with a small clock icon beside it;
- *   3. that badge is INSIDE the button, so it is part of the accessible name:
- *      the tile announces itself as "Farbfläche, bald, dimmed";
- *   4. it is drawn at reduced opacity with a dashed edge, against the solid
- *      edge every working tile has.
- *
- * What it deliberately is NOT: a tile that looks exactly like the working one
- * and does nothing when pressed, or a tile that opens a "coming soon" message.
- * Both are a picture of an interface rather than an interface.
+ * All four tiles are real now. The three that were marked "Bald" / "Soon" when
+ * this strip was first built were waiting on layer types the engine did not
+ * have; it has them (src/engine/layers/solid.js and gradient.js), so the
+ * badge, the dashed edge and the `disabled` are gone rather than left standing
+ * as decoration. Nothing here decides what a tile MEANS: the picture tile
+ * hands over a `File` and the other three hand over their own key, and
+ * app/renderer/main.js turns that into a document.
  */
 
 /** What the file dialog offers, derived from the one list that decides it. */
@@ -46,16 +28,18 @@ const ACCEPT = SUPPORTED_IMAGE_EXTENSIONS.join(',');
 /**
  * The tiles, in the order they are read.
  *
- * `ready: true` means the tile does something today. Everything else is
- * described here exactly as it will be built, so the strip is a plan rather
- * than a set of placeholders — and so that turning one on later is a change to
- * `ready` plus a handler, not a redesign.
+ * `starts` is the kind of effect the tile begins, and it is what `onStart`
+ * receives — the picture tile has none, because it opens a file dialog
+ * instead. The keys are the window's own words for the three ways of
+ * beginning; what each becomes in the document (a `solid` layer, a `gradient`
+ * layer with shape linear or radial) is main.js's business, and deliberately
+ * not spelled out here, so this file never has to know the document's shape.
  */
 export const TILES = Object.freeze([
-  Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'imagePlus', ready: true }),
-  Object.freeze({ key: 'solid', labelKey: 'gallery.solid', glyph: 'solid', ready: false }),
-  Object.freeze({ key: 'linear', labelKey: 'gallery.linear', glyph: 'gradient', ready: false }),
-  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: 'gradient', ready: false })
+  Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'imagePlus', starts: null }),
+  Object.freeze({ key: 'solid', labelKey: 'gallery.solid', glyph: 'solid', starts: 'solid' }),
+  Object.freeze({ key: 'linear', labelKey: 'gallery.linear', glyph: 'gradient', starts: 'linear' }),
+  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: 'radial', starts: 'radial' })
 ]);
 
 /**
@@ -67,8 +51,10 @@ export const TILES = Object.freeze([
  * there). A hidden `<input type="file">` is what opens the dialog: it is the
  * one way to reach a file picker without inventing a bridge channel for it,
  * and it keeps the security shape of this app exactly as it was.
+ *
+ * `onStart(kind)` receives 'solid', 'linear' or 'radial'.
  */
-export function mountGallery(container, { t, onPicture }) {
+export function mountGallery(container, { t, onPicture, onStart }) {
   const strip = document.createElement('section');
   strip.className = 'gallery';
   strip.id = 'gallery';
@@ -103,7 +89,7 @@ export function mountGallery(container, { t, onPicture }) {
     const button = document.createElement('button');
     button.type = 'button';
     button.id = `gallery-${tile.key}`;
-    button.className = tile.ready ? 'tile' : 'tile tile-soon';
+    button.className = 'tile';
     button.dataset.tile = tile.key;
 
     const art = document.createElement('span');
@@ -113,24 +99,9 @@ export function mountGallery(container, { t, onPicture }) {
     const label = document.createElement('span');
     label.className = 'tile-label';
 
-    const badge = document.createElement('span');
-    badge.className = 'tile-badge';
-
     button.append(art, label);
-    if (!tile.ready) {
-      badge.append(icon('soon'));
-      const word = document.createElement('span');
-      word.className = 'tile-badge-word';
-      badge.append(word);
-      button.append(badge);
-      // Not merely styled as unavailable: genuinely unpressable, out of the
-      // tab order, and announced as disabled.
-      button.disabled = true;
-      return { tile, button, label, word };
-    }
-
-    button.addEventListener('click', () => picker.click());
-    return { tile, button, label, word: null };
+    button.addEventListener('click', () => (tile.starts ? onStart(tile.starts) : picker.click()));
+    return { tile, button, label };
   });
 
   for (const item of built) rail.append(item.button);
@@ -139,10 +110,7 @@ export function mountGallery(container, { t, onPicture }) {
 
   function relabel() {
     heading.textContent = t('gallery.title');
-    for (const item of built) {
-      item.label.textContent = t(item.tile.labelKey);
-      if (item.word) item.word.textContent = t('gallery.soon');
-    }
+    for (const item of built) item.label.textContent = t(item.tile.labelKey);
   }
   relabel();
 

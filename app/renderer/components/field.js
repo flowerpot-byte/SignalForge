@@ -114,6 +114,39 @@ function numberField(field, { t, value, onChange }) {
   return wrapper;
 }
 
+/**
+ * A colour, picked with the operating system's own colour picker.
+ *
+ * `<input type="color">` and deliberately nothing hand-built. A colour picker
+ * is a project of its own — a wheel or a square, a hue strip, a hex field,
+ * keyboard access to all of it — and this app has one job that is not that.
+ * The native control is the affordance everybody already knows, it is
+ * reachable from the keyboard for free, and it is what the "prefer the
+ * system's own control" rule this window is built on actually means.
+ *
+ * What can and cannot be styled about it is worth recording, because it is not
+ * obvious: the BOX is ours (its size, its corners, the sunken card colour
+ * around it — see styles/app.css), the swatch inside it is the value, and the
+ * picker that opens on click is the operating system's and cannot be styled at
+ * all. That last part is the trade, and it is accepted.
+ *
+ * `input` fires while the picker is open, so the preview follows the colour as
+ * it is being chosen rather than only when the dialog is dismissed.
+ */
+function colorField(field, { t, value, onChange }) {
+  const wrapper = row('control control-row');
+  const id = fieldId(field.path);
+
+  const input = document.createElement('input');
+  input.type = 'color';
+  input.id = id;
+  input.value = String(value ?? '');
+  input.addEventListener('input', () => onChange(field.path, input.value));
+
+  wrapper.append(labelFor(id, t(field.labelKey)), input);
+  return wrapper;
+}
+
 function selectField(field, { t, value, onChange }) {
   // A dropdown shows its own value, so this one is a single row: name left,
   // control right — the shape the reference's "Color Mode" card has.
@@ -234,5 +267,81 @@ export function createMotions(field, { t, value, onChange }) {
 export function createField(field, options) {
   if (field.type === 'number') return numberField(field, options);
   if (field.type === 'select') return selectField(field, options);
+  if (field.type === 'color') return colorField(field, options);
   return null;
+}
+
+/**
+ * Where a newly added colour stop should sit: the middle of the widest gap.
+ *
+ * Not simply "at the end" and not "at 50": a stop dropped on top of one that
+ * is already there is invisible, and the first thing the user would have to do
+ * is drag it off its neighbour to find out that it exists. The widest gap is
+ * the one place on the ramp where a new colour has the most room to be seen.
+ *
+ * `positions` is the stops' `at` values, in document order (they need not be
+ * sorted). A list of fewer than two is not a gradient; 50 is the honest answer
+ * there, and it is the only case where the result is not a real midpoint.
+ */
+export function nextStopPosition(positions) {
+  const sorted = [...positions].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (sorted.length < 2) return 50;
+  let bestGap = -1;
+  let best = 50;
+  for (let index = 1; index < sorted.length; index += 1) {
+    const gap = sorted[index] - sorted[index - 1];
+    if (gap > bestGap) {
+      bestGap = gap;
+      best = (sorted[index] + sorted[index - 1]) / 2;
+    }
+  }
+  return Math.round(best);
+}
+
+/**
+ * The colour stops, as pieces — the same shape as createMotions above and for
+ * the same reason: a stop's colour and its position are separate fields that
+ * mountInspector receives one at a time, so only mountInspector can put a stop
+ * together, and it can only do that if it is handed the remove buttons loose.
+ *
+ * `value` is the layer the stops belong to (the field's path addresses the
+ * layer, see describeInspector), so the paths reported back get ".stops"
+ * appended here — exactly as the motion list does.
+ *
+ * Both buttons can be unavailable, and both say so by being disabled rather
+ * than by disappearing: a gradient below `min` is not a gradient at all
+ * (normalizeDocument would fill it back up behind the user's back), and above
+ * `max` the document would drop what was added.
+ */
+export function createStops(field, { t, value, onChange }) {
+  const stops = value && Array.isArray(value.stops) ? value.stops : [];
+  const base = fieldId(field.path);
+  const listPath = `${field.path}.stops`;
+
+  const rows = stops.map((stop, index) => {
+    const line = row('stop-row');
+    const remove = iconButton(
+      `${base}-stop-remove-${index}`,
+      'minus',
+      `${t('inspector.removeStop')} ${index + 1}`
+    );
+    remove.disabled = stops.length <= field.min;
+    remove.addEventListener('click', () => {
+      onChange(listPath, stops.filter((_, other) => other !== index));
+    });
+    line.append(remove);
+    return line;
+  });
+
+  const add = iconButton(`${base}-stop-add`, 'plus', t('inspector.addStop'));
+  add.disabled = stops.length >= field.max;
+  add.addEventListener('click', () => {
+    // Only the position is chosen here; the colour a new stop starts out in is
+    // normalizeDocument's business, not a second copy of that value kept in
+    // the window (which is also what keeps every colour in this app out of
+    // app/renderer — see test/app/color-literals.test.js).
+    onChange(listPath, [...stops, { at: nextStopPosition(stops.map((stop) => stop.at)) }]);
+  });
+
+  return { rows, add };
 }

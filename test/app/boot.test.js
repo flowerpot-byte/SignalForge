@@ -151,10 +151,12 @@ test('the app boots, opens a window and exposes its bridge', async () => {
       `the empty state must name ${format}, which the importer accepts`
     );
   }
-  // The settings column says why it is short while there is no picture.
+  // The settings column says why it is short while nothing has been started
+  // — and, since there are now three ways to start something and not one, it
+  // names them rather than talking about a picture alone.
   assert.equal(
     report.inEnglish.awaitingImage,
-    'Fit and motions appear here once an image is loaded.',
+    'Choose below how the effect should begin - a picture, a colour or a gradient. Its settings then appear here.',
     'the settings column must explain its own length, in the language in force'
   );
   assert.equal(report.inEnglish.firstRun, 'Where should the effects go?', 'and the first-start question');

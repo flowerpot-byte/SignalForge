@@ -28,30 +28,40 @@ import { icon } from './icons.js';
  * speaks. Both used to be crammed into the footer beside the buttons, which is
  * what stopped that footer from ever being the transport bar it is now.
  *
- * A destination whose section has no controls (there is no picture, so there
- * is no fit and no motion list) is offered as disabled rather than hidden:
- * hiding it would make the window change shape on import, and disabling it
- * says "this exists, and here is what it is waiting for" — which the note in
- * the settings column then spells out.
+ * A destination whose section has no controls (nothing has been started, so
+ * there is no fill, no fit and no motion list) is offered as disabled rather
+ * than hidden: hiding it would make the window change shape on import, and
+ * disabling it says "this exists, and here is what it is waiting for" — which
+ * the note in the settings column then spells out.
+ *
+ * WHICH ONES EXIST DEPENDS ON THE LAYER, NOT ON A PICTURE
+ *
+ * There used to be a `needsPicture` flag here, and it was right exactly as
+ * long as the only kind of effect was a picture. A gradient has a "Fläche" and
+ * no "Bild"; a picture has a "Bild" and no "Fläche"; both have motions. So the
+ * column is told which sections the settings column actually built
+ * (setAvailable) rather than deciding for itself from a flag — one rule, in
+ * describeInspector, instead of the same knowledge written down twice.
  */
 
 /**
  * The destinations, in the order they are read. `key` is what the settings
  * column filters on; `labelKey` is the translation key; `glyph` is the icon.
  *
- * The three document sections carry the very same labelKeys the settings
- * column's own headings do, deliberately: the entry and the heading it leads
- * to must be the same word, and one key is how that stays true.
+ * The document sections carry the very same labelKeys the settings column's
+ * own headings do, deliberately: the entry and the heading it leads to must be
+ * the same word, and one key is how that stays true.
  */
 export const DESTINATIONS = Object.freeze([
-  Object.freeze({ key: 'image', labelKey: 'inspector.section.image', glyph: 'image', needsPicture: true }),
-  Object.freeze({ key: 'motions', labelKey: 'inspector.motions', glyph: 'motion', needsPicture: true }),
-  Object.freeze({ key: 'colour', labelKey: 'inspector.section.colour', glyph: 'colour', needsPicture: false })
+  Object.freeze({ key: 'fill', labelKey: 'inspector.section.fill', glyph: 'solid' }),
+  Object.freeze({ key: 'image', labelKey: 'inspector.section.image', glyph: 'image' }),
+  Object.freeze({ key: 'motions', labelKey: 'inspector.motions', glyph: 'motion' }),
+  Object.freeze({ key: 'colour', labelKey: 'inspector.section.colour', glyph: 'colour' })
 ]);
 
 /** The one that is pinned to the bottom, below the rule. */
 export const APP_SETTINGS = Object.freeze({
-  key: 'settings', labelKey: 'inspector.title', glyph: 'settings', needsPicture: false
+  key: 'settings', labelKey: 'inspector.title', glyph: 'settings'
 });
 
 /**
@@ -139,16 +149,21 @@ export function mountSidebar(container, { t, active, onSelect }) {
   }
 
   /**
-   * Whether the two picture-dependent destinations may be visited.
+   * Which destinations may be visited: the sections the settings column has
+   * actually built, by name (see mountInspector's sections()).
    *
    * Disabled, not hidden: the window must not change shape the moment a file
-   * lands on it, and an entry that is visibly waiting teaches more than one
-   * that is absent.
+   * lands on it or a colour effect is started, and an entry that is visibly
+   * waiting teaches more than one that is absent.
+   *
+   * The app's own settings are never in that set and are never disabled —
+   * they belong to the app and not to the document, which is exactly why they
+   * are pinned away from the other four in the first place.
    */
-  function setHasPicture(has) {
+  function setAvailable(sections) {
     for (const item of all) {
-      if (!item.destination.needsPicture) continue;
-      item.button.disabled = !has;
+      if (item.destination === APP_SETTINGS) continue;
+      item.button.disabled = !sections.has(item.destination.key);
     }
   }
 
@@ -175,7 +190,8 @@ export function mountSidebar(container, { t, active, onSelect }) {
 
   relabel();
   setActive(active);
-  setHasPicture(false);
+  // Nothing is loaded yet, so only the document-wide colour section exists.
+  setAvailable(new Set(['colour']));
 
-  return { relabel, setActive, setHasPicture };
+  return { relabel, setActive, setAvailable };
 }
