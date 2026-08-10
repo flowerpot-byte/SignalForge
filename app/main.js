@@ -231,6 +231,7 @@ async function selfTestProjects(win) {
   const seedFile = join(dir, 'seed.sfx');
   const savedFile = join(dir, 'saved.sfx');
   const corruptFile = join(dir, 'corrupt.sfx');
+  const smuggledFile = join(dir, 'smuggled.sfx');
 
   const imageFile = process.env.SF_SELFTEST_IMAGE;
   const asset = imageFile
@@ -252,6 +253,16 @@ async function selfTestProjects(win) {
   writeFileSync(seedFile, serializeProject(seed), 'utf8');
   // Truncated mid-object: unreadable JSON, the commonest way a file goes bad.
   writeFileSync(corruptFile, '{"format": 1, "document": {"layers": [{"id": "ima', 'utf8');
+  // Review finding: a shared .sfx whose asset names a `file` instead of
+  // embedding it would have had the renderer's image loader try to resolve
+  // an attacker-chosen path the moment the project opened. Written as raw
+  // JSON, not through serializeProject/normalizeDocument — those would
+  // normalize the asset shape away, which is exactly not what a foreign file
+  // arriving over the open dialog looks like.
+  writeFileSync(smuggledFile, JSON.stringify({
+    format: 1,
+    document: { ...seed, assets: { image: { kind: 'image', mime: 'image/png', file: 'C:/Windows/win.ini' } } }
+  }), 'utf8');
 
   let saveTo = savedFile;
   let openFrom = seedFile;
@@ -324,6 +335,17 @@ async function selfTestProjects(win) {
   // project that was already open, not defaults and not a blank document.
   out.controlsAfterCorrupt = await controls();
   await shoot('04-corrupt');
+
+  openFrom = smuggledFile;
+  out.smuggledFileMessage = await clickAndWait(OPEN);
+  out.smuggledFileWarned = await read(
+    `document.querySelector('.drop-message').classList.contains('drop-warn')`
+  );
+  // Same untouched guarantee as the corrupt-file case above: a project
+  // trying to smuggle an outside file reference must leave the window
+  // showing exactly the project that was already open.
+  out.controlsAfterSmuggled = await controls();
+  await shoot('05-smuggled');
 
   // The brightness slider stops at 5 on purpose (see RANGES in
   // components/inspector.js), but a document may carry less. An

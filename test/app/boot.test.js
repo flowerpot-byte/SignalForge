@@ -93,6 +93,23 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'a project that failed to open must leave the one already open exactly as it was'
   );
 
+  // Review finding: a project whose asset names a `file` instead of
+  // embedding it must be refused, in the window and by the previous project
+  // being left exactly as it was — the same shape of proof as the corrupt
+  // file above, so the guard is proven where the renderer, not just the
+  // pure parseProject tests, can see it.
+  assert.match(
+    report.smuggledFileMessage,
+    /not embedded/i,
+    'a project whose asset names a file instead of embedding it must produce a visible message'
+  );
+  assert.equal(report.smuggledFileWarned, true, 'that message must be marked as a warning');
+  assert.deepEqual(
+    report.controlsAfterSmuggled,
+    report.projectOpenedControls,
+    'a project trying to smuggle an outside file reference must leave the one already open exactly as it was'
+  );
+
   // A stored value the slider's normal range cannot reach must be shown as it
   // is, not silently rounded up to the nearest end of the slider.
   assert.deepEqual(

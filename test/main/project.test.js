@@ -56,9 +56,17 @@ test('every field of a document survives the round trip, not just the obvious on
       property: 'tempo', label: { de: 'Tempo', en: 'Speed' }, type: 'number',
       min: 1, max: 100, values: ['a', 'b'], default: 42, bind: ['layers.front.motions.0.speed']
     }],
+    // Two embedded assets, not one, so the round trip is proven over a whole
+    // dictionary and not just a single entry. A `file`-shaped asset used to
+    // sit here instead of `sibling` — that shape is still faithfully carried
+    // by normalizeDocument itself (see test/engine/document.test.js and
+    // test/engine/boundary.test.js), but a *project file* naming an asset
+    // outside itself is exactly what parseProject now refuses (see the
+    // "smuggled" tests below), so it no longer belongs in a fixture this
+    // test expects to open cleanly.
     assets: {
       pic: { kind: 'image', mime: 'image/webp', data: 'QUJD' },
-      sibling: { kind: 'image', mime: 'image/png', file: 'beside.png' }
+      sibling: { kind: 'image', mime: 'image/gif', data: 'RATA' }
     }
   }).doc;
 
@@ -70,7 +78,51 @@ test('every field of a document survives the round trip, not just the obvious on
   assert.equal(back.doc.layers[0].visible, false);
   assert.equal(back.doc.layers[0].offset.x, -0.75);
   assert.equal(back.doc.controls[0].default, 42);
-  assert.equal(back.doc.assets.sibling.file, 'beside.png');
+  assert.equal(back.doc.assets.sibling.data, 'RATA');
+});
+
+// The format's own doc comment (src/main/project.js) says a project file is
+// self-contained because every asset's bytes are embedded as `data`. Nothing
+// enforced that until now: a shared .sfx could carry an attacker-chosen
+// `file` string that the renderer's image loader would try to resolve the
+// moment the project opened. These three tests pin the fix at the layer the
+// review named — parseProject, in the main process, before the document
+// ever reaches the renderer — and are falsifiable: removing the new check in
+// parseProject turns the first two red while leaving the third green.
+test('a project whose asset names a file instead of embedding it is refused', () => {
+  const text = JSON.stringify({
+    format: PROJECT_FORMAT,
+    document: {
+      name: 'Smuggled',
+      layers: [{ id: 'a1', type: 'image', asset: 'q' }],
+      assets: { q: { kind: 'image', mime: 'image/png', file: 'C:/Windows/System32/config/SAM' } }
+    }
+  });
+  assert.throws(() => parseProject(text), /not embedded/i);
+});
+
+// A `file` alongside `data` is the smuggling case, not a harmless extra
+// field: normalizeAsset (src/engine/document.js) keeps `data` and silently
+// drops `file` whenever both are present, which would hide the smuggled
+// string from every check that only looks at the normalized document. The
+// raw file itself must already be refused.
+test('a project whose asset carries both data and a file is refused, not silently trimmed', () => {
+  const text = JSON.stringify({
+    format: PROJECT_FORMAT,
+    document: {
+      name: 'Smuggled',
+      layers: [{ id: 'a1', type: 'image', asset: 'q' }],
+      assets: { q: { kind: 'image', mime: 'image/png', data: 'AAAA', file: '//attacker/share/evil.png' } }
+    }
+  });
+  assert.throws(() => parseProject(text), /not embedded/i);
+});
+
+test('a normal data-only project still opens, unaffected by the file-asset guard', () => {
+  const back = parseProject(serializeProject(doc));
+  assert.equal(back.doc.assets.q.data, 'AAAA');
+  assert.equal(back.doc.assets.q.file, undefined);
+  assert.deepEqual(back.problems, []);
 });
 
 // Cases the brief does not name, all of them "some other JSON file was
