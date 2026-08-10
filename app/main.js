@@ -96,9 +96,39 @@ function writeFileAtomic(file, text) {
   }
 }
 
+/**
+ * The settings the window is allowed to change by itself.
+ *
+ * The language, and nothing else. It is the window's own choice, made in the
+ * footer, and it names no file.
+ *
+ * The other two settings are filesystem paths, and this project has exactly
+ * one rule about those: the renderer never constructs or supplies one. It is
+ * what makes the bridge reviewable — every handler can be read as "the path is
+ * decided here". sf:exportEffect resolves the folder it writes into from
+ * `effectsFolder`, so leaving that key writable from the window would have
+ * handed the renderer a folder of its choosing and, with `force`, an existing
+ * file of its choosing to overwrite. Nothing legitimate is lost: `effectsFolder`
+ * is written only by sf:chooseFolder (from the folder dialog) and
+ * `lastProjectFolder` only by rememberProjectFolder (from the path a file
+ * dialog returned), both of them here in the main process.
+ */
+const RENDERER_SETTINGS = new Set(['language']);
+
 ipcMain.handle('sf:version', () => app.getVersion());
 ipcMain.handle('sf:settings:all', () => settings.all());
-ipcMain.handle('sf:settings:set', async (_e, key, value) => { await settings.set(key, value); return settings.all(); });
+ipcMain.handle('sf:settings:set', async (_e, key, value) => {
+  // A rejection, not a returned value: unlike the import/project/export
+  // handlers, no message from here is ever meant to reach a user. The window
+  // asks for exactly one setting, so anything else is a bug in the window (or
+  // something that is not the window at all), and the renderer's own
+  // `remember()` already turns a rejection into its visible line.
+  if (!RENDERER_SETTINGS.has(key)) {
+    throw new Error(`the window may not change the setting: ${key}`);
+  }
+  await settings.set(key, value);
+  return settings.all();
+});
 ipcMain.handle('sf:effectsTarget', () => currentTarget());
 
 /**
@@ -465,6 +495,37 @@ async function selfTestFirstRun(win, effectsFolder) {
 }
 
 /**
+ * The one setting the window owns, and the two it must not, asked through the
+ * real bridge in the real window.
+ *
+ * Run after selfTestFirstRun, deliberately: by then a folder has actually been
+ * chosen, so "the effects folder is unchanged" is a statement about a real
+ * path rather than about two empty strings, and the language is settled, so
+ * setting it again to what it already is proves the channel still works
+ * without disturbing the first-start checks above.
+ */
+async function selfTestSettingsGate(win) {
+  return win.webContents.executeJavaScript(`(async () => {
+    const before = await window.sf.settings.all();
+    const refused = async (key, value) => {
+      try { await window.sf.settings.set(key, value); return false; } catch { return true; }
+    };
+    const effectsFolder = await refused('effectsFolder', 'Z:\\\\renderer-chosen');
+    const lastProjectFolder = await refused('lastProjectFolder', 'Z:\\\\renderer-chosen');
+    const after = await window.sf.settings.all();
+    const stored = await window.sf.settings.set('language', before.language);
+    return {
+      rendererCannotSetEffectsFolder: effectsFolder,
+      rendererCannotSetLastProjectFolder: lastProjectFolder,
+      pathSettingsUnchangedAfterRefusal:
+        after.effectsFolder === before.effectsFolder &&
+        after.lastProjectFolder === before.lastProjectFolder,
+      rendererCanStillSetTheLanguage: stored.language === before.language && before.language !== ''
+    };
+  })()`);
+}
+
+/**
  * Save and open, driven through the app's own footer buttons.
  *
  * Only the two file dialogs are replaced (see projectDialogs above): a modal
@@ -783,6 +844,7 @@ app.whenReady().then(async () => {
         forgedImportResult.message.length > 0;
 
       Object.assign(report, await selfTestFirstRun(win, selfTestEffects));
+      Object.assign(report, await selfTestSettingsGate(win));
       Object.assign(report, await selfTestProjects(win));
       Object.assign(report, await selfTestExport(win, selfTestEffects));
 

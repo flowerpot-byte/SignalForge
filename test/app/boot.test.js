@@ -110,6 +110,33 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'once the folder has been chosen the footer must show it as the chosen one'
   );
 
+  // The renderer never constructs or supplies a filesystem path — the rule
+  // that makes the whole bridge reviewable. sf:exportEffect resolves the
+  // folder it writes into from the effectsFolder setting, so a window that
+  // could write that setting could choose where an effect lands and what it
+  // overwrites. Asked here through the real bridge, in the real window.
+  assert.equal(
+    report.rendererCannotSetEffectsFolder,
+    true,
+    'the window must be refused when it asks to set effectsFolder — that setting decides ' +
+      'where sf:exportEffect writes, and only the main process may choose a path'
+  );
+  assert.equal(
+    report.rendererCannotSetLastProjectFolder,
+    true,
+    'the window must be refused when it asks to set lastProjectFolder — it is a path too'
+  );
+  assert.equal(
+    report.pathSettingsUnchangedAfterRefusal,
+    true,
+    'a refused settings write must leave the stored paths exactly as they were'
+  );
+  assert.equal(
+    report.rendererCanStillSetTheLanguage,
+    true,
+    'the language is the one setting the window owns and must still be writable'
+  );
+
   // Save and open, driven by clicking the app's own footer buttons in the
   // real window. Only the two OS file dialogs are stubbed (see
   // selfTestProjects in app/main.js) — a modal dialog would wait for a human.
