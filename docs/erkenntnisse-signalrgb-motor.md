@@ -224,6 +224,34 @@ gut die Hälfte von JPEG 0,92 — und kann außerdem Alpha, würde die PNG-Sonde
 nicht, ob SignalRGBs eingefrorenes Chromium WebP aus einer `data:`-Adresse dekodiert. Das gehört
 erst in den Motorcheck, dann in den Bau — nicht umgekehrt.
 
+## Offen: der Farbregler (`type="color"`) ist ungemessen
+
+Seit dem 10.08.2026 exportiert SignalForge Effekte ohne Bild — eine Farbfläche und einen
+Verlauf. Die bringen einen Reglertyp mit, den dieses Projekt noch nie ausgeliefert hat:
+
+```html
+<meta property="color1" label="Colour 1" type="color" default="#ff0066" />
+```
+
+**Zwei Dinge sind unbekannt**, und beide gehören in den nächsten Motorcheck, bevor sie
+angenommen werden:
+
+1. **Zeigt SignalRGB so einen Regler überhaupt an?** In der Bausteine-Tabelle oben steht dazu
+   nichts. `color` steht zwar seit dem ersten Tag in `CONTROL_TYPES`, benutzt hat es bis jetzt
+   aber niemand.
+2. **Was schreibt er in die Variable?** `"#RRGGBB"` ist das Wahrscheinlichste, aber gemessen
+   ist es nicht.
+
+**Der zweite Punkt ist schon abgesichert, nicht angenommen:** `normalizeColor`
+(`src/engine/document.js`) nimmt `#RRGGBB`, `RRGGBB`, `#RGB` und `rgb(r,g,b)` an und fällt bei
+allem anderen auf die Farbe zurück, die im Dokument steht. Schlimmstenfalls ist der Regler
+also wirkungslos — der Effekt wird nicht schwarz. Das ist wichtig, weil ein nicht lesbarer
+Wert an `ctx.fillStyle` stillschweigend ignoriert wird und dann die *vorherige* Farbe stehen
+bliebe.
+
+**Ebenfalls ungemessen, aus demselben Anlass:** ein Zahlenregler mit negativem Minimum
+(Grün/Magenta und Blau/Gelb, −100..100). Siehe die Notiz in `src/export/effect-controls.js`.
+
 ## Der Motorcheck bleibt
 
 `tools/motorcheck/` erzeugt den Prüfeffekt neu. Bei jedem neuen Browser-Baustein, den ein
