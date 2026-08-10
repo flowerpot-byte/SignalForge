@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { coreShare, costLevel, FRAMES_PER_SECOND } from './cost.js';
 import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
+import { icon } from './icons.js';
 
 const FRAME_GAP = 1000 / FRAMES_PER_SECOND;
 /** Rolling average over this many frames, so the reading does not flicker. */
@@ -80,16 +81,34 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   const empty = document.createElement('div');
   empty.className = 'stage-empty';
   empty.id = 'preview-empty';
+  // The one glyph in the empty state, and the only place in this window where
+  // an icon is bigger than 16px: it is the sign for the gesture the two lines
+  // under it are describing, so it is decoration beside its own words and is
+  // hidden from the accessibility tree.
+  const sign = icon('drop');
+  sign.classList.add('stage-empty-sign');
   const invitation = document.createElement('p');
   invitation.className = 'stage-empty-title';
   invitation.id = 'preview-empty-title';
   const formats = document.createElement('p');
   formats.className = 'stage-empty-formats';
   formats.id = 'preview-empty-formats';
-  empty.append(invitation, formats);
+  empty.append(sign, invitation, formats);
+
+  // What is on the stage, said under it — the effect's own name, with the two
+  // readings that belong to the frame opposite it. This is the caption the
+  // reference puts under its stage, and it is the reason the name is worth
+  // showing large: it is the name of the file SignalRGB will list.
+  const title = document.createElement('h2');
+  title.className = 'stage-title';
+  title.id = 'preview-title';
+
+  const readings = document.createElement('div');
+  readings.className = 'stage-readings';
+  readings.append(size, readout);
 
   viewport.append(canvas, empty);
-  meta.append(size, readout);
+  meta.append(title, readings);
   inner.append(viewport, meta);
   stage.append(inner);
   container.append(stage);
@@ -169,6 +188,12 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
 
   return {
     relabel,
+    /**
+     * The name under the stage. Set from the document every time one arrives
+     * — a drop, an opened project — and as the name field is typed in, so the
+     * caption and the field can never disagree about what is being built.
+     */
+    setTitle(text) { title.textContent = text ?? ''; },
     setDocument,
     /**
      * The live document the loop renders, handed out so there is exactly one

@@ -238,7 +238,7 @@ async function phaseOne(win, state) {
 
   // --- 1. language --------------------------------------------------------
   const words = () => d.js(`({
-    settings: document.getElementById('inspector-title').textContent,
+    settings: document.getElementById('nav-settings-label').textContent,
     section: document.querySelector('#inspector-body .field-group > h3').textContent,
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,
@@ -256,7 +256,7 @@ async function phaseOne(win, state) {
   // element and the change event fired — the same event the user's click
   // produces, arriving at the same listener.
   const setLanguage = async (code) => {
-    await d.setSelect('footer-language', code);
+    await d.setSelect('settings-language', code);
     await wait(80);
   };
   await setLanguage('en');

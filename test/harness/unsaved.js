@@ -392,13 +392,13 @@ app.whenReady().then(async () => {
     // being used in, and nothing about them is written down in the main
     // process. Asked twice in two languages, which is the only way to tell a
     // translated label from a hard-coded one that happens to look right.
-    await d.setSelect('footer-language', 'de');
+    await d.setSelect('settings-language', 'de');
     await wait(150);
     const askedBeforeGerman = discardAsked.length;
     await d.clickById('footer-open');
     await waitFor(() => discardAsked.length > askedBeforeGerman, 'the question was asked in German');
     report.questionInGerman = discardAsked[discardAsked.length - 1];
-    await d.setSelect('footer-language', 'en');
+    await d.setSelect('settings-language', 'en');
     await wait(150);
 
     // --- the question: save first, but the save is cancelled ---------------

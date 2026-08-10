@@ -1,5 +1,12 @@
 {
   "app.title": "SignalForge",
+  "nav.caption": "Effect",
+  "gallery.title": "Start an effect with",
+  "gallery.picture": "Your own picture",
+  "gallery.solid": "Solid colour",
+  "gallery.linear": "Gradient",
+  "gallery.radial": "Radial gradient",
+  "gallery.soon": "Soon",
   "inspector.title": "Settings",
   "preview.dropHint": "Drop an image here",
   "preview.dropFormats": "Supported: {formats}",

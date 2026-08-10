@@ -1,5 +1,12 @@
 {
   "app.title": "SignalForge",
+  "nav.caption": "Effekt",
+  "gallery.title": "Effekt beginnen mit",
+  "gallery.picture": "Eigenes Bild",
+  "gallery.solid": "Farbfläche",
+  "gallery.linear": "Verlauf",
+  "gallery.radial": "Strahlenverlauf",
+  "gallery.soon": "Bald",
   "inspector.title": "Einstellungen",
   "preview.dropHint": "Bild hierher ziehen",
   "preview.dropFormats": "Unterstützt: {formats}",

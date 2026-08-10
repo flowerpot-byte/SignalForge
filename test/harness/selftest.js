@@ -135,9 +135,14 @@ async function selfTestFirstRun(win, folder) {
 
   /** The language switch in the footer, operated the way a person operates it. */
   const chooseLanguage = async (code) => {
-    await setSelect('footer-language', code);
+    // The language switch moved out of the footer and into the settings
+    // column, behind the entry pinned to the bottom of the left column (see
+    // components/appsettings.js). Same control, same event, new home.
+    await setSelect('settings-language', code);
     return js(`({
-      settings: document.getElementById('inspector-title').textContent,
+      // The word "Settings" is now the left column's fourth entry rather than
+      // a heading over the settings column, so it is read where it lives.
+      settings: document.getElementById('nav-settings-label').textContent,
       section: document.querySelector('#inspector-body .field-group > h3').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,

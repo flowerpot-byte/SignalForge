@@ -3,61 +3,56 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * Build the two-column frame and hand back its empty regions.
+ * The frame the whole window is built in, and the empty regions it hands back.
  *
- * There is no layer region, in the contract or in the markup. A layer list is
- * a later task, and until it exists there is nothing honest to put in a third
- * column: the empty panel that used to stand there was 260px of promise, and
- * it was the single loudest reason the window read as unfinished. A region
- * kept in the DOM but rendered as nothing would have been the same claim made
- * more quietly, plus a name in this contract that nobody could use — so the
- * whole thing is gone, and the width it held has gone to the picture. When the
- * layer list is built it gets a region designed around what it actually needs.
+ * Four of them now, in the shape SignalRGB's own window has:
  *
- * The column heading is the only text the frame owns, and it is written
- * through `relabel()` rather than into the markup above: a language switch
- * must not rebuild this element, because rebuilding it would throw away the
- * preview canvas (and the render loop drawing into it) along with everything
- * else the columns are holding.
+ *   nav        the left column, 200px, the destinations
+ *   preview    the stage: the picture being built, its caption, the strip of
+ *              tiles an effect can be started from
+ *   inspector  the settings column, 300px, built of discrete cards
+ *   footer     the transport bar across the bottom, beside the nav
+ *
+ * There is no `.panel` any more, and that is the largest single change in this
+ * file. Every region used to be a translucent, blurred, 14px-rounded box with
+ * a hairline around it, floating on a tinted backdrop; in the reference not
+ * one of these regions is a box at all. The stage sits directly on the page,
+ * the settings column is page colour with cards ON it, and the left column is
+ * simply a lighter field. Boxes only exist where something is genuinely raised
+ * out of the surface it sits on — a card, a tile, a control.
+ *
+ * There is still no layer region and still no layer list: that is a later task
+ * and inventing a column for it would repeat exactly the mistake this window
+ * has already been through once.
+ *
+ * The frame owns no text at all any more. Everything the old `relabel()` said
+ * has moved to the piece that owns it — the left column's caption to
+ * components/sidebar.js — so a language switch never has to touch this file
+ * and can therefore never rebuild it. That matters beyond tidiness: rebuilding
+ * this element would throw away the preview canvas and the render loop drawing
+ * into it.
  */
-export function mountShell(root, t) {
+export function mountShell(root) {
   root.innerHTML = `
-    <section class="panel" id="preview"><div id="preview-body"></div></section>
-    <section class="panel" id="inspector"><h2 id="inspector-title"></h2><div id="inspector-body"></div></section>
-    <section class="panel" id="footer"><div id="footer-body"></div></section>
+    <nav class="nav" id="nav"></nav>
+    <section class="stage-column" id="preview"><div id="preview-body"></div></section>
+    <section class="settings-column" id="inspector">
+      <div id="inspector-body"></div>
+      <div id="settings-body" hidden></div>
+    </section>
+    <footer class="transport" id="footer"><div id="footer-body"></div></footer>
   `;
-  const inspectorTitle = root.querySelector('#inspector-title');
-
-  function relabel() {
-    inspectorTitle.textContent = t('inspector.title');
-  }
-  relabel();
 
   return {
-    relabel,
+    nav: root.querySelector('#nav'),
     preview: root.querySelector('#preview-body'),
+    // The settings column itself — the element that scrolls — as well as the
+    // body inside it that the cards are built into. The left column has to
+    // reach the scroller to say where it is going and to hear where it ended
+    // up (see showSection in app/renderer/main.js).
+    column: root.querySelector('#inspector'),
     inspector: root.querySelector('#inspector-body'),
+    settings: root.querySelector('#settings-body'),
     footer: root.querySelector('#footer-body')
   };
-}
-
-/** Three blurred blobs behind the glass, tinted from the effect's own colours. */
-export function mountBackdrop(colours) {
-  let node = document.getElementById('backdrop');
-  if (!node) {
-    node = document.createElement('div');
-    node.id = 'backdrop';
-    node.innerHTML = '<div></div><div></div><div></div>';
-    document.body.prepend(node);
-  }
-  // Fallback colour comes from tokens.css, not a literal here, so every
-  // colour in the project still lives in one place.
-  const fallback = getComputedStyle(document.documentElement)
-    .getPropertyValue('--backdrop-fallback').trim();
-  const spots = [['6%', '4%'], ['52%', '38%'], ['24%', '62%']];
-  node.querySelectorAll('div').forEach((blob, i) => {
-    blob.style.left = spots[i][0];
-    blob.style.top = spots[i][1];
-    blob.style.background = colours[i] ?? fallback;
-  });
 }

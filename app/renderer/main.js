@@ -2,13 +2,16 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { createI18n, pickLanguage } from './i18n/i18n.js';
-import { mountShell, mountBackdrop } from './components/shell.js';
+import { mountShell } from './components/shell.js';
 import { createPreview } from './components/preview.js';
-import { mountDrop } from './components/drop.js';
+import { mountDrop, isSupportedImage } from './components/drop.js';
 import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
 import { mountFooter } from './components/footer.js';
 import { mountFirstRun } from './components/firstrun.js';
+import { mountSidebar, DESTINATIONS } from './components/sidebar.js';
+import { mountGallery } from './components/gallery.js';
+import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
@@ -57,35 +60,26 @@ async function boot() {
   // like all follow this attribute.
   document.documentElement.lang = language;
 
-  // The tint shown while there is no picture to take colours from. Read from
-  // tokens.css rather than hard-coded here so every colour that somebody
-  // CHOSE still lives in one place; the ones a picture supplies are computed
-  // (see components/palette.js) and could not live there.
-  const style = getComputedStyle(document.documentElement);
-  const seedColours = [
-    style.getPropertyValue('--backdrop-seed-1').trim(),
-    style.getPropertyValue('--backdrop-seed-2').trim(),
-    style.getPropertyValue('--backdrop-seed-3').trim()
-  ];
-
-  mountBackdrop(seedColours);
-
   /**
-   * Give the backdrop the colours of the picture now on screen.
+   * The thumbnail at the head of the transport bar: the picture's three
+   * strongest colours.
    *
-   * This is the reason the window is made of glass rather than merely
-   * decorated with it, and until now it was never wired up: mountBackdrop was
-   * called once, with the seeds, and never again.
+   * This is what is left of the blurred backdrop that used to stand behind the
+   * whole window, and it is what that idea was actually worth. Sampling the
+   * picture was never the problem — washing it across every panel was, because
+   * it made the surface under every label a colour nobody had chosen. Here the
+   * same six lines of sampling produce a 40px chip that says what the desk is
+   * about to look like, in the one place a bar like this has always shown what
+   * is loaded.
    *
-   * Deliberately cheap and deliberately rare. It samples a 48 x 30 copy of the
-   * picture once, at the moment it is imported or opened — never per frame,
-   * never off the preview canvas. A picture with no readable colour in it (an
-   * entirely transparent PNG) leaves the seeds in place rather than washing
-   * the window out to nothing.
+   * Deliberately cheap and deliberately rare: a 48 x 30 copy of the picture,
+   * once, at the moment it is imported or opened — never per frame, never off
+   * the preview canvas. A picture with no readable colour in it (an entirely
+   * transparent PNG) yields nothing and the chip goes back to its resting
+   * outline rather than to a colour that was invented for it.
    */
-  function retintBackdrop(image) {
-    const colours = image ? samplePalette(image) : [];
-    mountBackdrop(colours.length > 0 ? colours : seedColours);
+  function retintThumbnail(image) {
+    footer.setColours(image ? samplePalette(image) : []);
   }
 
   /**
@@ -97,8 +91,91 @@ async function boot() {
    */
   function showPicture(has) {
     regions.preview.classList.toggle('has-picture', has);
+    sidebar.setHasPicture(has);
+    // The two picture-dependent destinations only exist once there is a
+    // picture, so somebody standing on one of them when a project without one
+    // is opened has to be moved off it rather than left looking at an empty
+    // column. Going the other way, a picture that has just arrived puts the
+    // column on "Bild", which is where its fit and its crop are.
+    if (has && !hasPicture) showSection('image');
+    if (!has && DESTINATIONS.some((d) => d.key === section && d.needsPicture)) showSection('colour');
+    hasPicture = has;
   }
-  const regions = mountShell(document.getElementById('app'), (k) => i18n.t(k));
+  const regions = mountShell(document.getElementById('app'));
+
+  /**
+   * Which destination the left column is pointing at.
+   *
+   * 'colour' at a fresh start, deliberately: it is the one section that exists
+   * whether or not there is a picture, so the window never opens on a column
+   * that is waiting for something.
+   */
+  let section = 'colour';
+  let hasPicture = false;
+
+  /** Mark the group the left column is pointing at, without moving anything. */
+  function markSection() {
+    sidebar.setActive(section);
+    for (const group of regions.inspector.querySelectorAll('.field-group')) {
+      group.classList.toggle('is-active', group.dataset.section === section);
+    }
+  }
+
+  /**
+   * Go to a destination.
+   *
+   * For the three that belong to the effect this scrolls the settings column
+   * to that group and marks it; all three stay on screen, because one at a
+   * time left the column mostly empty (see mountInspector for the measurement
+   * and the screenshot that settled it). The fourth swaps the column for the
+   * app's own settings, which is a different thing entirely and does take
+   * over.
+   */
+  function showSection(next, { scroll = true } = {}) {
+    section = next;
+    // The app's own settings and the effect's settings share the column and
+    // take turns; the effect's controls stay in the document either way (see
+    // mountInspector on why they are never torn down).
+    const settingsShowing = next === 'settings';
+    regions.inspector.hidden = settingsShowing;
+    regions.settings.hidden = !settingsShowing;
+    markSection();
+    if (settingsShowing || !scroll) return;
+    const group = regions.inspector.querySelector(`.field-group[data-section="${next}"]`);
+    // 'auto' rather than 'smooth': a scroll that animates would still be
+    // moving when the next thing (a screenshot, a keyboard user's next arrow
+    // press) arrives.
+    if (group) group.scrollIntoView({ block: 'start', behavior: 'auto' });
+  }
+
+  const sidebar = mountSidebar(regions.nav, {
+    t: (k) => i18n.t(k),
+    active: section,
+    onSelect: showSection
+  });
+
+  /**
+   * Which group is actually under the eye, said back to the left column.
+   *
+   * Without this the marked entry would only ever be the last one clicked, so
+   * scrolling the column past all three would leave the left column claiming
+   * the wrong one — a map that lies about where you are is worse than no map.
+   * It only ever MARKS; it never scrolls anything, so it cannot fight the
+   * gesture that caused it.
+   */
+  regions.column.addEventListener('scroll', () => {
+    if (section === 'settings') return;
+    const top = regions.column.getBoundingClientRect().top + 24;
+    let arrived = null;
+    for (const group of regions.inspector.querySelectorAll('.field-group')) {
+      if (group.getBoundingClientRect().top <= top) arrived = group;
+    }
+    const first = regions.inspector.querySelector('.field-group');
+    const now = (arrived || first)?.dataset.section;
+    if (!now || now === section) return;
+    section = now;
+    markSection();
+  });
 
   const preview = createPreview(regions.preview, (k) => i18n.t(k));
 
@@ -253,9 +330,9 @@ async function boot() {
    */
   async function retintFromAsset(asset) {
     try {
-      retintBackdrop(await decodeAsset(asset));
+      retintThumbnail(await decodeAsset(asset));
     } catch (err) {
-      console.error('could not take the backdrop from the picture:', err);
+      console.error('could not take the thumbnail from the picture:', err);
     }
   }
 
@@ -297,6 +374,11 @@ async function boot() {
   const inspector = mountInspector(regions.inspector, {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
+    // Which of the three the left column is pointing at. Read on every redraw
+    // rather than passed in once, so a redraw caused by something else — a
+    // motion added, a project opened, a language switched — cannot put the
+    // column back to showing all three.
+    visibleSection: () => section,
     /**
      * Which way a change reaches the picture depends on what kind of change
      * it is:
@@ -346,13 +428,22 @@ async function boot() {
     }
   });
 
-  mountDrop(regions.preview, {
-    onFile: async (file) => {
+  /**
+   * Take a picture in, from wherever it came.
+   *
+   * There are two entrances now — a file dragged onto the stage, and the
+   * "own picture" tile in the starting gallery, which opens a file dialog —
+   * and they must not be two implementations. Both hand over a real `File`
+   * object and nothing else; only app/preload.cjs is trusted to turn that into
+   * a filesystem path (webUtils.getPathForFile), so adding the second entrance
+   * added no new way for the window to name a file.
+   */
+  async function importFile(file) {
       // sf:importImage already turns its own failures into { ok: false }
-      // (see app/main.js) rather than a rejection, but this handler is an
-      // event callback with nobody awaiting it — an unexpected throw
-      // anywhere in here (a bridge error, setDocument rejecting) must still
-      // end up on screen instead of an unhandled rejection in the console.
+      // (see app/main.js) rather than a rejection, but this runs from an event
+      // callback with nobody awaiting it — an unexpected throw anywhere in
+      // here (a bridge error, setDocument rejecting) must still end up on
+      // screen instead of an unhandled rejection in the console.
       try {
         // The File itself goes to the bridge; only preload.cjs resolves it
         // to a real path (see components/drop.js). file.name is already
@@ -380,8 +471,8 @@ async function boot() {
         // built on. Marked only once the import has actually succeeded: a
         // refused or unreadable file changes nothing and must say nothing.
         markChanged();
-        // The window takes the new picture's colours. Not awaited: the
-        // picture is already on screen and the tint is allowed to arrive a
+        // The transport bar takes the new picture's colours. Not awaited: the
+        // picture is already on screen and the chip is allowed to arrive a
         // frame later.
         retintFromAsset(result.asset);
         showPicture(true);
@@ -389,15 +480,37 @@ async function boot() {
         crop.refresh();
         // The column had nothing but the document-wide sliders until now.
         inspector.refresh();
-        footer.setName(preview.document().name);
+        showName(preview.document().name);
         preview.start();
       } catch (err) {
-        console.error('drop import failed:', err);
+        console.error('image import failed:', err);
         showMessage(`${i18n.t('preview.dropFailed')}: ${err.message || err}`, true);
       }
-    },
+  }
+
+  mountDrop(regions.preview, {
+    onFile: importFile,
     onReject: (name) => {
       showMessage(`${i18n.t('preview.dropUnsupported')}: ${name}`, true);
+    }
+  });
+
+  // The starting gallery, under the stage: how an effect begins. Only the
+  // "own picture" tile does anything today; the solid-colour and gradient
+  // tiles are on screen and marked as unbuilt, because they need layer types
+  // the engine does not have yet (see components/gallery.js).
+  const gallery = mountGallery(regions.preview, {
+    t: (k) => i18n.t(k),
+    // A dialog can only offer what the importer accepts, but `accept` is a
+    // hint the operating system is free to ignore ("all files" is one click
+    // away in every file dialog there is), so the same judgement the drop
+    // path makes is made here too rather than trusted to the dialog.
+    onPicture: (file) => {
+      if (!isSupportedImage(file.name)) {
+        showMessage(`${i18n.t('preview.dropUnsupported')}: ${file.name}`, true);
+        return;
+      }
+      importFile(file);
     }
   });
 
@@ -489,13 +602,13 @@ async function boot() {
     // for the backdrop cost nothing more than reading one of them. A project
     // with no picture in it puts the seed colours back rather than leaving
     // the previous project's tint behind.
-    retintBackdrop(measured ? measured.image : null);
+    retintThumbnail(measured ? measured.image : null);
     showPicture(Boolean(measured));
     // A project brings its own picture and its own fit mode, so whether the
     // canvas is a tab stop is decided fresh here too.
     crop.refresh();
     inspector.refresh();
-    footer.setName(doc.name);
+    showName(doc.name);
     preview.start();
     // What is on screen came out of a file and has not been touched since.
     // That holds for a repaired project too (below): the corrections are the
@@ -544,7 +657,7 @@ async function boot() {
       // (a "/", a ":", ...), leaving the original text in the field would
       // read as a promise the export did not keep — the file on disk is
       // named after result.name, not after whatever is still typed here.
-      footer.setName(result.name);
+      showName(result.name);
       return;
     }
 
@@ -593,7 +706,9 @@ async function boot() {
   function applyLanguage(next) {
     i18n.setLanguage(next);
     document.documentElement.lang = i18n.language;
-    regions.relabel();
+    sidebar.relabel();
+    gallery.relabel();
+    appSettings.relabel();
     firstRun.relabel();
     footer.relabel();
     // The empty frame's invitation. The cost chip beside it re-states itself
@@ -627,12 +742,6 @@ async function boot() {
 
   const footer = mountFooter(regions.footer, {
     t: (k) => i18n.t(k),
-    language,
-    languages,
-    onLanguageChange: (next) => {
-      applyLanguage(next);
-      remember('language', next);
-    },
     // Straight into the live document, through the engine's own setByPath,
     // exactly like every field in the settings column — so the name the
     // export uses and the name a saved project carries are the same one,
@@ -645,10 +754,12 @@ async function boot() {
       // The name is part of the document and travels into the saved file, so
       // typing in that field is unsaved work like anything else. Only a write
       // that actually took counts — and only a write the USER made: the
-      // export's own footer.setName() puts text in the field without firing
-      // this, which is right, because an export is not a change to the
-      // project.
+      // export's own showName() puts text in the field without firing this,
+      // which is right, because an export is not a change to the project.
       markChanged();
+      // The caption under the stage is the same name, so it follows the field
+      // as it is typed rather than only when a document arrives.
+      preview.setTitle(value);
     },
     onExport: guard('export.failed', () => exportEffect(false)),
     onOverwrite: guard('export.failed', () => exportEffect(true)),
@@ -656,13 +767,42 @@ async function boot() {
     onOpen: guard('project.openFailed', openProject)
   });
 
-  /** Both the footer line and the first-start question read the same target. */
+  // The app's own two settings, in the settings column behind the entry pinned
+  // to the bottom of the left column. They used to be wedged into the footer
+  // beside the buttons, which is what stopped that row from ever being a
+  // transport bar.
+  const appSettings = mountAppSettings(regions.settings, {
+    t: (k) => i18n.t(k),
+    language,
+    languages,
+    onLanguageChange: (next) => {
+      applyLanguage(next);
+      remember('language', next);
+    },
+    onChooseFolder: guard('settings.folderFailed', async () => {
+      showTarget(await window.sf.chooseFolder());
+    })
+  });
+
+  /**
+   * The effect's name, in both places it is said: the field in the transport
+   * bar and the caption under the stage. One call, so the two cannot drift.
+   */
+  function showName(text) {
+    footer.setName(text);
+    preview.setTitle(text);
+  }
+
+  /** The transport bar, the settings panel and the first-start question all
+   * read the same target. */
   function showTarget(target) {
     footer.setTarget(target);
+    appSettings.setTarget(target);
     firstRun.setTarget(target);
   }
 
-  footer.setName(preview.document().name);
+  showName(preview.document().name);
+  showSection(section);
   showTarget(await window.sf.effectsTarget());
 
   // The first start's own language is not a choice the user made, so it is

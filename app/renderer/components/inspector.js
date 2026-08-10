@@ -13,6 +13,7 @@
 import { FIT_MODES, MOTION_KINDS } from '../../../src/engine/document.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
 import { createField, createMotions } from './field.js';
+import { icon } from './icons.js';
 
 /** A range plus the one thing a slider needs that a baked control does not. */
 const withStep = (range) => Object.freeze({ ...range, step: 1 });
@@ -67,6 +68,13 @@ export const SECTION_TITLES = Object.freeze({
   image: 'inspector.section.image',
   motions: 'inspector.motions',
   colour: 'inspector.section.colour'
+});
+
+/** The glyph that leads each section's heading, and the left column's entry. */
+const SECTION_GLYPHS = Object.freeze({
+  image: 'image',
+  motions: 'motion',
+  colour: 'colour'
 });
 
 /** "layers.0.motions.1.speed" -> 1, or null for anything that is not a motion field. */
@@ -190,8 +198,33 @@ export function widenToInclude(field, value) {
  * There is no layer list yet (that is a later task), so the layer shown is
  * the document's first one.
  */
-export function mountInspector(container, { getDocument, onChange, t, onError }) {
+export function mountInspector(container, { getDocument, onChange, t, onError, visibleSection }) {
   const SF = window.SignalForgeEngine;
+
+  /**
+   * Which of the three sections the left column is pointing at.
+   *
+   * All three are on screen at once, and the one this names is merely MARKED —
+   * its heading takes the accent — rather than being the only one drawn.
+   *
+   * That is the second answer to this question, and the first one is worth
+   * recording because it looked better on paper. The column started out
+   * showing exactly one section at a time, which is what a left column full of
+   * destinations promises. Photographed, it was indefensible: "Bild" is one
+   * control, so choosing it produced a 300px column holding a single card with
+   * six hundred pixels of nothing under it — precisely the blank space this
+   * whole pass exists to kill (the screenshot is kept at
+   * work/redesign-shots/signalrgb/00-rejected-one-group-at-a-time.png). Three
+   * sections together fill the column; one at a time cannot, because this app
+   * does not have enough controls for four screens.
+   *
+   * So the left column scrolls to a group and says which one you are in, and
+   * the column stays whole. Every control also stays in the document, which
+   * the self-test, the acceptance walkthrough and the unsaved-work harness all
+   * depend on — each of them reads the fit, the motions and the colour sliders
+   * in one breath.
+   */
+  const showing = () => (visibleSection ? visibleSection() : null);
 
   function rememberFocus() {
     const active = document.activeElement;
@@ -209,15 +242,34 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
     if (remove) document.getElementById(`${remove[1]}-add`)?.focus();
   }
 
-  /** A headed section of the column, appended and handed back to fill. */
+  /**
+   * A headed section of the column, appended and handed back to fill.
+   *
+   * The heading is the column's header row: the section's own glyph and name
+   * on the left, its actions on the right — which is where the reference puts
+   * a section's icon buttons, and where the "add a motion" button now lives.
+   * Because exactly one section is on screen at a time, that heading reads as
+   * the header of the whole column rather than as one of three stacked rules.
+   */
   function openSection(name) {
     const group = document.createElement('section');
     group.className = 'field-group';
+    group.dataset.section = name;
+    group.classList.toggle('is-active', showing() === name);
+
     const heading = document.createElement('h3');
-    heading.textContent = t(SECTION_TITLES[name]);
+    heading.append(icon(SECTION_GLYPHS[name]));
+    const word = document.createElement('span');
+    word.textContent = t(SECTION_TITLES[name]);
+    heading.append(word);
+
+    const actions = document.createElement('span');
+    actions.className = 'section-actions';
+    heading.append(actions);
+
     group.append(heading);
     container.append(group);
-    return group;
+    return { group, actions };
   }
 
   function render() {
@@ -244,6 +296,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
 
     let sectionName = null;
     let section = null;
+    let sectionActions = null;
     // The motion rows, and the button that adds another, taken from
     // createMotions when the motion list itself comes past and put in their
     // places as the sliders that belong to them arrive.
@@ -252,20 +305,35 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
     let motionIndex = null;
     let motionCard = null;
 
-    /** The add button always goes last, under the motions it can add to. */
+    /** The add button goes into the heading of the section it adds to. */
     const closeMotions = () => {
-      if (addMotion && section) section.append(addMotion);
+      if (addMotion && sectionActions) sectionActions.append(addMotion);
       addMotion = null;
       motionRows = [];
       motionIndex = null;
       motionCard = null;
     };
 
+    /**
+     * One control, in a card of its own — the shape of every card in the
+     * reference: the name on the left, the value on the right, the control
+     * across the width beneath, on a fill one step up from the column with an
+     * 8px gap to the next.
+     */
+    const card = (element) => {
+      const box = document.createElement('div');
+      box.className = 'card';
+      box.append(element);
+      return box;
+    };
+
     for (const field of fields) {
       if (field.section !== sectionName) {
         closeMotions();
         sectionName = field.section;
-        section = openSection(sectionName);
+        const opened = openSection(sectionName);
+        section = opened.group;
+        sectionActions = opened.actions;
       }
 
       const value = SF.getByPath(doc, field.path);
@@ -301,7 +369,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
       // they sit on screen.
       const motion = motionIndexOf(field.path);
       if (motion === null) {
-        section.append(element);
+        section.append(card(element));
         continue;
       }
       if (motion !== motionIndex) {

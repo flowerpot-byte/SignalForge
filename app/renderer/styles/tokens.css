@@ -1,132 +1,162 @@
 /* SignalForge — build SignalRGB effects from images, video, gradients and shapes.
    Copyright (C) 2026 Max
    SPDX-License-Identifier: GPL-3.0-or-later */
+
+/* ---------------------------------------------------------------------------
+   The one place every colour in this project lives.
+
+   Every value below that names a surface, a text level, the accent or a slider
+   track was MEASURED out of SignalRGB's own "Customize" screen
+   (docs/erkenntnisse-signalrgb-oberflaeche.md records the sample points), not
+   guessed at and not eyeballed off a screenshot. Where a number here differs
+   from what SignalRGB draws it says so and why.
+
+   The glass is gone. There is no --glass-fill, no --glass-blur and no
+   backdrop: SignalRGB's window is flat, opaque and near-black, and every
+   surface in it is a step of solid colour rather than a translucent sheet over
+   a tinted blur. Blur cost frames, washed the picture's own colours across the
+   controls, and was the single thing that made this window read as a theme
+   rather than as a tool.
+   --------------------------------------------------------------------------- */
 :root {
-  --bg-base:        #0b0d14;
-  --glass-fill:     rgba(255, 255, 255, 0.06);
-  --glass-stroke:   rgba(255, 255, 255, 0.12);
-  --glass-blur:     18px;
-  --text-strong:    rgba(255, 255, 255, 0.94);
-  --text-muted:     rgba(255, 255, 255, 0.58);
-  --accent:         #c94f7c;
-  --accent-soft:    rgba(201, 79, 124, 0.22);
+  /* The page. Measured at four points well away from any content
+     (700,25 / 1230,780 / 210,780 / 1400,30): #060b11 at every one of them.
+     Near-black with the faintest cool cast — not a navy, and not pure black
+     either, which would make every surface above it look like a sticker. */
+  --bg-base:        #060b11;
+
+  /* The left column, one step UP from the page rather than down. Measured at
+     (100,600), (100,900) and (10,10): #0f1620. This is the surprise in the
+     reference — a sidebar that is lighter than the stage beside it, which is
+     what stops the window from reading as one flat sheet with lines on it. */
+  --bg-nav:         #0f1620;
+
+  /* A card in the settings column. Measured inside three different cards
+     (1320,620 / 1400,700 / 1400,306): #212d3a, the same value each time.
+     Cards carry NO border in the reference: scanning across a card's left edge
+     (row y=620) goes #060b11 -> #212d3a in a single pixel with nothing in
+     between, and the cards are told apart by an 8px gap of page colour. So
+     this project draws them the same way — a fill and a gap, no hairline. */
+  --surface-card:   #212d3a;
+
+  /* The raised step: the active entry in the left column, and any control
+     under the pointer. Measured across the "Lighting" pill at y=177: #272d36,
+     a neutral grey rather than a tint of the accent. */
+  --surface-raise:  #272d36;
+
+  /* A recess IN a card. Measured behind the "50" readout of the Speed card
+     (1490..1525, 530..550): #18212b — SignalRGB sinks a value into the card it
+     belongs to instead of raising it out. Used here for every slider's number
+     and for the two readings under the stage. */
+  --surface-sunk:   #18212b;
+
+  /* The segmented control at the top of the reference's right column
+     ("Effect | Layout"), measured at (1300..1380, 50..70): #3a4e60. Used here
+     for the quiet buttons — open, save — so they read as controls without
+     competing with the one filled action. */
+  --surface-quiet:  #3a4e60;
+
+  /* Strong text. Measured as the brightest pixel of five different runs of
+     text (the sidebar labels, the effect title, the bottom bar's name):
+     #f8f8ff every time. On --bg-base that is 19.1:1. */
+  --text-strong:    #f8f8ff;
+
+  /* Muted text: every card label, every section caption. Measured at the
+     brightest pixel of "Speed", "Drop Size" and "Effect Presets": #a3c5d6,
+     #abcad6, #aac0cf — one colour, three antialiasings of it. Taken as
+     #a3c5d6, the darkest of the three, so the figure below is the worst case:
+     8.4:1 on a card, 11.8:1 on the page. Nothing in this window is a dim grey
+     label. */
+  --text-muted:     #a3c5d6;
+
+  /* The quietest text there is: the reference's "Save and load Effect
+     settings" line, measured at #7d98a6. Used ONLY on --bg-base, where it
+     measures 6.5:1; on a card it would fall to 4.6:1, which is above the floor
+     but close enough to it that the rule is simply "not on cards". */
+  --text-dim:       #7d98a6;
+
+  /* The accent. Measured off two slider fills in the reference's Color card
+     (1450,245 and 1400,279): #ff0066 at both, exactly. SignalRGB's own pink.
+     --bg-base on it measures 5.12:1, which is what makes the one filled button
+     legible; white on it would be 3.75:1 and is never used. */
+  --accent:         #ff0066;
+  /* One step brighter, for the hover of that same button. --bg-base on it
+     measures 4.62:1, still past the body-text floor. */
+  --accent-hover:   #ff3d8a;
+  /* The accent at a whisper: the live drop target's fill, and the resting
+     tint of a control that is marked out by the accent rather than filled. */
+  --accent-soft:    rgba(255, 0, 102, 0.16);
+
+  /* The filled part of an ordinary slider's track, measured off the Speed
+     slider at (1330,570): #97b3c9. The remainder, measured on the same track
+     at (1490,570): #485969. Filled against empty is 3.30:1 and the thumb
+     against the empty track is 7.0:1, so where a slider stands is readable
+     without reading its number.
+
+     SignalRGB uses two fills, and the difference is not decoration: its
+     generic controls (Speed, Drop Size) fill light-neutral, its COLOUR
+     controls (Saturation, Brightness) fill with the accent. That maps exactly
+     onto this app, so it is kept — the motion sliders fill neutral, the four
+     colour sliders fill #ff0066. */
+  --track-fill:     #97b3c9;
+  --track-empty:    #485969;
+
+  /* A line that merely separates: the rule under the left column's caption,
+     the edge between the stage and the settings column. Measured at the
+     sidebar's right edge (200,600): #212d3a — the same value as a card fill,
+     which is why there is one token for the step and this alias for the
+     line. */
+  --hairline:       #212d3a;
+
+  /* The one non-SignalRGB colour in the set, kept from before: a reading that
+     has gone too expensive, and a message that is a warning. Amber, because
+     the accent is now the app's own voice and must not double as "careful".
+     On --bg-base it measures 9.4:1. */
   --warn:           #e0a54a;
-  --radius:         14px;
-  --gap:            12px;
-  --panel-pad:      16px;
-  --glass-fill-hover: rgba(255, 255, 255, 0.11);
-  --backdrop-fallback: #243049;
-  --backdrop-seed-1: #2a3a5c;
-  --backdrop-seed-2: #4a2f52;
-  --backdrop-seed-3: #20404a;
-
-  /* A panel is dark glass, not white glass.
-     --glass-fill alone lightens whatever is behind it, and since the backdrop
-     now takes its colours from the imported picture, "whatever is behind it"
-     is no longer a colour anybody chose. A bright picture pushed the panel
-     surface up to roughly #5a5a5a, where --text-muted measures 3.5:1 — below
-     the 4.5:1 body-text floor. This dark tint puts a floor under the surface
-     instead: measured against the brightest backdrop the sampler can produce,
-     --text-muted on a panel comes out at 5.9:1, and against the calmest at
-     7.6:1. The blur still carries the colour through, so the glass is still
-     glass. --glass-fill stays what it always was and is now used for the
-     controls that sit ON a panel. */
-  --panel-fill:     rgba(14, 17, 26, 0.62);
-
-  /* The primary button is filled with --accent and labelled in --bg-base:
-     4.53:1, which white on the same fill does not reach (4.29:1). This is
-     its hover, one step brighter — --bg-base on it measures 5.69:1. */
-  --accent-hover:   #d9648c;
-
-  /* The preview frame has to read as the thing being produced rather than as
-     an image lying on a panel, so it is lifted off the glass. A shadow needs
-     a colour and colours live here. */
-  --stage-shadow:   0 18px 44px rgba(0, 0, 0, 0.5);
-
-  /* The small radius, for controls. It was written as a bare 10px in five
-     places in app.css; the same number in one place is the system. */
-  --radius-sm:      10px;
 
   /* ---------------------------------------------------------------------
-     Type. Two stacks, so both live in one place instead of one of them
-     being a string buried in app.css.
+     Shape.
 
-     Neither downloads anything: every family named here already ships with
-     Windows, which is why this pass needs no font-src in the CSP and no
-     font file in the repository. The UI stack is the system's own, which on
-     a desktop tool is the right answer rather than a lazy one — the window
-     should look like the operating system it lives in.
+     Measured off the reference by reading where the fill starts on each row
+     of a corner: a card's curve runs from +7 to +2 over five rows, i.e. a
+     radius of about 6px; the sidebar's active pill runs from +10 to +2 over
+     eight, i.e. about 8px. The window this replaces used 14px everywhere,
+     which is what made every box read as a soft tile rather than as a panel
+     in a tool. */
+  --radius:         6px;
+  --radius-lg:      8px;
+  --radius-pill:    999px;
 
-     The mono stack is for DATA only: the 320 x 200 chip, the compute-load
-     readout, and every slider's number. A tool that deals in dimensions,
-     milliseconds and percentages should set its figures like an instrument
-     and its prose like prose; setting both in the same face threw that
-     distinction away. Never for labels, buttons or sentences.
-     "Cascadia Mono" ships with Windows 11 (and with every Windows Terminal
-     install); Consolas is the fallback on anything older, and ui-monospace
-     the one after that. */
+  /* ---------------------------------------------------------------------
+     Spacing, in five steps and no more. Everything in the window is one of
+     these. The gap between two cards in the reference is 8px, measured by
+     scanning down a card's top edge (508..515 is page colour, eight rows of
+     it), so --space-2 is the value the whole settings column is built from. */
+  --space-1:        4px;
+  --space-2:        8px;
+  --space-3:        12px;
+  --space-4:        16px;
+  --space-5:        24px;
+
+  /* ---------------------------------------------------------------------
+     The two fixed columns, measured off the reference: the sidebar's right
+     edge is at x=200, and the settings cards run 1268..1556 in a 1568-wide
+     window, i.e. a 300px column with 12px of padding either side. */
+  --nav-width:      200px;
+  --settings-width: 300px;
+
+  /* Every icon in this window is drawn on this grid, at this weight. Both are
+     tokens because "one stroke weight" is a rule, not a habit. */
+  --icon-size:      16px;
+  --icon-stroke:    1.5;
+
+  /* ---------------------------------------------------------------------
+     Type. Two stacks, unchanged in kind from before and for the same reasons:
+     neither downloads anything (which is why the CSP still needs no font-src),
+     the UI stack is the system's own, and the mono stack is for DATA only —
+     the 320 x 200 chip, the compute-load reading, and every slider's number.
+     "Cascadia Mono" ships with Windows 11; Consolas is the fallback on
+     anything older. */
   --font-ui:        "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono:      "Cascadia Mono", Consolas, ui-monospace, monospace;
-
-  /* ---------------------------------------------------------------------
-     Two strokes, and the difference between them is the point.
-
-     --hairline draws a box that is merely THERE: the panels, the rules
-     under the headings, the resting edge of a control. At 0.12 every one of
-     those edges had the same weight as an edge that meant something, so the
-     window read as a stack of boxes all shouting equally. A hairline is
-     structure; it should be felt rather than seen.
-
-     --glass-stroke keeps the old 0.12 and becomes the STATE stroke: what an
-     edge goes to when a control is under the pointer. Anything stronger
-     than that is the accent (focus, the live drop target, the one filled
-     button), which is a colour rather than a weight. */
-  --hairline:       rgba(255, 255, 255, 0.08);
-
-  /* ---------------------------------------------------------------------
-     Elevation, in four steps and no more.
-
-       page    --bg-base, with the picture's colours washed across it
-       panel   --panel-fill, dark glass over that wash
-       well    --well-fill, a recess IN a panel: the preview frame, and the
-               group of controls that make up one motion
-       control --glass-fill, the only thing that is raised
-
-     A recess rather than a fifth barely-lighter grey, deliberately: going
-     down is a direction the eye reads instantly, it needs no border to be
-     legible (so the motion cards lose theirs), and it puts the raised
-     controls in front of something darker instead of something almost the
-     same. It also cannot cost contrast — everything on it gets darker. */
-  --well-fill:      rgba(0, 0, 0, 0.22);
-
-  /* The filled part of a slider's track.
-     It used to be --accent, and with six sliders in the column that made a
-     row of bright pink bars the loudest thing in the window — the "dark
-     theme carried by one accent colour" read, stated six times over. The
-     accent now appears where it means something: the one filled button, the
-     focus ring, the live drop target, and the slider actually being moved.
-     A neutral fill also stops a bipolar control (-100..100, resting in the
-     middle) from looking half full of accent when its value is zero.
-
-     Recolouring the fill was never the same thing as erasing it: the track
-     was, and stays, two visibly different tones, so where six sliders stand
-     can still be read at a glance without reading six numbers — that is the
-     whole reason this value paints only PART of the track (see --sf-fill in
-     field.js and the gradient in app.css). What changed here is only which
-     colour that part is. */
-  --track-fill:     rgba(255, 255, 255, 0.58);
-
-  /* The unfilled remainder of a slider's track, i.e. the part var(--sf-fill)
-     has not reached yet. It used to borrow --glass-stroke, whose own job is
-     the STATE stroke an edge takes on hover (see --hairline above) — a
-     slider's resting track is neither an edge nor a hover state, it just
-     happened to want the same number. A dedicated token says that on
-     purpose instead of by coincidence, so a future change to hover borders
-     cannot quietly dim or brighten every slider in the window.
-     Value unchanged from the --glass-stroke it replaces: measured against
-     --track-fill in the real window, filled vs. unfilled comes out at
-     4.78:1 (rgb(157,157,159) vs rgb(49,49,54), sampled from a running
-     slider at 68% — see .superpowers/sdd/redesign-report.md, fourth pass),
-     comfortably past the 3:1 floor for a UI-component boundary. */
-  --track-empty:    rgba(255, 255, 255, 0.12);
 }

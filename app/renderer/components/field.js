@@ -1,6 +1,7 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
+import { icon } from './icons.js';
 
 /**
  * A control's id, derived from the field's path so it is the same before and
@@ -37,6 +38,25 @@ function button(id, text, ariaLabel) {
 }
 
 /**
+ * A small button that is nothing but a glyph — the shape SignalRGB puts in a
+ * section's heading. It has no visible text, so the accessible name is not
+ * optional: it is passed to icon() itself, which turns the glyph into a
+ * `role="img"` with that name instead of hiding it, and is repeated as the
+ * button's own aria-label so the button is announced whether or not a screen
+ * reader descends into it.
+ */
+function iconButton(id, glyph, name) {
+  const element = document.createElement('button');
+  element.type = 'button';
+  element.id = id;
+  element.className = 'icon-button';
+  element.setAttribute('aria-label', name);
+  element.title = name;
+  element.append(icon(glyph, name));
+  return element;
+}
+
+/**
  * How far along its range a slider is standing, as a percentage.
  *
  * The stylesheet paints the track from this (see --sf-fill in styles/app.css)
@@ -62,7 +82,11 @@ export function fillPercent({ min, max }, value) {
  * press, so both ways of working report a change the same way.
  */
 function numberField(field, { t, value, onChange }) {
-  const wrapper = row('field');
+  // One control, in the shape every control in the reference has: its name on
+  // the left, its current value on the right, the track across the full width
+  // underneath. Whether that control gets a card of its own or shares one with
+  // the rest of a motion is mountInspector's decision, not this one's.
+  const wrapper = row('control');
   const id = fieldId(field.path);
 
   const input = document.createElement('input');
@@ -91,7 +115,9 @@ function numberField(field, { t, value, onChange }) {
 }
 
 function selectField(field, { t, value, onChange }) {
-  const wrapper = row('field');
+  // A dropdown shows its own value, so this one is a single row: name left,
+  // control right — the shape the reference's "Color Mode" card has.
+  const wrapper = row('control control-row');
   const id = fieldId(field.path);
 
   const select = document.createElement('select');
@@ -169,9 +195,12 @@ export function createMotions(field, { t, value, onChange }) {
     select.value = motion.kind;
     select.addEventListener('change', () => onChange(`${listPath}.${index}.kind`, select.value));
 
-    const remove = button(
+    // Icon-only, because it sits at the end of a row that already says which
+    // motion it is: the aria-label carries the number, so it is announced as
+    // "Remove 2" rather than as one of two identical "Remove" buttons.
+    const remove = iconButton(
       `${base}-remove-${index}`,
-      t('inspector.removeMotion'),
+      'minus',
       `${t('inspector.removeMotion')} ${index + 1}`
     );
     remove.addEventListener('click', () => {
@@ -183,8 +212,10 @@ export function createMotions(field, { t, value, onChange }) {
   });
 
   const addable = field.values.filter((kind) => kind !== 'none' && !used.has(kind));
-  const add = button(`${base}-add`, t('inspector.addMotion'));
-  add.className = 'add-motion';
+  // The add button lives in the section's own heading (see mountInspector), in
+  // the place the reference puts a section's actions, so it is a glyph with a
+  // name rather than a full-width bar under the list.
+  const add = iconButton(`${base}-add`, 'plus', t('inspector.addMotion'));
   add.disabled = addable.length === 0;
   add.addEventListener('click', () => onChange(listPath, [...motions, { kind: addable[0] }]));
 

@@ -1,6 +1,16 @@
 /* SignalForge — build SignalRGB effects from images, video, gradients and shapes.
    Copyright (C) 2026 Max
    SPDX-License-Identifier: GPL-3.0-or-later */
+
+/* ---------------------------------------------------------------------------
+   The window is a sibling of SignalRGB's own, and this file is where that
+   claim is either kept or broken. What it is NOT any more, in one list,
+   because every one of these was measured out of the reference and found to be
+   absent from it: no translucency, no backdrop-filter, no blurred colour
+   behind anything, no 14px radii, no panel with a border floating in a gap, no
+   glow under the picture. Surfaces are opaque, they meet, and the only boxes
+   are the ones that hold something.
+   --------------------------------------------------------------------------- */
 * { box-sizing: border-box; }
 
 html, body {
@@ -8,7 +18,7 @@ html, body {
   height: 100%;
   background: var(--bg-base);
   color: var(--text-strong);
-  font: 14px/1.5 var(--font-ui);
+  font: 13px/1.5 var(--font-ui);
   overflow: hidden;
   /* Say the window is dark, so the controls the system draws for us — the
      dropdown lists above all — are drawn dark too instead of as white
@@ -16,92 +26,148 @@ html, body {
   color-scheme: dark;
 }
 
-/* The three soft blobs behind everything. They take the colours of the
-   picture that was imported (see samplePalette in components/palette.js),
-   which is the reason this interface is made of glass rather than just
-   decorated with it. */
-/* No saturate() here any more. Boosting an already-clamped colour by 20 % is
-   what turned three soft shapes into three lit shapes: a saturated edge on a
-   blurred blob is exactly the halo that reads as "glow". The blur is wider and
-   the shapes are larger instead, so what is left is a gradient across the whole
-   window rather than three light sources standing behind it. */
-#backdrop {
-  position: fixed;
-  inset: -25%;
-  z-index: 0;
-  filter: blur(110px);
-}
-#backdrop div {
-  position: absolute;
-  width: 58%;
-  height: 58%;
-  border-radius: 50%;
-  /* 0.55 -> 0.40 (second pass) -> 0.26. At 0.40 the window still read as
-     something with a light behind it; the test is whether you would call it a
-     glow, and at 0.40 you would. At 0.26, across a warm, a cool and a nearly
-     white picture, the colour is unmistakable the moment you switch pictures
-     and never nameable as a light source. The picture stays the only lit thing
-     in the window, which is the whole point of putting it in a frame. */
-  opacity: 0.26;
-  /* State, not decoration: this is the window saying it has taken the new
-     picture's colours. Fast enough to belong to the import that caused it. */
-  transition: background 220ms ease-out;
-}
+/* Four regions that touch. There is no gap and no page padding: in the
+   reference the columns are fields of colour meeting at a line, which is what
+   makes the window read as one surface with structure rather than as a tray of
+   floating tiles.
 
-/* Two columns, not three. The picture takes the width the (empty) layer
-   column used to hold; the settings keep a comfortable measure that grows a
-   little on a very wide screen and never below 320px, which is what the
-   longest label plus its number needs at the smallest window.
-   minmax(0, 1fr) rather than 1fr: a bare 1fr is min-content wide, so one long
-   unbreakable word in the settings column could otherwise push the preview
-   off the window. */
+   The transport bar runs beside the left column rather than under it —
+   measured off the reference, where the bar begins at the sidebar's right edge
+   and the sidebar keeps its own settings entry pinned below it. */
 #app {
-  position: relative;
-  z-index: 1;
   height: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(320px, 22%, 400px);
+  grid-template-columns: var(--nav-width) minmax(0, 1fr) var(--settings-width);
   grid-template-rows: minmax(0, 1fr) auto;
-  grid-template-areas: "preview inspector" "footer footer";
-  gap: var(--gap);
-  padding: var(--gap);
-}
-
-.panel {
-  background: var(--panel-fill);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  backdrop-filter: blur(var(--glass-blur));
-  padding: var(--panel-pad);
-  min-width: 0;
-  min-height: 0;
+  grid-template-areas:
+    "nav stage settings"
+    "nav transport transport";
 }
 
 /* ---------------------------------------------------------------------------
-   The preview: the one thing this app is for.
+   Icons. One size, one weight, one corner style, said once — see
+   components/icons.js for why they are drawn by hand rather than installed.
+   --------------------------------------------------------------------------- */
+.icon {
+  width: var(--icon-size);
+  height: var(--icon-size);
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: var(--icon-stroke);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ---------------------------------------------------------------------------
+   The left column: where you are, and where else you could be.
    --------------------------------------------------------------------------- */
 
-#preview {
-  grid-area: preview;
+.nav {
+  grid-area: nav;
+  /* Lighter than the stage beside it, not darker — the measured values are in
+     tokens.css, where colours live. It is the one surface in the reference
+     that goes UP, and it is what stops the window from reading as one flat
+     sheet with lines drawn on it. */
+  background: var(--bg-nav);
+  border-right: 1px solid var(--hairline);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-2) var(--space-3);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2) var(--space-4);
+  color: var(--accent);
+}
+.nav-wordmark {
+  color: var(--text-strong);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.nav-caption {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.nav-list { display: flex; flex-direction: column; gap: 2px; }
+/* The fourth destination is pinned to the bottom and separated by a rule: it
+   belongs to the app, the three above it belong to the effect. */
+.nav-foot {
+  margin-top: auto;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--hairline);
+}
+
+/* One entry: line icon, text label, and — when it is the one showing — a
+   rounded pill a step lighter than the column. Measured (see --surface-raise
+   in tokens.css): a neutral, with no accent in it at all. */
+.nav-entry {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-2) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease-out, color 120ms ease-out;
+}
+.nav-entry:hover:not(:disabled) { background: var(--surface-raise); color: var(--text-strong); }
+.nav-entry.is-active { background: var(--surface-raise); color: var(--text-strong); }
+/* A destination that is waiting for a picture. Visibly present, deliberately:
+   hiding it would make the window change shape the moment a file lands on it,
+   and the note in the settings column says what it is waiting for. */
+.nav-entry:disabled { color: var(--text-dim); cursor: default; }
+
+/* ---------------------------------------------------------------------------
+   The stage: the one thing this app is for.
+   --------------------------------------------------------------------------- */
+
+.stage-column {
+  grid-area: stage;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  /* Tighter above and below than at the sides: the reference's stage sits
+     almost flush with the top of the window, and every pixel taken off here
+     goes straight into the picture, which is the one thing this column is
+     for. */
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+  min-height: 0;
   /* Nothing in here may ever scroll: the stage sizes itself to what is on
      offer, so a scrollbar would mean the arithmetic below is wrong. */
   overflow: hidden;
 }
 
-/* The drop zone fills the whole preview panel so a drag can land anywhere
-   over it, not just on the canvas — see mountDrop() in components/drop.js. */
-/* Three rows, each named out loud rather than left to auto-placement: the
-   first-start notice, the stage, the status strip. The notice is absent most
-   of the time (it is `hidden`, i.e. display:none, whenever an effects folder
-   is known), and a track with nothing in it has to collapse to nothing — which
-   is also why the rows are spaced by margins rather than by `gap`: a gap is
-   drawn around an empty track too. */
+/* Four rows, each named out loud rather than left to auto-placement: the
+   first-start notice, the stage, the one line of feedback, the starting
+   gallery. The notice is absent most of the time (it is `hidden`, i.e.
+   display:none, whenever an effects folder is known) and a track with nothing
+   in it has to collapse to nothing — which is why the rows are spaced by
+   margins rather than by `gap`. */
 #preview-body {
   position: relative;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
   min-height: 0;
   border-radius: var(--radius);
   border: 1px dashed transparent;
@@ -109,10 +175,11 @@ html, body {
 .first-run { grid-row: 1; }
 .stage { grid-row: 2; }
 .drop-message { grid-row: 3; }
+.gallery { grid-row: 4; }
 #preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
-/* One gesture, not two competing rectangles: while a file is over the panel,
-   the frame's own edge joins in rather than sitting inside a second dashed
-   box of a different colour. */
+/* One gesture, not two competing rectangles: while a file is over the column,
+   the frame's own edge joins in rather than sitting inside a second dashed box
+   of a different colour. */
 #preview-body.drop-active .viewport { border-color: var(--accent); }
 
 /* The stage measures itself, and the frame inside it is sized from that
@@ -125,10 +192,11 @@ html, body {
    with width:100% keeps the ratio only until max-height bites, at which point
    the box is clamped on one axis and the ratio is silently broken. Deriving
    the width from the measured height instead means one axis is chosen and the
-   other simply follows, so the ratio cannot break. --meta-row is the caption
-   row under the frame plus its gap, which the frame must leave room for — and
-   which is not there at all while the frame is empty, so it is a variable
-   rather than a number baked into the sum. */
+   other simply follows, so the ratio cannot break.
+
+   --meta-row is the caption under the frame plus its gap, which the frame must
+   leave room for — and which is not there at all while the frame is empty, so
+   it is a variable rather than a number baked into the sum. */
 .stage {
   min-height: 0;
   display: grid;
@@ -136,41 +204,32 @@ html, body {
   container-type: size;
 }
 .stage-inner {
-  --meta-row: 34px;
+  --meta-row: 48px;
   display: grid;
-  gap: 8px;
   width: min(100%, calc((100cqh - var(--meta-row)) * 1.6));
 }
-/* No picture, no caption about one. "320 x 200" is true of the effect but it
-   is information about a preview, and there is nothing being previewed: on an
-   empty screen it was a lone pill under a large empty rectangle, reading as
-   metadata for something absent. It comes back with the first picture, next to
-   the cost of drawing it. What the frame is stays legible without it — the
-   frame keeps the exact shape of the thing being built. */
+/* No picture, no caption about one: "320 x 200" is true of the effect but it
+   is information about a preview, and there is nothing being previewed. It
+   comes back with the first picture, next to the cost of drawing it. */
 #preview-body:not(.has-picture) .stage-meta { display: none; }
 #preview-body:not(.has-picture) .stage-inner { --meta-row: 0px; }
 
-/* The frame. A screen, not a picture on a panel: it is sunk INTO the panel
-   (--well-fill) rather than painted the same colour as it, which is what it
-   was — the frame and the panel behind it were the same value and only the
-   border and the shadow told them apart. */
+/* The frame. Sunk into the page rather than raised off it — no shadow, because
+   the reference has none: what makes the picture the brightest thing in the
+   window is that everything else is near-black, not that it is lit. */
 .viewport {
   position: relative;
   aspect-ratio: 320 / 200;
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
-  background: var(--well-fill);
-  box-shadow: var(--stage-shadow);
+  background: var(--surface-sunk);
 }
-/* Empty, the frame is the drop target and says so with its edge — an opaque
-   black rectangle the size of the window read as a hole rather than as a
-   screen waiting for something. main.js adds .has-picture once there is one
-   (and takes it away again for a project that has none). The stronger stroke
-   stays here on purpose: this edge is carrying a state ("waiting for a file"),
+/* Empty, the frame is the drop target and says so with its edge. The stronger
+   stroke is deliberate: this edge is carrying a state ("waiting for a file"),
    and a hairline dashed line is barely a line at all. */
 #preview-body:not(.has-picture) .viewport {
   border-style: dashed;
-  border-color: var(--glass-stroke);
+  border-color: var(--track-empty);
 }
 #preview-canvas {
   display: block;
@@ -182,165 +241,245 @@ html, body {
   border-radius: calc(var(--radius) - 1px);
 }
 
-/* The empty state, inside the frame it is talking about. An empty state has to
-   teach the interface, and this one has exactly two things to teach: that a
-   picture can be dragged in, and what counts as one (derived from the
+/* The empty state, inside the frame it is talking about: the sign for the
+   gesture, what to do, and what counts as a picture (derived from the
    importer's own list — see SUPPORTED_FORMATS in components/preview.js).
-   Centred in the frame so the two read as one object; before this the words
-   sat under the frame, below a rule, and the pair read as a broken layout.
 
    pointer-events: none is load-bearing, not tidiness: dragenter/dragleave fire
-   per element, so a child under the pointer would make the panel's own
-   .drop-active flicker on and off as the file moved across it. Untouchable, it
-   cannot be entered or left, and the drop gesture stays exactly one gesture. */
+   per element, so a child under the pointer would make the column's own
+   .drop-active flicker on and off as the file moved across it. */
 .stage-empty {
   position: absolute;
   inset: 0;
   display: grid;
   align-content: center;
   justify-items: center;
-  gap: 4px;
-  padding: 16px;
+  gap: var(--space-1);
+  padding: var(--space-4);
   text-align: center;
   pointer-events: none;
 }
 #preview-body.has-picture .stage-empty { display: none; }
+.stage-empty-sign {
+  width: 26px;
+  height: 26px;
+  margin-bottom: var(--space-2);
+  color: var(--text-dim);
+}
 .stage-empty-title {
   margin: 0;
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-strong);
 }
 .stage-empty-formats {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
-/* The caption belongs to the frame: what the effect is (320 x 200, always,
-   because that is what SignalRGB samples) on the left, what it costs on the
-   right. Loose text drifting under the picture is what this replaces. */
+/* The caption belongs to the frame: what is being built on the left, what it
+   is on the right. This is the shape the reference has under its own stage. */
 .stage-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  min-height: 22px;
+  gap: var(--space-3);
+  min-height: 30px;
+  padding-top: var(--space-2);
 }
-/* Both chips are readings, so both are set in the data face — see --font-mono
-   in tokens.css. No font-variant-numeric here any more: a monospaced face
-   already advances every digit by the same amount, so tabular-nums asked for
-   something that was already true, and a declaration nothing depends on is a
-   claim that something does. */
+.stage-title {
+  margin: 0;
+  min-width: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage-readings { display: flex; gap: var(--space-2); flex: 0 0 auto; }
+
+/* Both chips are readings, so both are set in the data face and sunk into the
+   page the way the reference sinks its own values into their cards. */
 .chip {
   display: inline-flex;
   align-items: center;
   margin: 0;
-  padding: 2px 9px;
-  border: 1px solid var(--hairline);
-  border-radius: 999px;
-  background: var(--glass-fill);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.01em;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 /* Above 15 % of a core the reading is the point, so it stops being quiet. */
-#preview-cost.cost-warn { color: var(--warn); border-color: var(--warn); }
+#preview-cost.cost-warn { color: var(--warn); }
 /* Before the loop has drawn a frame there is no cost to report, and an empty
    pill is a promise of information that is not there. */
 #preview-cost:empty { display: none; }
 
 /* The one line of feedback in the window. Its row is reserved whether or not
-   there is anything to say, so the picture above it does not resize every
-   time a message comes and goes — the ghost gap the old `:empty { display:
-   none }` was avoiding is now the point of the row. */
+   there is anything to say, so the picture above it does not resize every time
+   a message comes and goes. */
 .drop-message {
-  margin: 8px 0 0;
-  min-height: 19px;
-  padding-top: 8px;
-  /* A rule across the panel, so the line reads as the preview's status strip
-     rather than as a caption that drifted away from the picture. */
+  margin: var(--space-3) 0 0;
+  min-height: 18px;
+  padding-top: var(--space-2);
   border-top: 1px solid var(--hairline);
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-muted);
-  text-align: center;
   overflow-wrap: anywhere;
 }
-/* Space kept, rule withdrawn. Reserving the row is right — a message arriving
-   must not resize the picture — but drawing a hairline the full width of the
-   panel with nothing under it made the reservation look like a leftover
-   element. The rule is the strip's frame, and a strip with nothing in it has
-   nothing to frame. Deliberately not `display: none` and deliberately not
-   `visibility: hidden` on the whole line: the first gives the jump back, the
-   second would also hide the rule when there IS something to say. */
+/* Space kept, rule withdrawn: reserving the row is right, but drawing a line
+   across the column with nothing under it made the reservation look like a
+   leftover element. */
 .drop-message:empty { border-top-color: transparent; }
-/* Two classes so this reliably outranks .muted regardless of source order —
-   the drop-message starts out merely muted (the hint) and only turns warn
-   once main.js adds this class for a rejection or a failed import. */
+/* Two classes so this reliably outranks .muted regardless of source order. */
 .drop-message.drop-warn { color: var(--warn); }
 
-/* The first-start question. A notice at the top of the working column, not a
+/* ---------------------------------------------------------------------------
+   The starting gallery: how an effect begins.
+   --------------------------------------------------------------------------- */
+
+.gallery { margin-top: var(--space-3); min-width: 0; }
+.gallery-title {
+  margin: 0 0 var(--space-2);
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+/* A rail that scrolls sideways, exactly as the reference's effect strip does —
+   so a fifth tile costs no height and the row never wraps into a grid. */
+.gallery-rail {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: var(--space-1);
+  scrollbar-width: thin;
+}
+
+.tile {
+  position: relative;
+  flex: 0 0 170px;
+  height: 84px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
+}
+.tile:hover:not(:disabled) { background: var(--surface-raise); border-color: var(--track-empty); }
+.tile-label {
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile-art {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+}
+.tile-art-picture { background: var(--surface-quiet); color: var(--text-strong); }
+.tile-art-solid { background: var(--accent); color: var(--bg-base); }
+.tile-art-linear { background: linear-gradient(115deg, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
+.tile-art-radial { background: radial-gradient(circle at 32% 30%, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
+
+/* A tile for something that is NOT built yet.
+   Four marks at once, none of them carrying the honesty alone: the button is
+   genuinely disabled (so it cannot be pressed and is not a tab stop), its edge
+   is dashed against every working tile's solid one, it sits on the page rather
+   than on a card, and it carries a badge that says so in words — inside the
+   button, so the badge is part of the accessible name.
+   Deliberately no opacity: dimming the whole tile would have taken the badge's
+   own contrast down with it, and the badge is the part that has to be read. */
+.tile-soon {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--track-empty);
+  color: var(--text-muted);
+  cursor: default;
+}
+.tile-soon .tile-art { filter: saturate(0.4); }
+/* Top right, opposite the art and clear of the label: at the bottom it sat on
+   top of the tile's own name and cut it in half at 1040px. */
+.tile-badge {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px var(--space-2) 2px 5px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunk);
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+.tile-badge .icon { width: 11px; height: 11px; }
+
+/* ---------------------------------------------------------------------------
+   The first-start question. A card at the top of the stage column, not a
    curtain: the rest of the window stays usable, because somebody who wants to
    drop a picture in and play first should not have to answer a filing question
    to get there.
-
-   It used to float in the middle of the preview column, and that stopped
-   working the moment the empty frame got its invitation: the two were centred
-   on the same point and the question sat on top of "Bild hierher ziehen", with
-   the accepted formats showing through it. Back in the flow it cannot overlap
-   anything at any window size — and the reason it was taken out of the flow in
-   the first place is gone, because what it used to push off the bottom was
-   that same invitation, which no longer lives down there.
-
-   Question and answer on one line: text left, the one button that settles it
-   right, vertically centred against both. */
+   --------------------------------------------------------------------------- */
 .first-run {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 16px;
-  margin: 0 0 12px;
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  /* A recess in the panel rather than a raised, outlined card. The one thing
-     in it that is meant to be pressed is a raised control, and it cannot read
-     as raised if it sits on something that is raised too. */
-  background: var(--well-fill);
+  column-gap: var(--space-4);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-card);
 }
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
    so the attribute the component sets has to be honoured here by hand — without
    this line the first-start question is on screen permanently, folder or no
    folder, and it was. */
 .first-run[hidden] { display: none; }
-.first-run h2 { grid-area: 1 / 1; margin: 0 0 3px; font-size: 14px; font-weight: 600; }
-.first-run p { grid-area: 2 / 1; margin: 0; color: var(--text-muted); font-size: 13px; }
+.first-run h2 { grid-area: 1 / 1; margin: 0 0 2px; font-size: 13px; font-weight: 600; }
+.first-run p { grid-area: 2 / 1; margin: 0; color: var(--text-muted); font-size: 12px; }
 .first-run button { grid-area: 1 / 2 / 3 / 3; }
 
 /* ---------------------------------------------------------------------------
-   The settings column.
+   The settings column: one group at a time, built of discrete cards.
    --------------------------------------------------------------------------- */
 
-#inspector {
-  grid-area: inspector;
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
-  /* The heading and the body carry their own padding, so the heading's rule
-     can run the full width of the panel and the scrollbar sits at its edge. */
-  padding: 0;
-  overflow: hidden;
-}
-#inspector-title {
-  margin: 0;
-  padding: 13px var(--panel-pad) 12px;
-  border-bottom: 1px solid var(--hairline);
-  font-size: 15px;
-  font-weight: 600;
-}
-#inspector-body {
+.settings-column {
+  grid-area: settings;
+  background: var(--bg-base);
+  border-left: 1px solid var(--hairline);
+  padding: var(--space-3);
+  min-width: 0;
+  min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
   /* Thin, and its space always reserved: a scrollbar that appears when a
@@ -348,207 +487,264 @@ html, body {
      sideways at the moment the user pressed a button. */
   scrollbar-width: thin;
   scrollbar-gutter: stable;
-  padding: 14px var(--panel-pad) 18px;
 }
 
-/* One line where two sections will be. It sits above "Farbe" — exactly where
-   "Bild" and "Bewegungen" appear once there is a picture — so the column
-   explains its own length instead of looking cut off. No box, no icon, no
-   disabled stand-in controls: the shortest honest thing that answers "where is
-   the rest". */
+/* One sentence where two sections will be, while there is no picture. No box,
+   no icon, no disabled stand-in controls: the shortest honest thing that
+   answers "where is the rest". */
 .section-note {
-  margin: 0 0 20px;
+  margin: 0 0 var(--space-3);
   color: var(--text-muted);
-  font-size: 13px;
+  font-size: 12px;
 }
 
-/* A section of the column. The weight is carried by the heading and the rule
-   under it, not by a box: a box here would be a card inside a card. */
-.field-group {
-  margin: 0 0 20px;
-  border: 0;
-  padding: 0;
-}
+/* A section of the column. All three are on screen at once and the left column
+   scrolls to them and marks which one you are in — see mountInspector for the
+   version that showed one at a time, why it was photographed, and why it lost.
+   `scroll-margin-top` is what makes that jump land with the heading at the top
+   of the column rather than tucked under its own edge. */
+.field-group { margin: 0 0 var(--space-5); border: 0; padding: 0; scroll-margin-top: var(--space-3); }
 .field-group:last-child { margin-bottom: 0; }
-.field-group > h3 {
-  margin: 0 0 12px;
-  padding-bottom: 7px;
-  border-bottom: 1px solid var(--hairline);
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-strong);
-}
 
-/* One field: its name on the left, its current value on the right, and — for
-   a slider — the control across the full width underneath. */
-.field {
+/* The section's glyph and name on the left, its actions on the right — which
+   is where the reference puts a section's icon buttons. The one the left
+   column is pointing at takes the accent under it and brightens: a marker, not
+   a second selection. */
+.field-group.is-active > h3 { color: var(--text-strong); border-bottom-color: var(--accent); }
+.field-group > h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-1) var(--space-2);
+  border-bottom: 1px solid var(--hairline);
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+.section-actions { margin-left: auto; display: flex; gap: var(--space-1); }
+
+/* A card: one control group, on a fill one step up from the column, with an
+   8px gap to the next and no border at all. Measured: the reference's cards
+   have no stroke — scanning across one goes page colour to card colour in a
+   single pixel — and are told apart by the gap. */
+.card {
+  margin: 0 0 var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+}
+.card:last-child { margin-bottom: 0; }
+
+/* One control: its name on the left, its current value on the right, and — for
+   a slider — the track across the full width underneath. */
+.control {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  column-gap: 10px;
-  row-gap: 4px;
-  margin: 0 0 12px;
+  column-gap: var(--space-2);
+  row-gap: var(--space-2);
 }
-.field:last-child { margin-bottom: 0; }
-.field > label {
+.control > label {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--text-muted);
-  font-size: 13px;
-}
-/* The value, in the data face. This is the figure a person is steering towards,
-   so it is set as a figure — see --font-mono in tokens.css. 12px rather than
-   the label's 13: Cascadia Mono runs wider and taller at the same nominal size,
-   and a number that outweighs its own label is the wrong hierarchy.
-   No font-variant-numeric, for the same reason as on .chip. */
-.field > output {
-  min-width: 4ch;
-  text-align: right;
-  color: var(--text-strong);
-  font-family: var(--font-mono);
   font-size: 12px;
 }
+/* The value, in the data face, sunk into the card the way the reference sinks
+   its own. 11px rather than the label's 12: Cascadia Mono runs wider and
+   taller at the same nominal size, and a number that outweighs its own label
+   is the wrong hierarchy. */
+.control > output {
+  min-width: 4ch;
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--text-strong);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.control-row > select { grid-column: 2; justify-self: end; max-width: 100%; }
 
-/* One motion: the kind it is, and the two sliders that steer it, together.
-   They used to be in two separate fieldsets several rows apart — a list of
-   motions above and a stack of "Bewegung 1", "Bewegung 2" below it — which
-   said the same structure twice and put a motion's name a long way from its
-   own sliders.
-
-   Two motions produce two of these, and two boxes that look alike is the
-   "identical card grid" tell — so it is worth saying why it stays. They are
-   the same kind of thing, they are told apart by their own legend and by the
-   kind each one is set to, and making one of them look different would be
-   decoration standing in for information. What is fixed instead is how much
-   of a card they are: no outline, and sunk into the panel rather than raised
-   out of it, so two of them read as two entries in a list rather than as two
-   feature tiles. */
+/* One motion: the kind it is, and the two sliders that steer it, in one card.
+   Two motions produce two of these, and that is right — they are the same kind
+   of thing, told apart by their own legend and by the kind each is set to. */
 .motion {
   min-inline-size: 0;
-  margin: 0 0 10px;
-  padding: 10px 12px 12px;
+  margin: 0 0 var(--space-2);
+  padding: var(--space-3);
   border: 0;
-  border-radius: var(--radius-sm);
-  background: var(--well-fill);
+  border-radius: var(--radius);
+  background: var(--surface-card);
 }
-.motion:last-of-type { margin-bottom: 12px; }
-/* No border to notch any more, so the legend stops sitting in a gap in one and
-   is simply the first line of the group. */
 .motion legend {
   padding: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 .motion-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-3);
 }
 .motion-row select { width: 100%; }
-.motion-row button { padding: 5px 10px; font-size: 12px; }
-button.add-motion { width: 100%; }
+.motion .control + .control { margin-top: var(--space-3); }
 
 /* ---------------------------------------------------------------------------
-   The footer: one action that matters, and the quiet ones beside it.
+   The transport bar: what is loaded, where it is going, and the one button the
+   whole app exists for.
    --------------------------------------------------------------------------- */
 
-#footer { grid-area: footer; padding: 10px 12px; }
-/* The buttons live one level in, inside the region mountShell hands out, so
-   the row has to be laid out here as well as on the panel itself. */
-#footer-body { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
-#footer-body label { color: var(--text-muted); font-size: 13px; }
-/* Buttons keep their natural width and their single line; the row is made to
-   fit by the target folder giving way below, never by a button being cut in
-   half or pushed off the edge. Without min-width: 0 above, the row's own
-   min-content width includes every button and the panel scrolls sideways
-   instead — which is exactly what happened the first time the overwrite
-   button appeared. */
-#footer-body > button, #footer-body > label, #footer-body > select { flex: 0 0 auto; white-space: nowrap; }
-/* The target folder is the longest thing in the row and the least urgent, so
-   it is the one that gives way: it takes the leftover width and truncates,
-   leaving the name field and the buttons at their natural size. The full
-   path is never only here — it is also in the message after every export
-   and in the overwrite question. */
-#footer-target {
-  flex: 1 1 auto;
+.transport {
+  grid-area: transport;
+  background: var(--bg-base);
+  border-top: 1px solid var(--hairline);
+  padding: var(--space-3) var(--space-4);
+  min-width: 0;
+}
+#footer-body {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+/* The identity block gives way before anything else does: `flex: 1 1 0` rather
+   than `1 1 auto` so its basis is nothing and every pixel it holds is one the
+   actions did not need. At the smallest window this is what keeps the buttons
+   from being pushed under the name field — which is exactly what happened
+   with `auto`, because the name input's own min-width put a floor under the
+   block that the row then overflowed. */
+.transport-now {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* The thumbnail: the picture's three strongest colours, or — with no picture
+   loaded — a quiet outline holding the app's own mark, so the bar is never a
+   row with a hole at the start of it. */
+.transport-thumb {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-card);
+  color: var(--text-dim);
+}
+.transport-thumb.has-colours { border-color: transparent; }
+.transport-thumb.has-colours .icon { display: none; }
+
+.transport-identity { display: grid; gap: 2px; min-width: 0; }
+.transport-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+.transport-name-label { flex: 0 0 auto; color: var(--text-muted); font-size: 12px; }
+.transport-name { flex: 1 1 0; min-width: 0; }
+/* The longest thing in the row and the least urgent, so it is the one that
+   gives way. The full path is never only here — it is in the message after
+   every export, in the overwrite question, and in the settings column. */
+.transport-target {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  color: var(--text-dim);
+  font-size: 12px;
 }
+
+.transport-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
+.transport-actions button { white-space: nowrap; }
 
 /* ---------------------------------------------------------------------------
    Controls. Every one of them has all five states.
    --------------------------------------------------------------------------- */
 
-/* Every control rests on a hairline and only goes to the heavier --glass-stroke
-   under the pointer, so an edge getting stronger MEANS something instead of
-   being how every box is drawn. Above that there is only the accent, and the
-   accent is reserved for the three things that earn it: focus, the live drop
-   target, and the one filled button. */
 input[type="text"] {
   font: inherit;
   font-size: 13px;
   color: var(--text-strong);
-  background: var(--glass-fill);
+  background: var(--surface-sunk);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  min-width: 170px;
-  transition: background 150ms ease-out, border-color 150ms ease-out;
+  border-radius: var(--radius);
+  padding: 5px var(--space-2);
+  /* No min-width: this field is inside a row that has to survive a 1040px
+     window with four buttons in it, and a floor here is a floor the row
+     cannot get under. */
+  min-width: 0;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
 }
-input[type="text"]:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
+input[type="text"]:hover { border-color: var(--track-empty); }
 input[type="text"]:disabled { color: var(--text-muted); cursor: default; }
 
 select {
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-strong);
-  background: var(--glass-fill);
+  background: var(--surface-sunk);
   border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  padding: 5px 8px;
+  border-radius: var(--radius);
+  padding: 4px var(--space-2);
   max-width: 100%;
   cursor: pointer;
-  transition: background 150ms ease-out, border-color 150ms ease-out;
+  transition: background 120ms ease-out, border-color 120ms ease-out;
 }
-select:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
-select:active { background: var(--accent-soft); border-color: var(--accent); }
+select:hover { border-color: var(--track-empty); }
 select:disabled { color: var(--text-muted); cursor: default; }
-select:disabled:hover { background: var(--glass-fill); border-color: var(--hairline); }
+select:disabled:hover { border-color: var(--hairline); }
 /* The dropdown list itself is drawn by the system and does not inherit the
-   glass above it, so it needs a solid background of its own — without this
-   the options come out as dark text on a dark list. */
-select option { background: var(--bg-base); color: var(--text-strong); }
+   surface above it, so it needs a solid background of its own. */
+select option { background: var(--bg-nav); color: var(--text-strong); }
+
+/* An author `display` outranks the browser's own `[hidden] { display: none }`,
+   so every element in this file that is given one has to honour the attribute
+   by hand. The overwrite answer is the one that matters: it is `hidden` until
+   there is a question to answer, and without this line it stood in the
+   transport bar permanently offering to overwrite a file nobody had been asked
+   about. (The same trap caught the first-start question once before; see
+   .first-run[hidden] above.) */
+button[hidden] { display: none; }
 
 button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--text-strong);
-  background: var(--glass-fill);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-sm);
-  padding: 7px 12px;
+  background: var(--surface-card);
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  padding: 6px var(--space-3);
   cursor: pointer;
-  transition: background 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
+  transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
 }
-button:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
-button:active { background: var(--accent-soft); border-color: var(--accent); }
-/* Nothing left to add: say so by looking spent, and do not light up on hover. */
-button:disabled { color: var(--text-muted); cursor: default; }
-button:disabled:hover, button:disabled:active {
-  background: var(--glass-fill);
-  border-color: var(--hairline);
-}
+button:hover { background: var(--surface-raise); }
+/* Nothing left to do: say so by looking spent, and do not light up on hover. */
+button:disabled { color: var(--text-dim); cursor: default; }
+button:disabled:hover { background: var(--surface-card); }
 
-/* The one action the whole app exists for. Filled, not tinted: --bg-base on
-   --accent measures 4.53:1, and on --accent-hover 5.69:1. */
+/* The quiet actions in the transport bar: controls, plainly, but never in
+   competition with the one filled button beside them. */
+button.quiet { background: var(--surface-quiet); }
+button.quiet:hover { background: var(--surface-raise); }
+
+/* The one action the whole app exists for. Filled with the accent measured out
+   of the reference and labelled in the page's own near-black, which measures
+   5.12:1 — white on the same fill reaches only 3.75:1 and is never used
+   here. */
 button.primary {
   color: var(--bg-base);
   background: var(--accent);
@@ -556,78 +752,137 @@ button.primary {
   font-weight: 600;
 }
 button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
-button.primary:active { background: var(--accent); border-color: var(--accent); }
 button.primary:disabled {
-  color: var(--text-muted);
-  background: var(--glass-fill);
-  border-color: var(--hairline);
+  color: var(--text-dim);
+  background: var(--surface-card);
+  border-color: transparent;
 }
+
+/* The answer to a question that has consequences: marked out by its edge in
+   the one colour this window uses for "careful", so it is never mistaken for
+   the ordinary export beside it. */
+button.warn-outline { color: var(--warn); background: transparent; border-color: var(--warn); }
+button.warn-outline:hover { color: var(--bg-base); background: var(--warn); }
 
 /* The answer to the first-start question. Marked out by its edge rather than
    filled, so the window still has exactly one filled button in it. */
-button.accent-outline { border-color: var(--accent); }
-button.accent-outline:hover { background: var(--accent-soft); border-color: var(--accent); }
+button.accent-outline { color: var(--accent); background: transparent; border-color: var(--accent); }
+button.accent-outline:hover { color: var(--bg-base); background: var(--accent); }
+
+/* A button that is nothing but a glyph: the section-heading actions, and a
+   motion's remove. Square, quiet at rest, and never without an accessible name
+   (see iconButton in components/field.js). */
+.icon-button {
+  padding: 0;
+  width: 26px;
+  height: 26px;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-muted);
+}
+.icon-button:hover { background: var(--surface-raise); color: var(--text-strong); }
+.icon-button:disabled { color: var(--track-empty); }
+.icon-button:disabled:hover { background: transparent; }
+
+/* The action inside a settings card: full width, under the value it changes. */
+.card-action { width: 100%; justify-content: center; margin-top: var(--space-3); }
+.card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.card-name { color: var(--text-muted); font-size: 12px; flex: 0 0 auto; }
+/* A path, on a line of its own, ellipsised from the FRONT: the end of a path
+   is the part that identifies it, and `direction: rtl` is the only way to move
+   the ellipsis to the other end. `unicode-bidi: plaintext` keeps the drive
+   letter and the separators in their real order inside that reversed box. */
+.card-value-text {
+  margin: var(--space-2) 0 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-strong);
+  font-size: 12px;
+  direction: rtl;
+  unicode-bidi: plaintext;
+  text-align: left;
+}
+#settings-language-card { display: grid; gap: var(--space-2); }
+#settings-language-card select { width: 100%; }
 
 /* The sliders. The filled part of the track is drawn here rather than left to
    the browser's own accent-color: --sf-fill is set by field.js on every input
-   event AND on every fresh mount (dragging, an arrow key, a project opened,
-   a language switch that redraws the column) so how far along the value is
-   can always be seen without reading the number.
-   The fill is neutral (--track-fill), not the accent — see tokens.css: six
-   sliders filled with one bright colour was the single loudest thing in the
-   window and made the whole interface read as "dark plus one accent". The
-   accent comes back on the thumb the moment the slider is actually being
-   moved, which is the one moment it says something.
-   The remainder is --track-empty, its own token rather than a reuse of
-   --glass-stroke — see tokens.css for why and for the measured contrast
-   between the two. */
+   event AND on every fresh mount, so how far along the value is can always be
+   seen without reading the number.
+
+   Which colour that filled part is depends on the section, and that is
+   measured rather than invented: in the reference SignalRGB fills its generic
+   controls (Speed, Drop Size) with a light neutral and its COLOUR controls
+   (Saturation, Brightness) with the accent. The same rule holds here — the
+   motion sliders fill neutral, the four colour sliders fill with the accent —
+   so it appears where it means something instead of six times in a row. */
 input[type="range"] {
+  --track-lead: var(--track-fill);
   grid-column: 1 / -1;
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 16px;
+  height: 14px;
   margin: 0;
   background: transparent;
   cursor: pointer;
 }
+.field-group[data-section="colour"] input[type="range"] { --track-lead: var(--accent); }
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
-    var(--track-fill) 0 var(--sf-fill, 0%),
+    var(--track-lead) 0 var(--sf-fill, 0%),
     var(--track-empty) var(--sf-fill, 0%) 100%
   );
 }
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
-  margin-top: -4.5px;
+  width: 11px;
+  height: 11px;
+  margin-top: -3.5px;
   border: 0;
   border-radius: 50%;
   background: var(--text-strong);
-  transition: transform 150ms ease-out;
+  transition: transform 120ms ease-out;
 }
-input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
-input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); background: var(--accent); }
+input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.2); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); background: var(--accent); }
 input[type="range"]:disabled { cursor: default; }
 input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-muted); }
 
-/* Focus must stay obvious on glass — never remove the ring without a
-   replacement that is at least as visible. */
+/* Focus must stay obvious on every surface in the window — never remove the
+   ring without a replacement that is at least as visible. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* The two scrollbars this window has — the settings column and the gallery
+   rail. `scrollbar-width: thin` alone left Chromium drawing its own light grey
+   bar, which on a near-black window was the brightest thing in it after the
+   picture. Same tokens as an unfilled slider track: present, findable, and
+   never the loudest edge on screen. */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--track-empty);
+  border-radius: var(--radius-pill);
+}
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+::-webkit-scrollbar-corner { background: transparent; }
 
 .muted { color: var(--text-muted); }
 
 /* Content for a screen reader only — present in the accessibility tree,
-   invisible and untouchable on screen. Used for the crop's aria-live
-   position announcement (see app/renderer/main.js), which has nothing to
-   show sighted users because the preview canvas already shows the move. The
-   standard clip-rect recipe: 1x1px, clipped to nothing, so it never affects
-   layout or paints a pixel, rather than display:none, which most screen
-   readers ignore entirely. */
+   invisible and untouchable on screen. The standard clip-rect recipe rather
+   than display:none, which most screen readers ignore entirely. */
 .visually-hidden {
   position: absolute;
   width: 1px;
