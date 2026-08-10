@@ -3,8 +3,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { registerLayer } from './layers/index.js';
 import * as imageLayer from './layers/image.js';
+import * as solidLayer from './layers/solid.js';
+import * as gradientLayer from './layers/gradient.js';
 
 registerLayer('image', imageLayer);
+registerLayer('solid', solidLayer);
+registerLayer('gradient', gradientLayer);
 
 export {
   CANVAS_WIDTH,
@@ -12,9 +16,17 @@ export {
   BLEND_MODES,
   FIT_MODES,
   MOTION_KINDS,
+  SOLID_MOTION_KINDS,
+  motionKindsFor,
+  GRADIENT_SHAPES,
+  MIN_GRADIENT_STOPS,
+  MAX_GRADIENT_STOPS,
+  DEFAULT_SOLID_COLOR,
+  DEFAULT_GRADIENT_STOPS,
   CONTROL_TYPES,
   BINDABLE_DOCUMENT_FIELDS,
   clamp,
+  normalizeColor,
   normalizeDocument
 } from './document.js';
 

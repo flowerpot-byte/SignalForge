@@ -20,6 +20,74 @@ export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe']);
 export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combobox']);
 
 /**
+ * The two ways a gradient can be laid out.
+ *
+ * Deliberately a FIELD of one `gradient` layer type rather than two layer
+ * types ("gradient" and "radial"). Three reasons, in the order they decided
+ * it:
+ *
+ *  1. The plan this project is built from already says so: docs/entwurf-
+ *     2026-08-09.md, section 5, lists one type "gradient" whose settings are
+ *     "linear oder radial, Farbstopps, Winkel". Splitting it would be
+ *     inventing a second design without a reason to.
+ *  2. Everything else about the two is identical — the same stops, the same
+ *     angle field, the same motions, the same controls. Two types would mean
+ *     two copies of the stop handling in normalizeLayer, two entries in the
+ *     settings column and two branches in effectControls, all to express one
+ *     word.
+ *  3. It is the only shape that lets SignalRGB's own UI switch between them.
+ *     A layer type is baked into the exported file and cannot be changed from
+ *     a control; a field can, so the finished effect gets a "Shape" dropdown
+ *     for free (see src/export/effect-controls.js). Somebody who exported a
+ *     linear gradient can try the radial one without going back to the app.
+ */
+export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial']);
+
+/**
+ * Which motions a layer type can actually be seen to perform.
+ *
+ * A uniform field of one colour is invariant under both displacement motions:
+ * drift slides it and warp bends it, and in both cases every pixel it moves
+ * has exactly the colour of the pixel it replaced. So a solid layer offers
+ * "breathe" and nothing else — that is not a limitation of the renderer, it
+ * is what "one colour everywhere" means. A drift entry stored on a solid
+ * layer by hand is kept rather than dropped (the data is the user's), it
+ * simply renders as nothing, exactly like a "none" entry.
+ *
+ * A gradient is not uniform, so all three are real on it — see
+ * src/engine/layers/gradient.js.
+ */
+export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe']);
+
+/** The motion kinds worth offering for a layer of this type. */
+export function motionKindsFor(type) {
+  return type === 'solid' ? SOLID_MOTION_KINDS : MOTION_KINDS;
+}
+
+/** Fewest and most colour stops a gradient may carry. */
+export const MIN_GRADIENT_STOPS = 2;
+export const MAX_GRADIENT_STOPS = 4;
+
+/**
+ * What a colour layer starts out as.
+ *
+ * These live here, in the engine's document module, and NOT in the app's
+ * tokens.css — which is where every colour the WINDOW paints itself with has
+ * to live (test/app/color-literals.test.js). The two rules do not collide,
+ * because these are not the window's palette: they are the opening value of a
+ * field in the user's own document, the same kind of thing as `brightness:
+ * 100`. The window never writes a colour of its own; it starts a solid or a
+ * gradient layer by naming the type alone and lets normalizeDocument fill
+ * these in, then shows and edits whatever the document says. That is why the
+ * colour guard still passes honestly rather than by an exemption.
+ */
+export const DEFAULT_SOLID_COLOR = '#ff0066';
+export const DEFAULT_GRADIENT_STOPS = Object.freeze([
+  Object.freeze({ at: 0, color: '#ff0066' }),
+  Object.freeze({ at: 100, color: '#00b3ff' })
+]);
+
+/**
  * Top-level document fields a control's `bind` array may address directly,
  * i.e. a bind entry with no dot (see `resolveBindingPath` in bind.js, which
  * is the only place that reads this list). This is an allowlist, not a
@@ -63,6 +131,48 @@ function num(value, fallback) {
 
 function str(value, fallback) {
   return typeof value === 'string' ? value : fallback;
+}
+
+const HEX_LONG = /^#?([0-9a-f]{6})$/i;
+const HEX_SHORT = /^#?([0-9a-f]{3})$/i;
+const RGB_CALL = /^rgba?\(\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*,\s*(-?[0-9.]+)\s*(?:,\s*-?[0-9.]+\s*)?\)$/i;
+
+const hex2 = (value) => clamp(Math.round(value), 0, 255).toString(16).padStart(2, '0');
+
+/**
+ * Turn whatever a colour arrived as into "#rrggbb", or hand back the fallback.
+ *
+ * Deliberately generous about the input and strict about the output, and both
+ * halves matter:
+ *
+ *  - Generous, because this string does not only come from a project file this
+ *    app wrote. It also comes from a SignalRGB colour control at runtime (see
+ *    applyControls in bind.js, which writes a control's raw value straight
+ *    into the layer), and what exactly SignalRGB hands a `type="color"`
+ *    control is UNVERIFIED — docs/erkenntnisse-signalrgb-motor.md records
+ *    nothing about it, because this project has never shipped one before.
+ *    "#RRGGBB", "RRGGBB", "#RGB" and "rgb(r, g, b)" are all accepted, so the
+ *    likely shapes all work rather than one of them going silently black.
+ *  - Strict, because the alternative is worse than a wrong colour. Assigning
+ *    an unparseable string to ctx.fillStyle is a no-op: the canvas keeps
+ *    whatever fill it had, so a junk value would paint the PREVIOUS layer's
+ *    colour and look like a rendering bug rather than a bad value.
+ */
+export function normalizeColor(value, fallback = DEFAULT_SOLID_COLOR) {
+  const text = typeof value === 'string' ? value.trim() : '';
+  const long = HEX_LONG.exec(text);
+  if (long) return `#${long[1].toLowerCase()}`;
+  const short = HEX_SHORT.exec(text);
+  if (short) {
+    const [r, g, b] = short[1].toLowerCase();
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  const call = RGB_CALL.exec(text);
+  if (call) {
+    const parts = [call[1], call[2], call[3]].map(Number);
+    if (parts.every(Number.isFinite)) return `#${parts.map(hex2).join('')}`;
+  }
+  return fallback;
 }
 
 /**
@@ -127,6 +237,51 @@ function normalizeMotions(input, layerId, problems) {
   return result;
 }
 
+/**
+ * The colour stops of a gradient, as a list of `{ at, color }`.
+ *
+ * `at` is a WHOLE PERCENT, 0..100, not the 0..1 the canvas API wants. Every
+ * other number a person can set in this app is a percent with a step of 1
+ * (speed, strength, brightness, saturation), and a stop position is the same
+ * kind of thing; the division by 100 belongs in the one place that paints
+ * (src/engine/layers/gradient.js), not in every slider and every control range.
+ *
+ * Recovery rather than refusal, in the same spirit as the rest of this file:
+ * a list that is too long is cut and reported, one that is too short is filled
+ * up from DEFAULT_GRADIENT_STOPS, a stop with no usable position is spaced
+ * evenly, and a stop with no usable colour takes the default rather than
+ * making the whole layer disappear. The list is NOT sorted here — the indices
+ * are what the settings column's cards and the exported effect's `color1` /
+ * `color2` controls address, so re-ordering them behind the user's back would
+ * move a control onto a different stop. Sorting is a painting concern and
+ * happens there.
+ */
+function normalizeStops(raw, layerId, problems) {
+  const input = Array.isArray(raw) ? raw : [];
+  if (input.length > MAX_GRADIENT_STOPS) {
+    problems.push(`Layer "${layerId}": ${input.length} colour stops given, `
+      + `only the first ${MAX_GRADIENT_STOPS} are kept.`);
+  }
+  const kept = input.slice(0, MAX_GRADIENT_STOPS);
+  const count = Math.max(kept.length, MIN_GRADIENT_STOPS);
+
+  const stops = [];
+  for (let index = 0; index < count; index += 1) {
+    const entry = kept[index] && typeof kept[index] === 'object' ? kept[index] : {};
+    const fallback = DEFAULT_GRADIENT_STOPS[Math.min(index, DEFAULT_GRADIENT_STOPS.length - 1)];
+    const evenly = (index / (count - 1)) * 100;
+    stops.push({
+      at: clamp(num(entry.at, index < kept.length ? evenly : fallback.at), 0, 100),
+      color: normalizeColor(entry.color, fallback.color)
+    });
+  }
+  if (input.length > 0 && input.length < MIN_GRADIENT_STOPS) {
+    problems.push(`Layer "${layerId}": a gradient needs at least ${MIN_GRADIENT_STOPS} colour stops, `
+      + 'the missing one was filled in.');
+  }
+  return stops;
+}
+
 function normalizeLayer(raw, index, usedIds, problems) {
   const input = raw && typeof raw === 'object' ? raw : {};
   let id = str(input.id, '').trim() || `layer-${index}`;
@@ -154,6 +309,40 @@ function normalizeLayer(raw, index, usedIds, problems) {
     opacity: clamp(num(input.opacity, 1), 0, 1),
     blend
   };
+
+  // Two layer types that own no asset at all. They are answered before the
+  // image branch, and they answer it fully: a solid or a gradient has no
+  // `asset`, no `fit` and no `offset`, because it has no picture to place —
+  // handing it those fields would be handing the settings column and the crop
+  // drag something to steer that does not exist. What they DO share with an
+  // image layer is `motions`, so the whole motion machinery (the list, the
+  // add/remove buttons, the exported motion/tempo/strength controls, the
+  // "first entry of a kind wins" rule) applies to them unchanged.
+  if (type === 'solid') {
+    return {
+      ...base,
+      color: normalizeColor(input.color, DEFAULT_SOLID_COLOR),
+      motions: normalizeMotions(input, id, problems)
+    };
+  }
+
+  if (type === 'gradient') {
+    let shape = str(input.shape, 'linear');
+    if (!GRADIENT_SHAPES.includes(shape)) {
+      problems.push(`Layer "${id}": unknown gradient shape "${shape}", using "linear".`);
+      shape = 'linear';
+    }
+    return {
+      ...base,
+      shape,
+      // Degrees, 0 = left to right, growing clockwise. Clamped rather than
+      // wrapped: the control is a slider with two ends, and a document that
+      // says 400 is more likely to be a mistake than an intent to mean 40.
+      angle: clamp(num(input.angle, 0), 0, 360),
+      stops: normalizeStops(input.stops, id, problems),
+      motions: normalizeMotions(input, id, problems)
+    };
+  }
 
   if (type !== 'image') return base;
 
