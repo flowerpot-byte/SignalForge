@@ -8,6 +8,8 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { effectControls } from '../../src/export/effect-controls.js';
+import { normalizeDocument } from '../../src/engine/document.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cli = join(root, 'bin', 'sfexport.js');
@@ -62,6 +64,56 @@ test('the generated effect exposes motion and fit combobox controls with the eng
     // Both bindings must reach the layer, so a control change actually moves something.
     assert.ok(html.includes('typeof motion'), 'bootstrap must read the "motion" global every frame');
     assert.ok(html.includes('typeof fit'), 'bootstrap must read the "fit" global every frame');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the cli emits the shared control list itself, not a copy of it', () => {
+  // The guard the whole of Task 11 turns on: the control list exists exactly
+  // once in the project (src/export/effect-controls.js) and the command line
+  // consumes it. Proven by behaviour, not by reading the source — the metas
+  // the CLI actually wrote are compared against what effectControls produces
+  // for the same document. Reinstate an inline list in bin/sfexport.js and
+  // this test goes red the moment the two disagree about a property, a
+  // range, a default or an order.
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  const outDir = join(dir, 'Effects');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    execFileSync(process.execPath, [
+      cli, '--image', image, '--name', 'Shared List', '--out', outDir, '--motion', 'breathe', '--fit', 'contain'
+    ], { encoding: 'utf8', cwd: root });
+
+    const html = readFileSync(join(outDir, 'Shared List.html'), 'utf8');
+
+    // The document the CLI baked in is read back out of its own output, so
+    // the expectation is built from what was really exported.
+    const baked = JSON.parse(html.match(
+      /<script id="sf-document" type="application\/json">([\s\S]*?)<\/script>/)[1]);
+    const expected = effectControls(normalizeDocument({ ...baked, controls: [] }).doc, 'a1');
+
+    assert.deepEqual(
+      baked.controls.map((control) => ({
+        property: control.property, type: control.type, min: control.min, max: control.max,
+        default: control.default, values: control.values, bind: control.bind
+      })),
+      expected.map((control) => ({
+        property: control.property, type: control.type,
+        min: control.min ?? 0, max: control.max ?? 100,
+        default: control.default, values: control.values ?? [], bind: control.bind
+      })),
+      'the CLI must emit the shared control list, not a second copy of it'
+    );
+
+    // The three colour controls came with the shared list; before it existed
+    // the CLI had no way to offer them at all.
+    for (const property of ['saturation', 'greenMagenta', 'blueYellow']) {
+      assert.match(html, new RegExp(`<meta property="${property}"`), `the "${property}" control is missing`);
+      assert.ok(html.includes(`typeof ${property}`), `bootstrap must read the "${property}" global every frame`);
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

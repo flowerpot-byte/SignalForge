@@ -7,9 +7,13 @@ import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildEffectHtml } from '../src/export/build-effect.js';
+import { effectControls } from '../src/export/effect-controls.js';
 import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
-import { MOTION_KINDS, FIT_MODES } from '../src/engine/document.js';
+import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../src/engine/document.js';
+
+/** The id the one image layer gets, and what the controls bind through. */
+const LAYER_ID = 'a1';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -86,22 +90,22 @@ function resolveNameAndProject(options) {
 
 async function buildImageDocument(options, name) {
   const asset = await prepareImageFile(options.image);
-  return {
+  const raw = {
     name,
     description: `Built from ${basename(options.image)} with SignalForge.`,
     publisher: 'SignalForge',
     assets: { picture: asset },
     layers: [{
-      id: 'a1',
+      id: LAYER_ID,
       type: 'image',
       name: 'Picture',
       asset: 'picture',
       fit: options.fit,
       // Always exactly one motion entry, whatever --motion was, so the
-      // three bindings below always have something to write into --
+      // motion/tempo/strength controls always have something to write into --
       // setByPath (src/engine/bind.js) deliberately refuses to create a
       // missing branch, so a `motions` array without an entry would leave
-      // the motion/tempo/strength controls silently dead.
+      // those three controls silently dead.
       //
       // For --motion none this bakes a real `kind: 'none'` entry, not a
       // placeholder standing in for it. normalizeDocument's normalizeMotion
@@ -109,16 +113,22 @@ async function buildImageDocument(options, name) {
       // dropping it, so the document is honest about having no motion from
       // the moment it is built -- true even if some future code renders
       // `layer.motions` directly without going through applyControls first.
-      motions: [{ kind: options.motion, speed: 15, amount: 30 }]
-    }],
-    controls: [
-      { property: 'motion', label: { de: 'Modus', en: 'Motion' }, type: 'combobox', values: [...MOTION_KINDS], default: options.motion, bind: ['a1.motions.0.kind'] },
-      { property: 'tempo', label: { de: 'Tempo', en: 'Speed' }, type: 'number', min: 1, max: 100, default: 15, bind: ['a1.motions.0.speed'] },
-      { property: 'strength', label: { de: 'Staerke', en: 'Strength' }, type: 'number', min: 0, max: 100, default: 30, bind: ['a1.motions.0.amount'] },
-      { property: 'fit', label: { de: 'Bildausschnitt', en: 'Fit' }, type: 'combobox', values: [...FIT_MODES], default: options.fit, bind: ['a1.fit'] },
-      { property: 'brightness', label: { de: 'Helligkeit', en: 'Brightness' }, type: 'number', min: 5, max: 100, default: 100, bind: ['brightness'] }
-    ]
+      //
+      // The entry's speed and amount are left out on purpose: what a fresh
+      // motion starts at is normalizeDocument's business, not a second copy
+      // of those numbers kept here.
+      motions: [{ kind: options.motion }]
+    }]
   };
+
+  // The control list is NOT written out here. It lives in exactly one place
+  // in the project -- src/export/effect-controls.js -- and the app's export
+  // button reads the very same list, so the command line and the window can
+  // never drift apart on which controls a finished effect offers or what
+  // ranges they span. effectControls reads its defaults straight out of the
+  // document, which therefore has to be normalized first.
+  const doc = normalizeDocument(raw).doc;
+  return { ...doc, controls: effectControls(doc, LAYER_ID) };
 }
 
 async function main() {

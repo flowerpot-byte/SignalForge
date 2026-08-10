@@ -19,16 +19,16 @@ import { createField } from './field.js';
  * Every number here must stay inside what normalizeDocument (src/engine/
  * document.js) clamps the same field to, otherwise the slider would offer
  * values the engine silently throws away. Where the exported effect's own
- * control list (bin/sfexport.js) already picked a narrower range for the
- * same field, that narrower range is used, so the app and the finished
- * effect present the same choices:
+ * control list (src/export/effect-controls.js — the one place it lives)
+ * picked a narrower range for the same field, that narrower range is used,
+ * so the app and the finished effect present the same choices:
  *
- *   speed        clamp 0..100   exported "tempo"      1..100  -> 1..100
- *   amount       clamp 0..100   exported "strength"   0..100  -> 0..100
- *   brightness   clamp 0..100   exported "brightness" 5..100  -> 5..100
- *   saturation   clamp 0..200   no exported control           -> 0..200
- *   greenMagenta clamp -100..100                              -> -100..100
- *   blueYellow   clamp -100..100                              -> -100..100
+ *   speed        clamp 0..100   exported "tempo"        1..100  -> 1..100
+ *   amount       clamp 0..100   exported "strength"     0..100  -> 0..100
+ *   brightness   clamp 0..100   exported "brightness"   5..100  -> 5..100
+ *   saturation   clamp 0..200   exported "saturation"   0..200  -> 0..200
+ *   greenMagenta clamp -100..100 exported "greenMagenta" -100..100 -> -100..100
+ *   blueYellow   clamp -100..100 exported "blueYellow"   -100..100 -> -100..100
  *
  * Step is 1 throughout: all six are whole-number percentages, and a step of
  * 1 is also what one arrow-key press moves, which is the resolution someone
