@@ -146,6 +146,51 @@ async function boot() {
   // list is a later task.
   const IMAGE_LAYER = 'image';
 
+  /**
+   * Whether the document on screen holds work that is in no file yet.
+   *
+   * One boolean, owned here, and deliberately not a second copy of the
+   * document to compare against: `preview.document()` is the one live
+   * document (the crop drag and the settings column write straight into it),
+   * and snapshotting it to diff — thirty times a second during a crop drag —
+   * would cost more than everything it was guarding. A flag cannot be out of
+   * date the way a copy can; it can only be forgotten, which is why every
+   * single writer below sets it and why each of them is checked one at a time
+   * (test/harness/unsaved.js).
+   *
+   * It is false at a fresh start, false again immediately after a successful
+   * save and after a successful open, and true from the first change of
+   * anything the user can change: the crop (mouse and keyboard), any control
+   * in the settings column, the fit mode, a motion added or removed, the
+   * name, and a picture imported.
+   *
+   * Deliberately erring towards true: a gesture that ends up writing the same
+   * value it found (an arrow key at the edge of the crop, a slider put back)
+   * still counts. A warning too many costs a click; a warning too few costs
+   * the work.
+   */
+  let unsavedChanges = false;
+
+  /**
+   * Say it out loud to the window as well as remembering it.
+   *
+   * The class carries no styling yet — the window's visuals are being rebuilt
+   * — but it is the one place a marker for "not saved" would hang off, and it
+   * is what lets a test at the real window see the flag at all without the
+   * renderer having to hand its internals out over the bridge.
+   */
+  function setUnsavedChanges(next) {
+    unsavedChanges = next;
+    document.documentElement.classList.toggle('has-unsaved-changes', next);
+  }
+
+  /** Something the user can change has changed. */
+  const markChanged = () => setUnsavedChanges(true);
+  /** Everything on screen is now in a file: a save, an open, a fresh start. */
+  const markSaved = () => setUnsavedChanges(false);
+
+  markSaved();
+
   // The only thing about the picture the document does not carry:
   // normalizeDocument keeps an asset's kind, mime and bytes, not the size the
   // importer scaled it down to. Everything else about the layer — its fit,
@@ -239,8 +284,13 @@ async function boot() {
     t: (k) => i18n.t(k),
     getLayer: draggableLayer,
     // Writes straight into the live document; the preview's frame loop shows
-    // it on its next frame (see components/preview.js).
-    onChange: (offset) => preview.setLayerOffset(IMAGE_LAYER, offset),
+    // it on its next frame (see components/preview.js). Both ways of moving
+    // the crop — the mouse drag and the arrow keys — arrive here, so this one
+    // line covers both of them.
+    onChange: (offset) => {
+      preview.setLayerOffset(IMAGE_LAYER, offset);
+      markChanged();
+    },
     announce: (message) => { cropAnnouncement.textContent = message; }
   });
 
@@ -270,6 +320,12 @@ async function boot() {
         console.error('inspector: refused to write', path);
         return;
       }
+      // The live document has just been written into — that is true of every
+      // control in the column: a slider, the fit dropdown, a motion's kind,
+      // and the whole motions list when one is added or removed. It counts
+      // even if the reload below then fails, because setByPath wrote into the
+      // live document itself and that change is already on screen.
+      markChanged();
       if (Array.isArray(value)) await preview.setDocument(doc);
       // The fit dropdown decides whether anything is croppable at all, so the
       // canvas's tab stop has to follow it. Called for every change rather
@@ -319,6 +375,11 @@ async function boot() {
           assets: { image: result.asset }
         });
         sourceSize = { width: result.asset.width, height: result.asset.height };
+        // A picture that has been imported and not yet saved is work like any
+        // other — and it is the change the whole ten minutes that follow are
+        // built on. Marked only once the import has actually succeeded: a
+        // refused or unreadable file changes nothing and must say nothing.
+        markChanged();
         // The window takes the new picture's colours. Not awaited: the
         // picture is already on screen and the tint is allowed to arrive a
         // frame later.
@@ -349,25 +410,67 @@ async function boot() {
    * of date. Which file it lands in is decided by a dialog the main process
    * opens; nothing here names a path, and the bridge has no parameter for one
    * (see app/preload.cjs).
+   *
+   * Hands back whether the document is now in a file — false for a cancelled
+   * dialog as much as for a failed write, because the one caller that asks
+   * (mayDiscard below) is about to throw the document away if it is told yes.
    */
   async function saveProject() {
     const result = await window.sf.saveProject(preview.document());
-    if (result.canceled) return;
+    if (result.canceled) return false;
     if (!result.ok) {
       showMessage(`${i18n.t('project.saveFailed')}: ${result.message}`, true);
-      return;
+      return false;
     }
     showMessage(`${i18n.t('project.saved')}: ${result.name}`);
+    // What is on screen is now in a file, character for character — the
+    // document that was written is the live one (see above), not a copy.
+    markSaved();
+    return true;
   }
 
   /**
-   * Open a project, replacing everything on screen — but only once the file
-   * has proved itself readable and its picture decodable. Up to that point
-   * the project already open is untouched, which is what an unreadable,
-   * truncated or foreign file must leave behind: a message, and the work the
-   * user still had.
+   * Whether the document on screen may be thrown away, asking first when
+   * there is anything to lose.
+   *
+   * The question is a native, window-modal one the main process opens (see
+   * sf:confirmDiscard in app/main.js); every word in it comes from here,
+   * because this is where the language is. Answering "save" runs the ordinary
+   * save, dialog and all, and a save that is cancelled or fails means the
+   * work is still unsaved and nothing may be discarded — so it says no.
+   *
+   * With nothing unsaved it asks nothing at all: a question that appears when
+   * there is no risk is how a user learns to click it away without reading.
+   */
+  async function mayDiscard() {
+    if (!unsavedChanges) return true;
+    const answer = await window.sf.confirmDiscard({
+      title: i18n.t('project.unsaved.title'),
+      body: i18n.t('project.unsaved.body'),
+      save: i18n.t('project.unsaved.save'),
+      discard: i18n.t('project.unsaved.discard'),
+      cancel: i18n.t('project.unsaved.cancel')
+    });
+    if (answer === 'save') return saveProject();
+    return answer === 'discard';
+  }
+
+  /**
+   * Open a project, replacing everything on screen — but only once the user
+   * has been asked about anything unsaved, and only once the file has proved
+   * itself readable and its picture decodable. Up to that point the project
+   * already open is untouched, which is what an unreadable, truncated or
+   * foreign file must leave behind: a message, and the work the user still
+   * had.
+   *
+   * The question comes before the file dialog rather than after it, which is
+   * the other way round from most programs. It is deliberate: being made to
+   * pick a file and only then being told the work is about to be lost is two
+   * decisions in the wrong order, and the first of them was wasted.
    */
   async function openProject() {
+    if (!(await mayDiscard())) return;
+
     const result = await window.sf.openProject();
     if (result.canceled) return;
     if (!result.ok) {
@@ -394,6 +497,10 @@ async function boot() {
     inspector.refresh();
     footer.setName(doc.name);
     preview.start();
+    // What is on screen came out of a file and has not been touched since.
+    // That holds for a repaired project too (below): the corrections are the
+    // parser's, not the user's, and there is no work here of theirs to lose.
+    markSaved();
 
     // A project that had to be corrected on the way in says so rather than
     // quietly presenting something other than what the file held.
@@ -533,7 +640,15 @@ async function boot() {
     onNameChange: (value) => {
       if (!window.SignalForgeEngine.setByPath(preview.document(), 'name', value)) {
         console.error('footer: refused to write the name');
+        return;
       }
+      // The name is part of the document and travels into the saved file, so
+      // typing in that field is unsaved work like anything else. Only a write
+      // that actually took counts — and only a write the USER made: the
+      // export's own footer.setName() puts text in the field without firing
+      // this, which is right, because an export is not a change to the
+      // project.
+      markChanged();
     },
     onExport: guard('export.failed', () => exportEffect(false)),
     onOverwrite: guard('export.failed', () => exportEffect(true)),
