@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeInspector } from '../../app/renderer/components/inspector.js';
+import { describeInspector, widenToInclude } from '../../app/renderer/components/inspector.js';
 import { normalizeDocument, FIT_MODES, MOTION_KINDS } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 
@@ -96,4 +96,38 @@ test('a layer that is not an image contributes nothing of its own', () => {
   const fields = describeInspector(doc, 'a1');
   assert.equal(fields.filter((f) => f.path.startsWith('layers.')).length, 0);
   assert.ok(fields.length > 0);
+});
+
+// A saved project may legitimately carry a value the sliders do not offer:
+// the engine clamps brightness to 0..100 while the slider deliberately stops
+// at 5 (and speed at 1), to match the ranges the exported effect's own
+// controls use. Without this, opening such a project would show 5 where the
+// document says 3 and write 5 back the moment the slider was touched —
+// silently changing the user's value.
+test('a stored value below the slider range widens that one slider instead of misreporting it', () => {
+  const field = { path: 'brightness', type: 'number', labelKey: 'inspector.brightness', min: 5, max: 100, step: 1 };
+  const widened = widenToInclude(field, 3);
+  assert.equal(widened.min, 3);
+  assert.equal(widened.max, 100);
+  // Everything else about the field is untouched.
+  assert.equal(widened.path, 'brightness');
+  assert.equal(widened.step, 1);
+});
+
+test('a stored value above the slider range widens it upwards', () => {
+  const field = { path: 'saturation', type: 'number', labelKey: 'inspector.saturation', min: 0, max: 200, step: 1 };
+  assert.equal(widenToInclude(field, 260).max, 260);
+});
+
+test('a value already inside the range hands back the very same field object', () => {
+  const field = { path: 'brightness', type: 'number', labelKey: 'inspector.brightness', min: 5, max: 100, step: 1 };
+  assert.equal(widenToInclude(field, 40), field);
+});
+
+test('only sliders are widened, and only by a real number', () => {
+  const select = { path: 'layers.0.fit', type: 'select', labelKey: 'inspector.fit', values: ['cover'] };
+  assert.equal(widenToInclude(select, 3), select);
+  const field = { path: 'brightness', type: 'number', labelKey: 'inspector.brightness', min: 5, max: 100, step: 1 };
+  assert.equal(widenToInclude(field, undefined), field);
+  assert.equal(widenToInclude(field, NaN), field);
 });

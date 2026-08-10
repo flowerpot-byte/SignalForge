@@ -99,6 +99,31 @@ export function describeInspector(doc, layerId) {
 }
 
 /**
+ * Stretch one slider's range far enough to show a value it would otherwise
+ * misreport, and hand back the field unchanged when it already fits.
+ *
+ * The ranges above are on purpose narrower than what normalizeDocument
+ * clamps the same field to (brightness 5..100 against a clamp of 0..100,
+ * speed 1..100 against 0..100), so the app offers what the exported effect
+ * offers. A document is under no such obligation: an effect exported by hand,
+ * a project file edited in a text editor, or a future version with wider
+ * controls can all legitimately carry brightness 3. An `<input type=range>`
+ * given a value outside its min/max shows the nearest end instead — the
+ * slider would sit at 5, and the first touch of it would write 5 into a
+ * document that said 3. Quietly losing the user's value that way is worse
+ * than briefly offering one step more range than usual, so the range gives
+ * way, never the value.
+ *
+ * Only that one control, only while the value is out of range: as soon as
+ * the user drags it back inside, the next redraw restores the normal range.
+ */
+export function widenToInclude(field, value) {
+  if (field.type !== 'number' || !Number.isFinite(value)) return field;
+  if (value >= field.min && value <= field.max) return field;
+  return { ...field, min: Math.min(field.min, value), max: Math.max(field.max, value) };
+}
+
+/**
  * Put the settings column on screen and keep it in step with the document.
  *
  * `getDocument()` returns the one live document — the same object the crop
@@ -148,9 +173,10 @@ export function mountInspector(container, { getDocument, onChange, t }) {
     let group = null;
 
     for (const field of describeInspector(doc, layerId)) {
-      const element = createField(field, {
+      const value = SF.getByPath(doc, field.path);
+      const element = createField(widenToInclude(field, value), {
         t,
-        value: SF.getByPath(doc, field.path),
+        value,
         onChange: (path, value) => {
           const result = onChange(path, value);
           // A slider must never pull the ground out from under the drag it
