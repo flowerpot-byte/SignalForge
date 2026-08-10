@@ -69,7 +69,7 @@ html, body {
 
 .panel {
   background: var(--panel-fill);
-  border: 1px solid var(--glass-stroke);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius);
   backdrop-filter: blur(var(--glass-blur));
   padding: var(--panel-pad);
@@ -150,21 +150,28 @@ html, body {
 #preview-body:not(.has-picture) .stage-meta { display: none; }
 #preview-body:not(.has-picture) .stage-inner { --meta-row: 0px; }
 
-/* The frame. A screen, not a picture on a panel: its own surface, its own
-   edge, and lifted off the glass by a shadow. */
+/* The frame. A screen, not a picture on a panel: it is sunk INTO the panel
+   (--well-fill) rather than painted the same colour as it, which is what it
+   was — the frame and the panel behind it were the same value and only the
+   border and the shadow told them apart. */
 .viewport {
   position: relative;
   aspect-ratio: 320 / 200;
   border-radius: var(--radius);
-  border: 1px solid var(--glass-stroke);
-  background: var(--panel-fill);
+  border: 1px solid var(--hairline);
+  background: var(--well-fill);
   box-shadow: var(--stage-shadow);
 }
 /* Empty, the frame is the drop target and says so with its edge — an opaque
    black rectangle the size of the window read as a hole rather than as a
    screen waiting for something. main.js adds .has-picture once there is one
-   (and takes it away again for a project that has none). */
-#preview-body:not(.has-picture) .viewport { border-style: dashed; }
+   (and takes it away again for a project that has none). The stronger stroke
+   stays here on purpose: this edge is carrying a state ("waiting for a file"),
+   and a hairline dashed line is barely a line at all. */
+#preview-body:not(.has-picture) .viewport {
+  border-style: dashed;
+  border-color: var(--glass-stroke);
+}
 #preview-canvas {
   display: block;
   width: 100%;
@@ -230,7 +237,7 @@ html, body {
   align-items: center;
   margin: 0;
   padding: 2px 9px;
-  border: 1px solid var(--glass-stroke);
+  border: 1px solid var(--hairline);
   border-radius: 999px;
   background: var(--glass-fill);
   color: var(--text-muted);
@@ -257,7 +264,7 @@ html, body {
   padding-top: 8px;
   /* A rule across the panel, so the line reads as the preview's status strip
      rather than as a caption that drifted away from the picture. */
-  border-top: 1px solid var(--glass-stroke);
+  border-top: 1px solid var(--hairline);
   font-size: 13px;
   color: var(--text-muted);
   text-align: center;
@@ -298,9 +305,11 @@ html, body {
   column-gap: 16px;
   margin: 0 0 12px;
   padding: 12px 14px;
-  border: 1px solid var(--glass-stroke);
   border-radius: var(--radius-sm);
-  background: var(--glass-fill);
+  /* A recess in the panel rather than a raised, outlined card. The one thing
+     in it that is meant to be pressed is a raised control, and it cannot read
+     as raised if it sits on something that is raised too. */
+  background: var(--well-fill);
 }
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
    so the attribute the component sets has to be honoured here by hand — without
@@ -327,7 +336,7 @@ html, body {
 #inspector-title {
   margin: 0;
   padding: 13px var(--panel-pad) 12px;
-  border-bottom: 1px solid var(--glass-stroke);
+  border-bottom: 1px solid var(--hairline);
   font-size: 15px;
   font-weight: 600;
 }
@@ -364,7 +373,7 @@ html, body {
 .field-group > h3 {
   margin: 0 0 12px;
   padding-bottom: 7px;
-  border-bottom: 1px solid var(--glass-stroke);
+  border-bottom: 1px solid var(--hairline);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-strong);
@@ -406,17 +415,29 @@ html, body {
    They used to be in two separate fieldsets several rows apart — a list of
    motions above and a stack of "Bewegung 1", "Bewegung 2" below it — which
    said the same structure twice and put a motion's name a long way from its
-   own sliders. */
+   own sliders.
+
+   Two motions produce two of these, and two boxes that look alike is the
+   "identical card grid" tell — so it is worth saying why it stays. They are
+   the same kind of thing, they are told apart by their own legend and by the
+   kind each one is set to, and making one of them look different would be
+   decoration standing in for information. What is fixed instead is how much
+   of a card they are: no outline, and sunk into the panel rather than raised
+   out of it, so two of them read as two entries in a list rather than as two
+   feature tiles. */
 .motion {
   min-inline-size: 0;
   margin: 0 0 10px;
-  padding: 8px 12px 12px;
-  border: 1px solid var(--glass-stroke);
+  padding: 10px 12px 12px;
+  border: 0;
   border-radius: var(--radius-sm);
+  background: var(--well-fill);
 }
 .motion:last-of-type { margin-bottom: 12px; }
+/* No border to notch any more, so the legend stops sitting in a gap in one and
+   is simply the first line of the group. */
 .motion legend {
-  padding: 0 5px;
+  padding: 0;
   color: var(--text-muted);
   font-size: 12px;
 }
@@ -465,18 +486,23 @@ button.add-motion { width: 100%; }
    Controls. Every one of them has all five states.
    --------------------------------------------------------------------------- */
 
+/* Every control rests on a hairline and only goes to the heavier --glass-stroke
+   under the pointer, so an edge getting stronger MEANS something instead of
+   being how every box is drawn. Above that there is only the accent, and the
+   accent is reserved for the three things that earn it: focus, the live drop
+   target, and the one filled button. */
 input[type="text"] {
   font: inherit;
   font-size: 13px;
   color: var(--text-strong);
   background: var(--glass-fill);
-  border: 1px solid var(--glass-stroke);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   padding: 6px 10px;
   min-width: 170px;
   transition: background 150ms ease-out, border-color 150ms ease-out;
 }
-input[type="text"]:hover { background: var(--glass-fill-hover); }
+input[type="text"]:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
 input[type="text"]:disabled { color: var(--text-muted); cursor: default; }
 
 select {
@@ -484,17 +510,17 @@ select {
   font-size: 13px;
   color: var(--text-strong);
   background: var(--glass-fill);
-  border: 1px solid var(--glass-stroke);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   padding: 5px 8px;
   max-width: 100%;
   cursor: pointer;
   transition: background 150ms ease-out, border-color 150ms ease-out;
 }
-select:hover { background: var(--glass-fill-hover); }
+select:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
 select:active { background: var(--accent-soft); border-color: var(--accent); }
 select:disabled { color: var(--text-muted); cursor: default; }
-select:disabled:hover { background: var(--glass-fill); }
+select:disabled:hover { background: var(--glass-fill); border-color: var(--hairline); }
 /* The dropdown list itself is drawn by the system and does not inherit the
    glass above it, so it needs a solid background of its own — without this
    the options come out as dark text on a dark list. */
@@ -506,19 +532,19 @@ button {
   font-weight: 500;
   color: var(--text-strong);
   background: var(--glass-fill);
-  border: 1px solid var(--glass-stroke);
+  border: 1px solid var(--hairline);
   border-radius: var(--radius-sm);
   padding: 7px 12px;
   cursor: pointer;
   transition: background 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
 }
-button:hover { background: var(--glass-fill-hover); }
+button:hover { background: var(--glass-fill-hover); border-color: var(--glass-stroke); }
 button:active { background: var(--accent-soft); border-color: var(--accent); }
 /* Nothing left to add: say so by looking spent, and do not light up on hover. */
 button:disabled { color: var(--text-muted); cursor: default; }
 button:disabled:hover, button:disabled:active {
   background: var(--glass-fill);
-  border-color: var(--glass-stroke);
+  border-color: var(--hairline);
 }
 
 /* The one action the whole app exists for. Filled, not tinted: --bg-base on
@@ -534,7 +560,7 @@ button.primary:active { background: var(--accent); border-color: var(--accent); 
 button.primary:disabled {
   color: var(--text-muted);
   background: var(--glass-fill);
-  border-color: var(--glass-stroke);
+  border-color: var(--hairline);
 }
 
 /* The answer to the first-start question. Marked out by its edge rather than
