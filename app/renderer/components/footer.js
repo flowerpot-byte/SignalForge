@@ -124,6 +124,10 @@ export function mountFooter(container, {
     }
     const how = source === 'configured' ? t('export.sourceConfigured') : t('export.sourceDetected');
     target.textContent = `${t('settings.effectsFolder')}: ${folder} (${how})`;
+    // The row truncates this line before it truncates anything else (see
+    // #footer-target in styles/app.css), and at the smallest window there is
+    // little left of it — so the whole path stays reachable by resting on it.
+    target.title = target.textContent;
   }
 
   relabel();

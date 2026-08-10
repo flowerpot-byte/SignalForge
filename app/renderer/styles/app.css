@@ -95,6 +95,10 @@ html, body {
   border: 1px dashed transparent;
 }
 #preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
+/* One gesture, not two competing rectangles: while a file is over the panel,
+   the frame's own edge joins in rather than sitting inside a second dashed
+   box of a different colour. */
+#preview-body.drop-active .viewport { border-color: var(--accent); }
 
 /* The stage measures itself, and the frame inside it is sized from that
    measurement: `container-type: size` is what makes 100cqh below mean "the
