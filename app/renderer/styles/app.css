@@ -191,17 +191,18 @@ select option { background: var(--bg-base); color: var(--text-strong); }
   margin: 0 0 14px;
 }
 .motion-list legend, .motion-group legend { color: var(--text-muted); padding: 0 4px; }
-/* The name goes on its own line above the dropdown and its remove button:
-   all three side by side do not fit the column, and a wrapped label reads
-   as if it belonged to the row below it. */
+/* The dropdown and its remove button, side by side. The motion's name is
+   deliberately not printed here: the fieldset holding that motion's sliders
+   carries it as its legend, and having both meant the column said
+   "Bewegung 1" twice. The dropdown keeps the name for a screen reader
+   through an aria-label (see components/field.js). */
 .motion-row {
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  gap: 2px 8px;
+  gap: 8px;
   margin-bottom: 10px;
 }
-.motion-row label { grid-column: 1 / -1; color: var(--text-muted); }
 .motion-row button, button.add-motion { padding: 4px 10px; }
 .motion-group .field:last-child { margin-bottom: 0; }
 

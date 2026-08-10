@@ -130,6 +130,64 @@ test('a change that succeeds reports nothing', async () => {
   assert.deepEqual(errors, [], 'a change that worked must not put a warning in the window');
 });
 
+/** Every piece of text the column would print, in order. */
+function texts(node, out = []) {
+  if (node.textContent) out.push(node.textContent);
+  for (const kid of node.children || []) texts(kid, out);
+  return out;
+}
+
+// The motion's name was printed twice: once as the row's own label and once
+// as the legend of the fieldset holding that motion's sliders, a few pixels
+// below. It was the one thing in the settings column that read as a bug to a
+// first-time user.
+test('a motion is named once in the column, and its dropdown is still named for a screen reader', () => {
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  mountInspector(container, {
+    t,
+    getDocument: docWithMotion,
+    onChange: () => {},
+    onError: () => {}
+  });
+
+  const name = `${t('inspector.motion')} 1`;
+  assert.equal(
+    texts(container).filter((text) => text === name).length,
+    1,
+    `"${name}" must appear exactly once in the settings column`
+  );
+
+  const select = byId(container, 'sf-layers-0-kind-0');
+  assert.equal(
+    select.attributes['aria-label'],
+    name,
+    'the row\'s dropdown must still say which motion it belongs to, even without a visible label'
+  );
+});
+
+// Every other control keeps its label bound to its id: that association is
+// what makes the label clickable and what a screen reader reads out.
+test('the sliders and the fit dropdown keep their label bound to their control', () => {
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  mountInspector(container, { t, getDocument: docWithMotion, onChange: () => {}, onError: () => {} });
+
+  for (const id of ['sf-brightness', 'sf-layers-0-fit', 'sf-layers-0-motions-0-speed']) {
+    const control = byId(container, id);
+    assert.ok(control, `${id} must be on screen`);
+    const labels = [];
+    const walk = (node) => {
+      if (node.tagName === 'label' && node.htmlFor === id) labels.push(node);
+      (node.children || []).forEach(walk);
+    };
+    walk(container);
+    assert.equal(labels.length, 1, `${id} must have exactly one <label for> pointing at it`);
+  }
+});
+
 // A slider reports a change on every pixel of a drag; rebuilding the column
 // underneath a held-down mouse would throw the focus away mid-gesture. That
 // restraint must not have been weakened into "sliders are also silent about

@@ -125,6 +125,12 @@ function motionsField(field, { t, value, onChange }) {
 
     const select = document.createElement('select');
     select.id = id;
+    // Named for a screen reader, not on screen: the fieldset that wraps this
+    // motion's sliders already prints "Bewegung 1" as its legend a few pixels
+    // below (see mountInspector), and a visible label here printed the very
+    // same words a second time. An aria-label keeps the dropdown announced as
+    // the motion it belongs to without saying it twice to the eye.
+    select.setAttribute('aria-label', `${t('inspector.motion')} ${index + 1}`);
     for (const kind of field.values) {
       if (kind !== motion.kind && used.has(kind)) continue;
       const node = document.createElement('option');
@@ -144,7 +150,7 @@ function motionsField(field, { t, value, onChange }) {
       onChange(listPath, motions.filter((_, other) => other !== index));
     });
 
-    line.append(labelFor(id, `${t('inspector.motion')} ${index + 1}`), select, remove);
+    line.append(select, remove);
     group.append(line);
   });
 
