@@ -25,5 +25,13 @@ contextBridge.exposeInMainWorld('sf', {
   // way it rejects any other failed import. This is what keeps
   // sf:importImage from being an arbitrary-file-read primitive despite
   // sandbox: true isolating the renderer from Node.
-  importImage: (file) => ipcRenderer.invoke('sf:importImage', webUtils.getPathForFile(file))
+  importImage: (file) => ipcRenderer.invoke('sf:importImage', webUtils.getPathForFile(file)),
+  // Same rule as importImage, from the other end: the renderer hands over a
+  // document and gets a document back, and never names a file. Which file is
+  // written or read is decided solely by the dialog the main process opens
+  // (see app/main.js) — there is no parameter here for a renderer to put a
+  // path into, so sf:saveProject cannot be turned into "write this anywhere"
+  // and sf:openProject cannot be turned into "read anything".
+  saveProject: (doc) => ipcRenderer.invoke('sf:saveProject', doc),
+  openProject: () => ipcRenderer.invoke('sf:openProject')
 });

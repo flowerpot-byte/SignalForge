@@ -55,6 +55,9 @@ html, body {
 #preview   { grid-area: preview; display: grid; place-items: center; }
 #inspector { grid-area: inspector; }
 #footer    { grid-area: footer; display: flex; align-items: center; gap: var(--gap); }
+/* The buttons live one level in, inside the region mountShell hands out, so
+   the row has to be laid out here as well as on the panel itself. */
+#footer-body { display: flex; align-items: center; gap: var(--gap); }
 
 .muted { color: var(--text-muted); }
 

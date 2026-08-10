@@ -30,5 +30,10 @@
   "footer.name": "Name",
   "settings.language": "Language",
   "settings.effectsFolder": "Effects folder",
-  "settings.chooseFolder": "Choose folder"
+  "settings.chooseFolder": "Choose folder",
+  "project.saved": "Project saved",
+  "project.saveFailed": "Could not save the project",
+  "project.opened": "Project opened",
+  "project.openFailed": "Could not open the project",
+  "project.repaired": "Project opened, but something had to be corrected"
 }

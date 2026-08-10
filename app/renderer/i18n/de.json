@@ -30,5 +30,10 @@
   "footer.name": "Name",
   "settings.language": "Sprache",
   "settings.effectsFolder": "Effektordner",
-  "settings.chooseFolder": "Ordner waehlen"
+  "settings.chooseFolder": "Ordner waehlen",
+  "project.saved": "Projekt gespeichert",
+  "project.saveFailed": "Projekt konnte nicht gespeichert werden",
+  "project.opened": "Projekt geoeffnet",
+  "project.openFailed": "Projekt konnte nicht geoeffnet werden",
+  "project.repaired": "Projekt geoeffnet, aber etwas musste korrigiert werden"
 }

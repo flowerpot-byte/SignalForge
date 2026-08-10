@@ -67,6 +67,12 @@ async function boot() {
   message.textContent = i18n.t('preview.dropHint');
   regions.preview.append(message);
 
+  /** The one line of feedback in the window; `warn` colours it. */
+  function showMessage(text, warn = false) {
+    message.classList.toggle('drop-warn', warn);
+    message.textContent = text;
+  }
+
   // The id the dropped picture always gets. One layer for now; the layer
   // list is a later task.
   const IMAGE_LAYER = 'image';
@@ -86,6 +92,39 @@ async function boot() {
    * settings column now also writes — the crop would have gone on computing
    * its slack for whichever fit was in force when the picture was dropped.
    */
+  /**
+   * The size a picture actually has, read from the picture itself.
+   *
+   * An asset in the document carries its bytes but not the size the importer
+   * scaled it to (normalizeDocument keeps kind, mime and data, nothing else),
+   * so a project that comes back from a file has to be measured again before
+   * the crop drag can work out how much slack there is to drag.
+   *
+   * Rejecting on a picture that will not decode is the point as much as the
+   * measurement is: it happens before the opened document is allowed near the
+   * preview, so a project whose picture is damaged leaves the one on screen
+   * alone instead of replacing it with an empty canvas.
+   */
+  function measureAsset(asset) {
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onerror = () => reject(new Error('a picture in this project could not be decoded'));
+      image.src = `data:${asset.mime};base64,${asset.data}`;
+    });
+  }
+
+  async function measureEmbeddedAssets(doc) {
+    const sizes = new Map();
+    for (const [id, asset] of Object.entries(doc.assets)) {
+      // An asset that names a sibling file instead of carrying its bytes
+      // belongs to the export path, not to a self-contained project file.
+      if (typeof asset.data !== 'string') continue;
+      sizes.set(id, await measureAsset(asset));
+    }
+    return sizes;
+  }
+
   function draggableLayer() {
     if (!sourceSize) return null;
     const layer = preview.document().layers.find((entry) => entry.id === IMAGE_LAYER);
@@ -144,12 +183,10 @@ async function boot() {
         // path-splitting needed here.
         const result = await window.sf.importImage(file);
         if (!result.ok) {
-          message.classList.add('drop-warn');
-          message.textContent = `${i18n.t('preview.dropFailed')}: ${result.message}`;
+          showMessage(`${i18n.t('preview.dropFailed')}: ${result.message}`, true);
           return;
         }
-        message.classList.remove('drop-warn');
-        message.textContent = '';
+        showMessage('');
         await preview.setDocument({
           name: file.name,
           layers: [{ id: IMAGE_LAYER, type: 'image', asset: 'image', fit: 'cover', motions: [] }],
@@ -161,15 +198,90 @@ async function boot() {
         preview.start();
       } catch (err) {
         console.error('drop import failed:', err);
-        message.classList.add('drop-warn');
-        message.textContent = `${i18n.t('preview.dropFailed')}: ${err.message || err}`;
+        showMessage(`${i18n.t('preview.dropFailed')}: ${err.message || err}`, true);
       }
     },
     onReject: (name) => {
-      message.classList.add('drop-warn');
-      message.textContent = `${i18n.t('preview.dropUnsupported')}: ${name}`;
+      showMessage(`${i18n.t('preview.dropUnsupported')}: ${name}`, true);
     }
   });
+
+  /**
+   * Save what is on screen.
+   *
+   * `preview.document()` is the one live document — the same object the crop
+   * drag and the settings column write into — so what gets saved is by
+   * construction what the user is looking at, with no second copy to be out
+   * of date. Which file it lands in is decided by a dialog the main process
+   * opens; nothing here names a path, and the bridge has no parameter for one
+   * (see app/preload.cjs).
+   */
+  async function saveProject() {
+    const result = await window.sf.saveProject(preview.document());
+    if (result.canceled) return;
+    if (!result.ok) {
+      showMessage(`${i18n.t('project.saveFailed')}: ${result.message}`, true);
+      return;
+    }
+    showMessage(`${i18n.t('project.saved')}: ${result.name}`);
+  }
+
+  /**
+   * Open a project, replacing everything on screen — but only once the file
+   * has proved itself readable and its picture decodable. Up to that point
+   * the project already open is untouched, which is what an unreadable,
+   * truncated or foreign file must leave behind: a message, and the work the
+   * user still had.
+   */
+  async function openProject() {
+    const result = await window.sf.openProject();
+    if (result.canceled) return;
+    if (!result.ok) {
+      showMessage(`${i18n.t('project.openFailed')}: ${result.message}`, true);
+      return;
+    }
+
+    const doc = result.document;
+    const sizes = await measureEmbeddedAssets(doc);
+
+    await preview.setDocument(doc);
+    const layer = doc.layers.find((entry) => entry.id === IMAGE_LAYER);
+    sourceSize = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
+    inspector.refresh();
+    preview.start();
+
+    // A project that had to be corrected on the way in says so rather than
+    // quietly presenting something other than what the file held.
+    if (result.problems.length > 0) {
+      showMessage(`${i18n.t('project.repaired')}: ${result.problems.join(' ')}`, true);
+    } else {
+      showMessage(`${i18n.t('project.opened')}: ${result.name}`);
+    }
+  }
+
+  /**
+   * A footer button. Every failure ends up on the same line of the window as
+   * every other one: these handlers are event callbacks with nobody awaiting
+   * them, so an unexpected throw would otherwise be an unhandled rejection
+   * nobody but the console ever hears about.
+   */
+  function footerButton(labelKey, failedKey, run) {
+    const element = document.createElement('button');
+    element.type = 'button';
+    element.textContent = i18n.t(labelKey);
+    element.addEventListener('click', () => {
+      run().catch((err) => {
+        console.error(`${labelKey} failed:`, err);
+        showMessage(`${i18n.t(failedKey)}: ${err.message || err}`, true);
+      });
+    });
+    return element;
+  }
+
+  regions.footer.append(
+    footerButton('footer.save', 'project.saveFailed', saveProject),
+    footerButton('footer.open', 'project.openFailed', openProject)
+  );
 }
 
 boot().catch((err) => {
