@@ -10,31 +10,45 @@ import { buildEffectHtml } from '../src/export/build-effect.js';
 import { effectControls } from '../src/export/effect-controls.js';
 import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
-import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../src/engine/document.js';
+import {
+  MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS,
+  normalizeColor, normalizeDocument
+} from '../src/engine/document.js';
 
-/** The id the one image layer gets, and what the controls bind through. */
+/** The id the one layer gets, and what the controls bind through. */
 const LAYER_ID = 'a1';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
 const USAGE = `Usage:
   node bin/sfexport.js --image <file> [options]
+  node bin/sfexport.js --solid <colour> [options]
+  node bin/sfexport.js --gradient <colour,colour[,colour,colour]> [options]
   node bin/sfexport.js --project <file.json> [options]
 
 Options:
-  --name <text>      Effect name (default: the image file name)
-  --motion <kind>    none | warp | drift | breathe   (default: warp)
-  --fit <kind>       cover | stretch | contain       (default: cover)
+  --name <text>      Effect name (default: the image file name; required without --image)
+  --motion <kind>    none | warp | drift | breathe   (default: warp; none for --solid)
+  --fit <kind>       cover | stretch | contain       (default: cover, --image only)
+  --shape <kind>     linear | radial                 (default: linear, --gradient only)
+  --angle <degrees>  0..360                          (default: 0, --gradient only)
   --out <folder>     Where to write. Default: the detected SignalRGB folder.
   --force            Overwrite an existing effect of the same name.
+
+A colour is written the way a colour usually is: #rrggbb, #rgb or rrggbb.
 `;
 
 // Flags that take a value. --force is handled separately as the one
 // value-less flag.
-const VALUE_FLAGS = new Set(['image', 'project', 'name', 'motion', 'fit', 'out']);
+const VALUE_FLAGS = new Set([
+  'image', 'solid', 'gradient', 'project', 'name', 'motion', 'fit', 'shape', 'angle', 'out'
+]);
+
+/** The three ways to say what the effect is made of; exactly one is allowed. */
+const SOURCE_FLAGS = ['image', 'solid', 'gradient', 'project'];
 
 function parseArguments(argv) {
-  const options = { motion: 'warp', fit: 'cover', force: false };
+  const options = { fit: 'cover', shape: 'linear', angle: '0', force: false };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--force') { options.force = true; continue; }
@@ -48,14 +62,51 @@ function parseArguments(argv) {
     options[key] = value;
   }
 
+  const given = SOURCE_FLAGS.filter((flag) => options[flag] !== undefined);
+  if (given.length > 1) {
+    throw new Error(`give exactly one of ${SOURCE_FLAGS.map((f) => `--${f}`).join(', ')}, not ${given.length}`);
+  }
+
+  // Whether --motion was actually asked for. A picture defaults to warp, as it
+  // always has; a solid colour defaults to "none", because warp and drift on a
+  // flat colour provably change nothing (see src/engine/layers/solid.js) and
+  // starting somebody off with an inert motion would be a lie about what the
+  // effect does.
+  options.motionGiven = options.motion !== undefined;
+  if (!options.motionGiven) options.motion = options.solid !== undefined ? 'none' : 'warp';
+
   if (!MOTION_KINDS.includes(options.motion)) {
     throw new Error(`unknown --motion value: "${options.motion}" (expected ${MOTION_KINDS.join('|')})`);
   }
   if (!FIT_MODES.includes(options.fit)) {
     throw new Error(`unknown --fit value: "${options.fit}" (expected ${FIT_MODES.join('|')})`);
   }
+  if (!GRADIENT_SHAPES.includes(options.shape)) {
+    throw new Error(`unknown --shape value: "${options.shape}" (expected ${GRADIENT_SHAPES.join('|')})`);
+  }
+  if (!Number.isFinite(Number(options.angle))) {
+    throw new Error(`--angle needs a number of degrees, got "${options.angle}"`);
+  }
 
   return options;
+}
+
+/**
+ * "#ff0066" -> "#ff0066", and anything unusable is refused by name.
+ *
+ * normalizeColor (src/engine/document.js) is the one judge of what a colour
+ * is, here as everywhere else — but it recovers by handing back a fallback,
+ * which is right inside a document being repaired and wrong on a command line.
+ * A typed colour that was not understood has to be said out loud, or the
+ * effect quietly comes out in a colour nobody asked for.
+ */
+function colourArgument(text, flag) {
+  const IMPOSSIBLE = '#000000';
+  const OTHER = '#ffffff';
+  if (normalizeColor(text, IMPOSSIBLE) === IMPOSSIBLE && normalizeColor(text, OTHER) === OTHER) {
+    throw new Error(`${flag}: "${text}" is not a colour (expected #rrggbb, #rgb or rrggbb)`);
+  }
+  return normalizeColor(text, IMPOSSIBLE);
 }
 
 function resolveOutputFolder(explicit) {
@@ -83,9 +134,19 @@ function resolveNameAndProject(options) {
     const project = JSON.parse(readFileSync(options.project, 'utf8'));
     return { name: project.name, project };
   }
-  if (!options.image) throw new Error(USAGE);
-  const name = options.name || basename(options.image).replace(/\.[^.]+$/, '');
-  return { name, project: null };
+  if (options.image) {
+    const name = options.name || basename(options.image).replace(/\.[^.]+$/, '');
+    return { name, project: null };
+  }
+  // A colour effect has no file to be named after, so the name has to be
+  // given. Guessing one ("Solid", "Gradient") would put a file in somebody's
+  // SignalRGB list under a name they never chose, and the second export would
+  // silently want to overwrite the first.
+  if (options.solid !== undefined || options.gradient !== undefined) {
+    if (!options.name) throw new Error('--name is required when there is no image to take a name from');
+    return { name: options.name, project: null };
+  }
+  throw new Error(USAGE);
 }
 
 async function buildImageDocument(options, name) {
@@ -131,6 +192,61 @@ async function buildImageDocument(options, name) {
   return { ...doc, controls: effectControls(doc, LAYER_ID) };
 }
 
+/**
+ * An effect with no picture in it at all: one colour, or a ramp between a few.
+ *
+ * Everything the picture path does, minus the picture — no asset, no
+ * Electron launch to prepare one, and therefore no `assets` key: the whole
+ * effect is the layer and the engine bundle. The control list comes from the
+ * one shared place, exactly as above.
+ */
+function buildColourDocument(options, name) {
+  const gradient = options.gradient !== undefined;
+  const colours = gradient
+    ? options.gradient.split(',').map((part) => colourArgument(part.trim(), '--gradient'))
+    : [colourArgument(options.solid, '--solid')];
+
+  if (gradient && (colours.length < MIN_GRADIENT_STOPS || colours.length > MAX_GRADIENT_STOPS)) {
+    throw new Error(`--gradient needs between ${MIN_GRADIENT_STOPS} and ${MAX_GRADIENT_STOPS} `
+      + `colours separated by commas, got ${colours.length}`);
+  }
+
+  const layer = gradient
+    ? {
+      id: LAYER_ID,
+      type: 'gradient',
+      name: 'Gradient',
+      shape: options.shape,
+      angle: Number(options.angle),
+      // Spread evenly across the ramp. Where exactly each colour sits is
+      // deliberately not a command-line option: it is the one gradient
+      // setting that needs to be seen while it is being chosen, which is
+      // what the window is for.
+      stops: colours.map((color, index) => ({
+        at: colours.length === 1 ? 0 : (index / (colours.length - 1)) * 100,
+        color
+      })),
+      motions: [{ kind: options.motion }]
+    }
+    : {
+      id: LAYER_ID,
+      type: 'solid',
+      name: 'Colour',
+      color: colours[0],
+      motions: [{ kind: options.motion }]
+    };
+
+  const doc = normalizeDocument({
+    name,
+    description: gradient
+      ? `A ${options.shape} gradient built with SignalForge.`
+      : `A single colour built with SignalForge.`,
+    publisher: 'SignalForge',
+    layers: [layer]
+  }).doc;
+  return { ...doc, controls: effectControls(doc, LAYER_ID) };
+}
+
 async function main() {
   const options = parseArguments(process.argv.slice(2));
 
@@ -149,8 +265,14 @@ async function main() {
   }
 
   // Only reached once the overwrite check has passed: this is the
-  // expensive step (an Electron launch) for `--image` mode.
-  const doc = project || await buildImageDocument(options, name);
+  // expensive step (an Electron launch) for `--image` mode. A colour effect
+  // has nothing expensive to do at all.
+  let doc = project;
+  if (!doc) {
+    doc = options.image
+      ? await buildImageDocument(options, name)
+      : buildColourDocument(options, name);
+  }
 
   const html = buildEffectHtml({ doc, engineSource, lang: 'en' });
   writeFileSync(target, html, 'utf8');

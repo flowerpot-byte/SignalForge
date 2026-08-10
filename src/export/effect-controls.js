@@ -1,7 +1,9 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../engine/document.js';
+import {
+  MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, motionKindsFor, normalizeDocument
+} from '../engine/document.js';
 
 /**
  * The one list of controls an exported effect offers.
@@ -44,6 +46,19 @@ import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../engine/document.j
  *   saturation   <- saturation       clamp 0..200   offered 0..200
  *   greenMagenta <- greenMagenta     clamp -100..100 offered -100..100
  *   blueYellow   <- blueYellow       clamp -100..100 offered -100..100
+ *   angle        <- gradient angle   clamp 0..360   offered 0..360
+ *   stop         <- stops[].at       clamp 0..100   offered 0..100
+ *
+ * `stop` is the one entry here the exported effect does NOT offer, and it is
+ * in this table anyway because it is a range and this is where ranges live —
+ * the settings column reads it like all the others. Why the finished effect
+ * does not get stop-position sliders: SignalRGB's control panel has no
+ * gradient bar to see them against, so the number would have to be judged
+ * against the keyboard alone; and dragging stop 1 past stop 2 turns the ramp
+ * inside out, which reads as a bug rather than as a setting. The same looks
+ * are reachable by changing the colours, which the effect DOES offer. Where
+ * along the ramp each colour sits is a decision that belongs in SignalForge,
+ * where the gradient is on screen while it is being made.
  *
  * test/export/effect-controls.test.js checks the three colour ranges against
  * normalizeDocument itself rather than against these numbers, so a change to
@@ -60,8 +75,29 @@ export const CONTROL_RANGES = Object.freeze({
   brightness: Object.freeze({ min: 5, max: 100 }),
   saturation: Object.freeze({ min: 0, max: 200 }),
   greenMagenta: Object.freeze({ min: -100, max: 100 }),
-  blueYellow: Object.freeze({ min: -100, max: 100 })
+  blueYellow: Object.freeze({ min: -100, max: 100 }),
+  angle: Object.freeze({ min: 0, max: 360 }),
+  stop: Object.freeze({ min: 0, max: 100 })
 });
+
+/**
+ * A colour picker.
+ *
+ * SECOND NOTE, unverified, and a larger one than the negative minimum above:
+ * `type="color"` has been in this project's CONTROL_TYPES since the first
+ * commit but has never been exported, and docs/erkenntnisse-signalrgb-motor.md
+ * — which is the record of what SignalRGB's browser was actually MEASURED to
+ * do — says nothing about it. So two things are unknown until somebody runs
+ * one of these in SignalRGB: whether the control appears at all, and what
+ * shape the value it writes into the global has. The second is handled rather
+ * than assumed: normalizeColor (src/engine/document.js) accepts "#RRGGBB",
+ * "RRGGBB", "#RGB" and "rgb(r,g,b)" and falls back to the document's own
+ * colour for anything else, so the worst case is a control that does nothing,
+ * not an effect that goes black.
+ */
+function colour(property, de, en, value, bind) {
+  return { property, label: { de, en }, type: 'color', default: value, bind: [bind] };
+}
 
 /**
  * A slider, with its range stretched if the document carries a value the
@@ -114,16 +150,64 @@ export function effectControls(doc, layerId) {
   const controls = [];
   const layer = doc.layers.find((entry) => entry.id === layerId);
 
+  /**
+   * The three motion controls, for whichever layer type has motions.
+   *
+   * The Motion dropdown offers motionKindsFor(type) and not MOTION_KINDS
+   * flat: on a solid colour that is "none" and "breathe" alone, because drift
+   * and warp on a uniform field provably cannot change a pixel (see
+   * src/engine/layers/solid.js). Offering them would put two options in
+   * somebody's SignalRGB panel that do nothing whatsoever when chosen.
+   */
+  const motionControls = () => {
+    const motion = layer.motions?.[0];
+    if (!motion) return;
+    // The same rule the sliders follow (see slider() above): the offer gives
+    // way, never the document's own value. A hand-edited project can carry a
+    // warp on a solid layer, and a dropdown whose default is not one of its
+    // own options leaves SignalRGB to decide what that means.
+    const offered = motionKindsFor(layer.type);
+    const kinds = offered.includes(motion.kind) ? offered : [...offered, motion.kind];
+    controls.push(
+      dropdown('motion', 'Modus', 'Motion', kinds, motion.kind, `${layerId}.motions.0.kind`),
+      slider('tempo', 'Tempo', 'Speed', motion.speed, `${layerId}.motions.0.speed`),
+      slider('strength', 'Staerke', 'Strength', motion.amount, `${layerId}.motions.0.amount`)
+    );
+  };
+
   if (layer && layer.type === 'image') {
-    const motion = layer.motions[0];
-    if (motion) {
-      controls.push(
-        dropdown('motion', 'Modus', 'Motion', MOTION_KINDS, motion.kind, `${layerId}.motions.0.kind`),
-        slider('tempo', 'Tempo', 'Speed', motion.speed, `${layerId}.motions.0.speed`),
-        slider('strength', 'Staerke', 'Strength', motion.amount, `${layerId}.motions.0.amount`)
-      );
-    }
+    motionControls();
     controls.push(dropdown('fit', 'Bildausschnitt', 'Fit', FIT_MODES, layer.fit, `${layerId}.fit`));
+  }
+
+  // For a picture the motion leads, because the picture itself is already
+  // baked in and cannot be changed from SignalRGB at all. For a colour effect
+  // the colour IS the effect and everything else is applied to it, so it comes
+  // first — somebody who installs a gradient wants to try their own two
+  // colours in it before they wonder how fast it should move.
+  if (layer && layer.type === 'solid') {
+    controls.push(colour('color', 'Farbe', 'Colour', layer.color, `${layerId}.color`));
+    motionControls();
+  }
+
+  if (layer && layer.type === 'gradient') {
+    layer.stops.forEach((stop, index) => {
+      const at = index + 1;
+      controls.push(colour(`color${at}`, `Farbe ${at}`, `Colour ${at}`, stop.color,
+        `${layerId}.stops.${index}.color`));
+    });
+    controls.push(
+      dropdown('shape', 'Form', 'Shape', GRADIENT_SHAPES, layer.shape, `${layerId}.shape`),
+      // Offered whatever the shape is, and deliberately so. A radial gradient
+      // ignores it (it runs outwards from the middle, which has no angle), but
+      // the Shape dropdown above can be switched to linear at any moment from
+      // this very panel — so a hidden angle would mean switching to linear and
+      // finding no way to turn the ramp. The angle is remembered rather than
+      // conditional; the cost is one slider that does nothing while radial is
+      // chosen, against a dead end if it were left out.
+      slider('angle', 'Winkel', 'Angle', layer.angle, `${layerId}.angle`)
+    );
+    motionControls();
   }
 
   controls.push(
@@ -137,7 +221,7 @@ export function effectControls(doc, layerId) {
 }
 
 /**
- * Give an image layer a motion entry to bind to, if it has none.
+ * Give a layer a motion entry to bind to, if it has none.
  *
  * setByPath (src/engine/bind.js) deliberately refuses to create a missing
  * branch, so an empty `motions` list would leave the motion/tempo/strength
@@ -151,7 +235,11 @@ export function effectControls(doc, layerId) {
  */
 export function withLiveMotion(doc, layerId) {
   const layer = doc.layers.find((entry) => entry.id === layerId);
-  if (!layer || layer.type !== 'image' || layer.motions.length > 0) return doc;
+  // Every layer type that carries motions at all, not just the picture: a
+  // gradient's and a solid's motion controls would be just as dead without an
+  // entry to write into. A layer type with no motions field (an unknown one)
+  // is left exactly as it is.
+  if (!layer || !Array.isArray(layer.motions) || layer.motions.length > 0) return doc;
   return normalizeDocument({
     ...doc,
     layers: doc.layers.map((entry) => (entry === layer ? { ...entry, motions: [{ kind: 'none' }] } : entry))
