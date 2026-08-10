@@ -5,6 +5,7 @@ import { createI18n } from './i18n/i18n.js';
 import { mountShell, mountBackdrop } from './components/shell.js';
 import { createPreview } from './components/preview.js';
 import { mountDrop } from './components/drop.js';
+import { mountCrop } from './components/crop.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -65,6 +66,22 @@ async function boot() {
   message.textContent = i18n.t('preview.dropHint');
   regions.preview.append(message);
 
+  // The picture the user can drag around, or null while there is none.
+  // Its source size cannot be read back out of the document: normalizeDocument
+  // keeps only an asset's kind, mime and bytes. The importer returns the size
+  // it scaled the picture down to, so it is remembered here instead.
+  let cropLayer = null;
+
+  mountCrop(preview.canvas, {
+    getLayer: () => cropLayer,
+    onChange: (offset) => {
+      cropLayer.offset = offset;
+      // Writes straight into the live document; the preview's frame loop
+      // shows it on its next frame (see components/preview.js).
+      preview.setLayerOffset(cropLayer.id, offset);
+    }
+  });
+
   mountDrop(regions.preview, {
     onFile: async (file) => {
       // sf:importImage already turns its own failures into { ok: false }
@@ -85,11 +102,19 @@ async function boot() {
         }
         message.classList.remove('drop-warn');
         message.textContent = '';
+        const layer = { id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] };
         await preview.setDocument({
           name: file.name,
-          layers: [{ id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] }],
+          layers: [layer],
           assets: { image: result.asset }
         });
+        cropLayer = {
+          id: layer.id,
+          fit: layer.fit,
+          offset: { x: 0, y: 0 },
+          sourceWidth: result.asset.width,
+          sourceHeight: result.asset.height
+        };
         preview.start();
       } catch (err) {
         console.error('drop import failed:', err);

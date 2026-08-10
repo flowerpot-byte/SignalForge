@@ -84,6 +84,22 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
 
   return {
     setDocument,
+    /**
+     * Move one image layer's crop window, in place.
+     *
+     * Deliberately NOT setDocument(): that replaces the document and reloads
+     * every asset, i.e. decodes the picture again — and this runs on every
+     * single pointermove of a crop drag (see components/crop.js). Writing
+     * into the live document instead means the frame the render loop has
+     * already scheduled picks the new offset up on its own: no extra render
+     * call, no second loop, nothing for the drag and the loop to fight over.
+     */
+    setLayerOffset(id, offset) {
+      const layer = doc.layers.find((entry) => entry.id === id);
+      if (!layer || !layer.offset) return;
+      layer.offset.x = SF.clamp(offset.x, -1, 1);
+      layer.offset.y = SF.clamp(offset.y, -1, 1);
+    },
     start() {
       if (running) return;
       running = true;

@@ -22,10 +22,14 @@ function installFakeDom(renderCalls) {
       CANVAS_HEIGHT: 10,
       createRenderer: () => ({ render: () => { renderCalls.push(true); } }),
       normalizeDocument: (doc) => ({ doc: doc ?? {} }),
-      loadAssets: async () => new Map()
+      clamp: (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v),
+      loadAssets: async () => { assetLoads.push(true); return new Map(); }
     }
   };
 }
+
+/** Counts every asset (re-)load, so a crop drag can be shown not to cause one. */
+const assetLoads = [];
 
 // A fake requestAnimationFrame that never ticks on its own — the caller
 // decides exactly when a scheduled frame runs, and in what order, by
@@ -103,4 +107,52 @@ test('start() while already running does not stack a second chain', async () => 
   preview.start();
   preview.start();
   assert.equal(scheduler.pendingCount(), 1, 'repeated start() calls must not queue extra chains');
+});
+
+// A crop drag (components/crop.js) calls setLayerOffset on every pointermove.
+// Doing that through setDocument() would decode the picture again each time
+// and, worse, race the running loop; it must be a plain write into the live
+// document that the already-scheduled frame simply picks up.
+test('setLayerOffset moves the crop without reloading assets or touching the frame loop', async () => {
+  const renderCalls = [];
+  installFakeDom(renderCalls);
+  const scheduler = makeFakeScheduler();
+
+  const preview = createPreview(fakeContainer, t, scheduler.requestFrame);
+  const doc = { layers: [{ id: 'image', offset: { x: 0, y: 0 } }] };
+  await preview.setDocument(doc);
+
+  preview.start();
+  scheduler.runNext(0);
+  const framesBefore = renderCalls.length;
+  const loadsBefore = assetLoads.length;
+  const pendingBefore = scheduler.pendingCount();
+
+  // Thirty moves, as a real drag produces.
+  for (let i = 1; i <= 30; i += 1) preview.setLayerOffset('image', { x: -i / 30, y: 0 });
+
+  assert.equal(doc.layers[0].offset.x, -1, 'the live document must carry the new offset');
+  assert.equal(assetLoads.length, loadsBefore, 'a drag must never reload the picture');
+  assert.equal(renderCalls.length, framesBefore, 'a drag must not render on its own');
+  assert.equal(scheduler.pendingCount(), pendingBefore, 'a drag must not schedule extra frames');
+
+  // The next frame the loop was already going to run shows the new crop.
+  scheduler.runNext(1000);
+  assert.equal(renderCalls.length, framesBefore + 1, 'exactly one frame, from the existing loop');
+});
+
+test('setLayerOffset clamps to the valid range and ignores an unknown layer', async () => {
+  installFakeDom([]);
+  const scheduler = makeFakeScheduler();
+
+  const preview = createPreview(fakeContainer, t, scheduler.requestFrame);
+  const doc = { layers: [{ id: 'image', offset: { x: 0, y: 0 } }] };
+  await preview.setDocument(doc);
+
+  preview.setLayerOffset('image', { x: -9, y: 9 });
+  assert.deepEqual(doc.layers[0].offset, { x: -1, y: 1 });
+
+  // Must not throw, and must leave the real layer alone.
+  preview.setLayerOffset('nope', { x: 0.5, y: 0.5 });
+  assert.deepEqual(doc.layers[0].offset, { x: -1, y: 1 });
 });
