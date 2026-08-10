@@ -12,6 +12,22 @@ import { buildEffectHtml } from '../../src/export/build-effect.js';
 
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
+// One layer of every type the engine can draw, in one document.
+//
+// The guarantee this file exists for — the preview's pixels and the exported
+// file's pixels are identical, through the same dist/engine.bundle.js — is
+// only ever as wide as this document is. With two image layers it covered one
+// layer type out of three, and the two newest ones are exactly the shape of
+// thing that diverges: the gradient is the first layer type with a state cache
+// keyed on its own content (buildSource's sourceKey in
+// src/engine/layers/gradient.js) and the first to build a CanvasGradient per
+// frame. A cache that one day outlived a document would show up here and
+// nowhere else.
+//
+// The two colour layers are deliberately translucent and over the pictures
+// rather than under them: a solid layer at full opacity fills all 320 x 200
+// and would hide every image pixel, which would narrow this test in the act of
+// widening it.
 const DOC = {
   name: 'Parity',
   description: 'preview and export must agree',
@@ -19,7 +35,23 @@ const DOC = {
   assets: { q: { kind: 'image', mime: 'image/png', data: QUADRANTS } },
   layers: [
     { id: 'a1', type: 'image', asset: 'q', fit: 'cover', motion: { kind: 'none' } },
-    { id: 'a2', type: 'image', asset: 'q', fit: 'stretch', opacity: 0.4, blend: 'screen', motion: { kind: 'none' } }
+    { id: 'a2', type: 'image', asset: 'q', fit: 'stretch', opacity: 0.4, blend: 'screen', motion: { kind: 'none' } },
+    {
+      id: 'a3', type: 'solid', color: '#2f7d5a', opacity: 0.35, blend: 'screen',
+      motions: [{ kind: 'none' }]
+    },
+    {
+      id: 'a4', type: 'gradient', shape: 'linear', angle: 35, opacity: 0.5, blend: 'screen',
+      // Three stops at uneven positions, so a ramp built even slightly
+      // differently on the two paths lands on different pixels rather than on
+      // a symmetry that hides the difference.
+      stops: [
+        { at: 0, color: '#ff0066' },
+        { at: 35, color: '#00b3ff' },
+        { at: 100, color: '#1b2430' }
+      ],
+      motions: [{ kind: 'none' }]
+    }
   ],
   controls: []
 };
