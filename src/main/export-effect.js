@@ -20,7 +20,6 @@ const EFFECT_EXTENSION = 'html';
 export const MAX_EFFECT_NAME_LENGTH = 100;
 
 /** Characters Windows refuses in a file name, plus every control character. */
-// eslint-disable-next-line no-control-regex
 const FORBIDDEN = /[\\/:*?"<>|\x00-\x1f]/g;
 
 /**

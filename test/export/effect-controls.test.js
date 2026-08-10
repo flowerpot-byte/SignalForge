@@ -3,9 +3,20 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { effectControls } from '../../src/export/effect-controls.js';
+import { buildEffectHtml } from '../../src/export/build-effect.js';
 import { normalizeDocument, MOTION_KINDS, FIT_MODES } from '../../src/engine/document.js';
 import { resolveBindingPath } from '../../src/engine/bind.js';
+import { runJobs } from '../harness/render.js';
+import { meanDifference, maxDifference, meanBrightness } from '../harness/pixels.js';
+
+// 4x4 PNG: red / green / blue / white quadrants — the same picture the other
+// export tests use. Four saturated, different colours are what makes a
+// saturation or a colour-cast change impossible to miss.
+const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
 
@@ -126,6 +137,51 @@ test('a layer with no motion still gets live motion controls, bound to a real en
   const motion = controls.find((c) => c.property === 'motion');
   assert.equal(motion.default, 'none');
   assert.notEqual(resolveBindingPath(prepared, motion.bind[0]), null);
+});
+
+test('the three colour controls actually change the picture, they are not just listed', async () => {
+  // A control that resolves on paper and moves nothing is the exact bug this
+  // project has already shipped once (see the regression guard in
+  // test/export/motion-control.test.js). These three are new to the exported
+  // effect, so they get the same treatment: render the real thing, set the
+  // control the way SignalRGB would, and require the pixels to move.
+  const doc = normalizeDocument({
+    name: 'ColourControls',
+    assets: { q: { kind: 'image', mime: 'image/png', data: QUADRANTS } },
+    // No motion, so any difference between the frames can only come from the
+    // control that was set, not from where the animation happened to be.
+    layers: [{ id: 'a1', type: 'image', asset: 'q', fit: 'cover', motions: [{ kind: 'none' }] }]
+  }).doc;
+  const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-colour-controls-'));
+  const file = join(dir, 'effect.html');
+  writeFileSync(file, buildEffectHtml({
+    doc: { ...doc, controls: effectControls(doc, 'a1') }, engineSource, lang: 'en'
+  }), 'utf8');
+
+  try {
+    const [untouched, grey, magenta, yellow] = await runJobs([
+      { name: 'untouched', kind: 'html', file, settleMs: 400 },
+      { name: 'saturation-0', kind: 'html', file, settleMs: 400, setGlobals: { saturation: 0 }, afterSetGlobalsMs: 100 },
+      { name: 'green-magenta', kind: 'html', file, settleMs: 400, setGlobals: { greenMagenta: 100 }, afterSetGlobalsMs: 100 },
+      { name: 'blue-yellow', kind: 'html', file, settleMs: 400, setGlobals: { blueYellow: -100 }, afterSetGlobalsMs: 100 }
+    ]);
+
+    assert.ok(meanBrightness(untouched.pixels) > 5, 'the untouched export is blank');
+    for (const [name, result] of [['saturation', grey], ['greenMagenta', magenta], ['blueYellow', yellow]]) {
+      assert.ok(
+        maxDifference(untouched.pixels, result.pixels) > 0,
+        `setting the ${name} control had no visible effect — it exists on paper but not in effect`
+      );
+      assert.ok(
+        meanDifference(untouched.pixels, result.pixels) > 1,
+        `expected a clearly visible change from ${name}, mean difference was only `
+          + `${meanDifference(untouched.pixels, result.pixels)}`
+      );
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 test('a document with no image layer still gets the document-wide controls', () => {
