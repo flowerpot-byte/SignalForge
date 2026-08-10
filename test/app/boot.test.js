@@ -21,11 +21,18 @@ const BG_BASE = /--bg-base:\s*([^;]+);/
   .exec(readFileSync(join(root, 'app', 'renderer', 'styles', 'tokens.css'), 'utf8'))[1].trim();
 
 test('the app boots, opens a window and exposes its bridge', async () => {
-  // SF_SELFTEST in the environment is what switches the self-test on, and the
-  // only thing that does — app/main.js never looks at argv.
-  const child = spawn(require_('electron'), [join(root, 'app', 'main.js')], {
+  // An Electron entry of its own (test/harness/selftest.js), which imports the
+  // real app/main.js and drives the window it opens from the outside — the
+  // same shape as test/harness/walkthrough.js. Running that file IS the
+  // signal; there is no environment variable to remember, and app/main.js
+  // carries no test code to switch on.
+  //
+  // The environment is passed on whole, and that matters: SF_EFFECTS_SANDBOX_REQUIRED
+  // and SF_SINGLE_INSTANCE_TEST are armed for the whole suite by the two
+  // --import scripts in package.json, and the child has to inherit both.
+  const child = spawn(require_('electron'), [join(root, 'test', 'harness', 'selftest.js')], {
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env, SF_SELFTEST: '1' }
+    env: { ...process.env }
   });
 
   let stdout = '';
@@ -221,7 +228,8 @@ test('the app boots, opens a window and exposes its bridge', async () => {
 
   // Save and open, driven by clicking the app's own footer buttons in the
   // real window. Only the two OS file dialogs are stubbed (see
-  // selfTestProjects in app/main.js) — a modal dialog would wait for a human.
+  // selfTestProjects in test/harness/selftest.js) — a modal dialog would wait
+  // for a human.
   assert.match(
     report.projectOpenedMessage,
     /seed\.sfx/,
