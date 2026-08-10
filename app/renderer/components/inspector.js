@@ -100,6 +100,30 @@ function entryIndexOf(path, list) {
 }
 
 /**
+ * Which motion kinds a layer's dropdowns may offer: the engine's own list for
+ * that type, widened by whatever the layer actually carries.
+ *
+ * The offer gives way, never the value — the same rule the sliders follow (see
+ * widenToInclude below) and the same one the exported effect's Motion dropdown
+ * follows (src/export/effect-controls.js). Without this a hand-written `drift`
+ * on a solid layer would be built from 'none'/'breathe' alone, `select.value =
+ * 'drift'` would match no option, and the dropdown would render BLANK: a
+ * control that shows nothing, and whose first touch would silently write some
+ * other kind into a document that said drift.
+ *
+ * Widened by every kind in the list, not only the first: field.js builds every
+ * row's dropdown from this one array, so a second entry the offer does not
+ * name would go blank exactly as the first would.
+ */
+function motionKindsWide(layer) {
+  const offered = motionKindsFor(layer.type);
+  const extra = layer.motions
+    .map((motion) => motion.kind)
+    .filter((kind, index, all) => !offered.includes(kind) && all.indexOf(kind) === index);
+  return extra.length === 0 ? offered : [...offered, ...extra];
+}
+
+/**
  * What the settings column should show, as plain data.
  *
  * Deliberately free of any DOM: which fields exist is arithmetic over the
@@ -190,7 +214,7 @@ export function describeInspector(doc, layerId) {
   if (layer && Array.isArray(layer.motions)) {
     fields.push({
       path: at, type: 'motions', section: 'motions',
-      labelKey: 'inspector.motions', values: [...motionKindsFor(layer.type)]
+      labelKey: 'inspector.motions', values: [...motionKindsWide(layer)]
     });
     layer.motions.forEach((_, i) => {
       fields.push({

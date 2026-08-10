@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeInspector, widenToInclude, SECTION_TITLES } from '../../app/renderer/components/inspector.js';
-import { normalizeDocument, FIT_MODES, MOTION_KINDS } from '../../src/engine/document.js';
+import {
+  normalizeDocument, FIT_MODES, MOTION_KINDS, SOLID_MOTION_KINDS
+} from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 import { CONTROL_RANGES } from '../../src/export/effect-controls.js';
 
@@ -115,6 +117,33 @@ test('the dropdowns offer exactly the values the engine accepts', () => {
   const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1');
   assert.deepEqual(fields.find((f) => f.path === 'layers.0.fit').values, [...FIT_MODES]);
   assert.deepEqual(fields.find((f) => f.type === 'motions').values, [...MOTION_KINDS]);
+});
+
+test('a solid layer is offered only the motions a flat colour can perform', () => {
+  const doc = normalizeDocument({ layers: [{ id: 'a1', type: 'solid', motions: [{ kind: 'breathe' }] }] }).doc;
+  const list = describeInspector(doc, 'a1').find((f) => f.type === 'motions');
+  assert.deepEqual(list.values, [...SOLID_MOTION_KINDS]);
+});
+
+test('a solid layer that carries a drift anyway keeps it: the offer widens, the value stands', () => {
+  // The same rule the sliders follow (widenToInclude) and the same one the
+  // exported effect follows (src/export/effect-controls.js). Without it the
+  // dropdown would be built from 'none'/'breathe', `select.value = 'drift'`
+  // would match no option, and the control would render BLANK — and its first
+  // touch would write some other kind into a document that said drift.
+  const doc = normalizeDocument({
+    layers: [{ id: 'a1', type: 'solid', motions: [{ kind: 'drift' }, { kind: 'breathe' }] }]
+  }).doc;
+  const list = describeInspector(doc, 'a1').find((f) => f.type === 'motions');
+  assert.ok(list.values.includes('drift'), 'a value outside its own options is not a choice');
+  // Widened, not replaced: what a solid can perform is still on offer.
+  for (const kind of SOLID_MOTION_KINDS) assert.ok(list.values.includes(kind), kind);
+  // And every kind the layer actually carries is named, not only the first —
+  // field.js builds EVERY row's dropdown from this one array.
+  for (const motion of doc.layers[0].motions) {
+    assert.ok(list.values.includes(motion.kind), `motion ${motion.kind} has no option to select`);
+  }
+  assert.equal(new Set(list.values).size, list.values.length, 'no kind may be offered twice');
 });
 
 test('the motion list is offered even when there are none, so one can be added', () => {
