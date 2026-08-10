@@ -115,10 +115,33 @@ const DRAW_SAMPLE = `(() => {
   return c.toDataURL('image/png');
 })()`;
 
+/**
+ * A picture with slack in it: 960 x 300, i.e. far wider than the 320 x 200
+ * frame, with one white bar to follow. On `cover` it is scaled to 640 x 200,
+ * so there are 320 canvas pixels the crop can actually travel — which is what
+ * the 1:1 check below needs and what the 16:10 picture above cannot give.
+ */
+const WIDE_SAMPLE = `(() => {
+  const c = document.createElement('canvas');
+  c.width = 960; c.height = 300;
+  const g = c.getContext('2d');
+  const bg = g.createLinearGradient(0, 0, 960, 0);
+  bg.addColorStop(0, '#123');
+  bg.addColorStop(1, '#514');
+  g.fillStyle = bg; g.fillRect(0, 0, 960, 300);
+  g.fillStyle = '#ffffff'; g.fillRect(470, 0, 20, 300);
+  return c.toDataURL('image/png');
+})()`;
+
 async function main() {
   const [win] = BrowserWindow.getAllWindows();
   const d = driver(win);
   const notes = {};
+
+  // Real mouse events go through the debugging protocol, which has to be
+  // attached before driver.drag() can send anything — the same line
+  // test/harness/unsaved.js and walkthrough.js open with.
+  await win.webContents.debugger.attach('1.3');
 
   await d.until(`document.getElementById('footer-export') !== null`, 'the window is built', 300);
   await d.js(PUMP);
@@ -235,6 +258,53 @@ async function main() {
     };
   })()`);
 
+  // ------------------------------------------ the crop drag, still 1:1
+  //
+  // LAST, and that is not tidiness: a crop drag leaves the document unsaved,
+  // and opening another project after it makes the app ask the question it is
+  // supposed to ask - a real, window-modal OS dialog that would sit here
+  // waiting for a human. So nothing follows it.
+  //
+  // The canvas's DISPLAY size changed in this pass (its backing store did not
+  // and never may — it is SF.CANVAS_WIDTH x SF.CANVAS_HEIGHT), and mountCrop
+  // converts screen pixels to canvas pixels through getBoundingClientRect().
+  // So the conversion is only right if it is measured at the size the canvas
+  // is actually drawn at, which is what this does: a real protocol mouse drag
+  // across a picture wide enough to have slack, and the white marker bar in
+  // the rendered frame read before and after.
+  //
+  // A picture of 960 x 300 into a 320 x 200 frame on `cover` is scaled to
+  // 640 x 200, i.e. 320 canvas pixels of horizontal slack — the earlier one is
+  // 16:10 like the frame itself and has none, which is why it cannot be used
+  // for this.
+  const wideUrl = await d.js(WIDE_SAMPLE);
+  const wide = normalizeDocument({
+    name: 'Crop Check',
+    layers: [{ id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] }],
+    assets: { image: { kind: 'image', mime: 'image/png', data: wideUrl.split(',')[1] } }
+  }).doc;
+  const wideFile = join(runDir, 'crop-check.sfx');
+  writeFileSync(wideFile, serializeProject(wide), 'utf8');
+  projectDialogs.open = async () => ({ canceled: false, filePaths: [wideFile] });
+  await d.clickAndWait('footer-open');
+  await d.js(`window.__sfPump(4)`);
+
+  const canvas = await d.box('#preview-canvas');
+  // Twenty canvas pixels, expressed in the screen pixels this canvas is
+  // currently drawn at.
+  const perCanvasPixel = canvas.width / 320;
+  const before = (await d.stats()).brightestColumn;
+  await d.drag(canvas.cx, canvas.cy, canvas.cx - 20 * perCanvasPixel, canvas.cy);
+  await d.js(`window.__sfPump(4)`);
+  const after = (await d.stats()).brightestColumn;
+  notes.crop = {
+    cssPixelsPerCanvasPixel: Number(perCanvasPixel.toFixed(4)),
+    draggedCanvasPixels: -20,
+    markerBefore: before,
+    markerAfter: after,
+    movedCanvasPixels: after - before
+  };
+  await shot('12-crop-dragged-1to1');
   process.stdout.write(`${JSON.stringify(notes)}\n`);
   app.exit(0);
 }
