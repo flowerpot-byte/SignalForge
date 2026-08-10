@@ -106,6 +106,27 @@
      accent now appears where it means something: the one filled button, the
      focus ring, the live drop target, and the slider actually being moved.
      A neutral fill also stops a bipolar control (-100..100, resting in the
-     middle) from looking half full of accent when its value is zero. */
+     middle) from looking half full of accent when its value is zero.
+
+     Recolouring the fill was never the same thing as erasing it: the track
+     was, and stays, two visibly different tones, so where six sliders stand
+     can still be read at a glance without reading six numbers — that is the
+     whole reason this value paints only PART of the track (see --sf-fill in
+     field.js and the gradient in app.css). What changed here is only which
+     colour that part is. */
   --track-fill:     rgba(255, 255, 255, 0.58);
+
+  /* The unfilled remainder of a slider's track, i.e. the part var(--sf-fill)
+     has not reached yet. It used to borrow --glass-stroke, whose own job is
+     the STATE stroke an edge takes on hover (see --hairline above) — a
+     slider's resting track is neither an edge nor a hover state, it just
+     happened to want the same number. A dedicated token says that on
+     purpose instead of by coincidence, so a future change to hover borders
+     cannot quietly dim or brighten every slider in the window.
+     Value unchanged from the --glass-stroke it replaces: measured against
+     --track-fill in the real window, filled vs. unfilled comes out at
+     4.78:1 (rgb(157,157,159) vs rgb(49,49,54), sampled from a running
+     slider at 68% — see .superpowers/sdd/redesign-report.md, fourth pass),
+     comfortably past the 3:1 floor for a UI-component boundary. */
+  --track-empty:    rgba(255, 255, 255, 0.12);
 }

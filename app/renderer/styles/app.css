@@ -570,13 +570,17 @@ button.accent-outline:hover { background: var(--accent-soft); border-color: var(
 
 /* The sliders. The filled part of the track is drawn here rather than left to
    the browser's own accent-color: --sf-fill is set by field.js on every input
-   event, so how far along the value is can be seen without reading the
-   number.
+   event AND on every fresh mount (dragging, an arrow key, a project opened,
+   a language switch that redraws the column) so how far along the value is
+   can always be seen without reading the number.
    The fill is neutral (--track-fill), not the accent — see tokens.css: six
    sliders filled with one bright colour was the single loudest thing in the
    window and made the whole interface read as "dark plus one accent". The
    accent comes back on the thumb the moment the slider is actually being
-   moved, which is the one moment it says something. */
+   moved, which is the one moment it says something.
+   The remainder is --track-empty, its own token rather than a reuse of
+   --glass-stroke — see tokens.css for why and for the measured contrast
+   between the two. */
 input[type="range"] {
   grid-column: 1 / -1;
   -webkit-appearance: none;
@@ -593,7 +597,7 @@ input[type="range"]::-webkit-slider-runnable-track {
   background: linear-gradient(
     to right,
     var(--track-fill) 0 var(--sf-fill, 0%),
-    var(--glass-stroke) var(--sf-fill, 0%) 100%
+    var(--track-empty) var(--sf-fill, 0%) 100%
   );
 }
 input[type="range"]::-webkit-slider-thumb {

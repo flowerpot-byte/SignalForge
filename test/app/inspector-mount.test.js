@@ -4,6 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountInspector } from '../../app/renderer/components/inspector.js';
+import { fillPercent } from '../../app/renderer/components/field.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 
@@ -279,4 +280,71 @@ test('a slider still neither redraws nor reports', async () => {
 
   assert.deepEqual(changes, [['brightness', 60]]);
   assert.deepEqual(errors, []);
+});
+
+// The filled part of a slider's track is painted from a CSS custom property
+// (--sf-fill) that field.js sets, not from anything the browser tracks on
+// its own — see styles/app.css and styles/tokens.css (--track-fill /
+// --track-empty). That only does anyone any good if it is kept in step with
+// the value on every path a value can change through. This test is
+// falsifiable on purpose: comment out the `paint(input.value)` call in
+// field.js's 'input' listener, or the `paint(value)` call at slider
+// construction, and one of the two assertions below fails.
+test('the fill custom property tracks the value, driven by an arrow-key-style input event', async () => {
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  mountInspector(container, { t, getDocument: docWithMotion, onChange: () => {}, onError: () => {} });
+
+  const slider = byId(container, 'sf-brightness');
+  // brightness offers 5..100 (see CONTROL_RANGES); this is the same event a
+  // real ArrowLeft/ArrowRight press fires on a range input, distinct from a
+  // drag only in how the value got set, not in which event follows it.
+  slider.value = '62';
+  slider.fire('input');
+
+  assert.equal(
+    slider.style.properties['--sf-fill'],
+    `${fillPercent({ min: 5, max: 100 }, 62)}%`,
+    '--sf-fill must move to match the value an arrow key just set'
+  );
+});
+
+test('the fill custom property is set correctly by a redraw, not only by a live drag', () => {
+  // Stands in for the two real callers of inspector.refresh() that are not a
+  // drag: opening a saved project (app/renderer/main.js, after
+  // preview.setDocument) and switching the language (applyLanguage). Both
+  // throw the whole settings column away and rebuild it from whatever the
+  // document says right now — so a slider that only painted itself in
+  // response to its own 'input' event would come back on screen showing the
+  // old value's fill next to the new value's number.
+  let brightness = 12;
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  const doc = () => ({
+    ...docWithMotion(),
+    // Only brightness needs to move for this test; everything else about
+    // the document is the fixture's normal shape.
+    brightness
+  });
+
+  const inspector = mountInspector(container, { t, getDocument: doc, onChange: () => {}, onError: () => {} });
+  assert.equal(
+    byId(container, 'sf-brightness').style.properties['--sf-fill'],
+    `${fillPercent({ min: 5, max: 100 }, 12)}%`,
+    'the first paint must match the first document'
+  );
+
+  // Nothing dragged this slider; the document underneath it changed and the
+  // column was told to redraw, exactly as a freshly opened project or a
+  // language switch does.
+  brightness = 91;
+  inspector.refresh();
+
+  assert.equal(
+    byId(container, 'sf-brightness').style.properties['--sf-fill'],
+    `${fillPercent({ min: 5, max: 100 }, 91)}%`,
+    'a redraw must paint the fill for the NEW value, not leave the old fill standing'
+  );
 });
