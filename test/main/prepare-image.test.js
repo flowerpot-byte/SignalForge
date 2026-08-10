@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prepareImageFile, resolveElectronBin } from '../../src/main/prepare-image.js';
+import { ENGINE_HOST, prepareImageFile, resolveElectronBin } from '../../src/main/prepare-image.js';
 
 // A 60x20 solid blue PNG. Verified real, not a placeholder.
 const BLUE_60x20 = 'iVBORw0KGgoAAAANSUhEUgAAADwAAAAUCAIAAABeYcl+AAAAKklEQVR42u3OAQ0AAAgDoGv/zlpDN0hAJZNvOg9JS0tLS0tLS0tLS0vftzy0ASdQ1Ru5AAAAAElFTkSuQmCC';
@@ -94,4 +94,68 @@ test('a timeout shorter than any real Electron launch rejects instead of hanging
     rmSync(isolatedTmp, { recursive: true, force: true });
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+/**
+ * The packaged app's own trap, and the fix for it.
+ *
+ * `electron <script>` runs that script — in a development checkout. A packaged
+ * executable ignores the argument and always loads its own bundled main entry,
+ * which was measured against `release/win-unpacked/SignalForge.exe`: given the
+ * runner's path it booted app/main.js instead and wrote nothing. So spawning
+ * `process.execPath` from inside the installed app would have started a second
+ * copy of SignalForge for every picture a user imported, and every import would
+ * have failed. A process that IS Electron already has a canvas; it uses it.
+ */
+test('inside Electron the image is prepared here, without spawning anything', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-prepare-inproc-'));
+  const image = join(dir, 'blue.png');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    let asked = null;
+    const asset = await prepareImageFile(image, { fit: 'cover' }, {
+      inElectron: true,
+      inProcess: async (request) => { asked = request; return { kind: 'image', data: 'prepared' }; },
+      // Short enough that a spawn, if one happened after all, could not
+      // possibly finish first and hide the mistake.
+      timeoutMs: 1
+    });
+
+    assert.deepEqual(asset, { kind: 'image', data: 'prepared' });
+    assert.deepEqual(asked.options, { fit: 'cover' }, 'the options must be handed straight through');
+    assert.match(asked.dataUrl, /^data:image\/png;base64,/, 'and so must the picture, as a data URL');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('outside Electron it still spawns, because a plain Node process has no canvas', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-prepare-spawn-'));
+  const image = join(dir, 'blue.png');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    // The in-process route would have returned this value; the spawn route
+    // cannot finish inside 1ms and rejects. Which error arrives is the answer.
+    await assert.rejects(
+      () => prepareImageFile(image, {}, {
+        inElectron: false,
+        inProcess: async () => ({ kind: 'image', data: 'prepared here after all' }),
+        timeoutMs: 1
+      }),
+      /timed out after 1ms/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * The engine host is found relative to this module, not to a working directory
+ * or to a repo root: inside a packaged app the whole tree lives in an asar
+ * archive, and a path built any other way points outside it.
+ */
+test('the engine host sits beside the module that loads it', () => {
+  assert.equal(ENGINE_HOST, join(import.meta.dirname, '..', '..', 'src', 'main', 'engine-host.html'));
 });

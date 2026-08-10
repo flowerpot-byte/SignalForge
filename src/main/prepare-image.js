@@ -9,7 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 
 const require_ = createRequire(import.meta.url);
-const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
+const here = dirname(fileURLToPath(import.meta.url));
+const root = dirname(dirname(here));
+
+/**
+ * The page a canvas lives in — the same one src/main/prepare-image-runner.cjs
+ * loads, because it is the same work.
+ */
+export const ENGINE_HOST = join(here, 'engine-host.html');
 
 /**
  * The path to the Electron binary to spawn as the helper process.
@@ -30,6 +37,11 @@ const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
  * is exactly what a helper process should also run. `versions`/`execPath`/
  * `requireElectron` are injectable so this can be proven for both contexts
  * without actually needing to run inside one.
+ *
+ * Since prepareImageInProcess exists, a caller that is already inside Electron
+ * never reaches the spawn at all, so the first branch below is a safety net
+ * rather than a live path — it stays because the alternative is a function that
+ * is right only as long as nobody calls it from the wrong place again.
  */
 export function resolveElectronBin(
   { versions = process.versions, execPath = process.execPath, requireElectron = () => require_('electron') } = {}
@@ -56,15 +68,63 @@ const MIME_BY_EXTENSION = {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
- * Prepare an image file for embedding, using the very same engine code the
- * app uses. Runs it inside Electron because that is where a canvas exists.
+ * Prepare the asset in THIS process, in a window nobody ever sees.
+ *
+ * Why this exists at all: the spawn below runs a second Electron and hands it
+ * a script to run, which is exactly what `electron <script>` does — in a
+ * development checkout. A PACKAGED app ignores that argument entirely. Its
+ * executable always loads its own bundled main entry, so spawning it would
+ * start a second copy of SignalForge (measured: it boots app/main.js and never
+ * looks at argv[1]), which then quits against the single-instance lock without
+ * ever writing the asset file. Every dropped or picked picture in the
+ * installed app would have failed.
+ *
+ * There is nothing to spawn for, though, whenever the caller is already
+ * running inside Electron — app/main.js's import handler always is. A canvas
+ * exists here; use it. `bin/sfexport.js`, which runs under plain Node, still
+ * goes the long way round.
+ *
+ * `createWindow` is injectable so the choice above can be proven from a plain
+ * Node test, which cannot construct a BrowserWindow at all.
  */
-export async function prepareImageFile(imagePath, options = {}, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export async function prepareImageInProcess({ dataUrl, options }, {
+  createWindow = () => new (require_('electron').BrowserWindow)({
+    show: false, webPreferences: { backgroundThrottling: false }
+  }),
+  hostFile = ENGINE_HOST
+} = {}) {
+  const win = createWindow();
+  try {
+    await win.loadFile(hostFile);
+    return await win.webContents.executeJavaScript(
+      `window.SignalForgeEngine.prepareImageAsset(${JSON.stringify(dataUrl)}, `
+      + `${JSON.stringify(options)})`
+    );
+  } finally {
+    // destroy(), not close(): close() is a request the page could in principle
+    // delay, and nothing here has anything to save.
+    win.destroy();
+  }
+}
+
+/**
+ * Prepare an image file for embedding, using the very same engine code the
+ * app uses. Runs it inside Electron because that is where a canvas exists —
+ * this one when this process is already Electron, a spawned one when it is not.
+ */
+export async function prepareImageFile(imagePath, options = {}, {
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  inElectron = Boolean(process.versions.electron),
+  inProcess = prepareImageInProcess
+} = {}) {
   const extension = extname(imagePath).toLowerCase();
   const mime = MIME_BY_EXTENSION[extension];
   if (!mime) throw new Error(`unsupported image type: ${extension || '(none)'}`);
 
   const dataUrl = `data:${mime};base64,${readFileSync(imagePath).toString('base64')}`;
+
+  if (inElectron) return inProcess({ dataUrl, options });
+
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-prepare-'));
   const requestFile = join(dir, 'request.json');
   const outFile = join(dir, 'asset.json');
