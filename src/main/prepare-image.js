@@ -11,6 +11,34 @@ import { createRequire } from 'node:module';
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
 
+/**
+ * The path to the Electron binary to spawn as the helper process.
+ *
+ * `require('electron')` is not stable across callers: run under plain
+ * Node.js (the test suite, bin/sfexport.js) the "electron" npm package
+ * resolves to a string — the path to the electron executable. But when this
+ * very module is loaded *inside* a running Electron main process (as
+ * app/main.js does for the drag-and-drop import), Electron's own require
+ * hook shadows that package with its built-in API namespace object instead,
+ * so `require('electron')` there returns `{ app, BrowserWindow, ... }`, not
+ * a path. Handing that object to `spawn()` as the command fails with
+ * "The \"file\" argument must be of type string" — a failure no test caught
+ * because none of them called prepareImageFile from inside a live Electron
+ * process; a real drag-and-drop through the built app did.
+ * `versions.electron` is only set when the current process actually is
+ * Electron, in which case `execPath` is the very binary already running and
+ * is exactly what a helper process should also run. `versions`/`execPath`/
+ * `requireElectron` are injectable so this can be proven for both contexts
+ * without actually needing to run inside one.
+ */
+export function resolveElectronBin(
+  { versions = process.versions, execPath = process.execPath, requireElectron = () => require_('electron') } = {}
+) {
+  return versions.electron ? execPath : requireElectron();
+}
+
+const electronBin = resolveElectronBin();
+
 const MIME_BY_EXTENSION = {
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
@@ -44,7 +72,7 @@ export async function prepareImageFile(imagePath, options = {}, { timeoutMs = DE
 
   try {
     await new Promise((resolve, reject) => {
-      const child = spawn(require_('electron'), [
+      const child = spawn(electronBin, [
         join(root, 'src', 'main', 'prepare-image-runner.cjs'), requestFile, outFile
       ], { stdio: ['ignore', 'ignore', 'pipe'] });
       let stderr = '';

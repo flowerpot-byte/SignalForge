@@ -6,10 +6,36 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { prepareImageFile } from '../../src/main/prepare-image.js';
+import { prepareImageFile, resolveElectronBin } from '../../src/main/prepare-image.js';
 
 // A 60x20 solid blue PNG. Verified real, not a placeholder.
 const BLUE_60x20 = 'iVBORw0KGgoAAAANSUhEUgAAADwAAAAUCAIAAABeYcl+AAAAKklEQVR42u3OAQ0AAAgDoGv/zlpDN0hAJZNvOg9JS0tLS0tLS0tLS0vftzy0ASdQ1Ru5AAAAAElFTkSuQmCC';
+
+// Regression test for a bug a real drag-and-drop through the built app
+// found (see docs/superpowers/sdd/task-7-report.md): require('electron')
+// returns a path string under plain Node.js but the Electron API namespace
+// object under the real Electron runtime, because Electron's own require
+// hook shadows the npm package. Handing that object to child_process.spawn()
+// as the command crashes with "The \"file\" argument must be of type
+// string" — invisible to every test that only ever ran prepareImageFile
+// from plain Node, exactly as the rest of this file does.
+test('resolves the running Electron binary itself when already inside Electron', () => {
+  const bin = resolveElectronBin({
+    versions: { electron: '43.3.0' },
+    execPath: 'C:\\fake\\electron.exe',
+    requireElectron: () => { throw new Error('must not call require("electron") inside Electron'); }
+  });
+  assert.equal(bin, 'C:\\fake\\electron.exe');
+});
+
+test('falls back to the "electron" package path when not running inside Electron', () => {
+  const bin = resolveElectronBin({
+    versions: {},
+    execPath: 'C:\\fake\\node.exe',
+    requireElectron: () => 'C:\\fake\\node_modules\\electron\\dist\\electron.exe'
+  });
+  assert.equal(bin, 'C:\\fake\\node_modules\\electron\\dist\\electron.exe');
+});
 
 test('a timeout shorter than any real Electron launch rejects instead of hanging', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-prepare-timeout-'));
