@@ -46,4 +46,66 @@
   /* The small radius, for controls. It was written as a bare 10px in five
      places in app.css; the same number in one place is the system. */
   --radius-sm:      10px;
+
+  /* ---------------------------------------------------------------------
+     Type. Two stacks, so both live in one place instead of one of them
+     being a string buried in app.css.
+
+     Neither downloads anything: every family named here already ships with
+     Windows, which is why this pass needs no font-src in the CSP and no
+     font file in the repository. The UI stack is the system's own, which on
+     a desktop tool is the right answer rather than a lazy one — the window
+     should look like the operating system it lives in.
+
+     The mono stack is for DATA only: the 320 x 200 chip, the compute-load
+     readout, and every slider's number. A tool that deals in dimensions,
+     milliseconds and percentages should set its figures like an instrument
+     and its prose like prose; setting both in the same face threw that
+     distinction away. Never for labels, buttons or sentences.
+     "Cascadia Mono" ships with Windows 11 (and with every Windows Terminal
+     install); Consolas is the fallback on anything older, and ui-monospace
+     the one after that. */
+  --font-ui:        "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono:      "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  /* ---------------------------------------------------------------------
+     Two strokes, and the difference between them is the point.
+
+     --hairline draws a box that is merely THERE: the panels, the rules
+     under the headings, the resting edge of a control. At 0.12 every one of
+     those edges had the same weight as an edge that meant something, so the
+     window read as a stack of boxes all shouting equally. A hairline is
+     structure; it should be felt rather than seen.
+
+     --glass-stroke keeps the old 0.12 and becomes the STATE stroke: what an
+     edge goes to when a control is under the pointer. Anything stronger
+     than that is the accent (focus, the live drop target, the one filled
+     button), which is a colour rather than a weight. */
+  --hairline:       rgba(255, 255, 255, 0.08);
+
+  /* ---------------------------------------------------------------------
+     Elevation, in four steps and no more.
+
+       page    --bg-base, with the picture's colours washed across it
+       panel   --panel-fill, dark glass over that wash
+       well    --well-fill, a recess IN a panel: the preview frame, and the
+               group of controls that make up one motion
+       control --glass-fill, the only thing that is raised
+
+     A recess rather than a fifth barely-lighter grey, deliberately: going
+     down is a direction the eye reads instantly, it needs no border to be
+     legible (so the motion cards lose theirs), and it puts the raised
+     controls in front of something darker instead of something almost the
+     same. It also cannot cost contrast — everything on it gets darker. */
+  --well-fill:      rgba(0, 0, 0, 0.22);
+
+  /* The filled part of a slider's track.
+     It used to be --accent, and with six sliders in the column that made a
+     row of bright pink bars the loudest thing in the window — the "dark
+     theme carried by one accent colour" read, stated six times over. The
+     accent now appears where it means something: the one filled button, the
+     focus ring, the live drop target, and the slider actually being moved.
+     A neutral fill also stops a bipolar control (-100..100, resting in the
+     middle) from looking half full of accent when its value is zero. */
+  --track-fill:     rgba(255, 255, 255, 0.58);
 }
