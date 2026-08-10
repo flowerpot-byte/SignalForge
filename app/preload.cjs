@@ -34,6 +34,12 @@ contextBridge.exposeInMainWorld('sf', {
   // and sf:openProject cannot be turned into "read anything".
   saveProject: (doc) => ipcRenderer.invoke('sf:saveProject', doc),
   openProject: () => ipcRenderer.invoke('sf:openProject'),
+  // The question asked before unsaved work is thrown away. Only words travel
+  // out — the window knows the language, the main process owns the dialog —
+  // and one of 'save' | 'discard' | 'cancel' comes back. Nothing here names a
+  // file either: whether anything is opened at all is still decided by the
+  // window, and by which file, still only by the dialog sf:openProject opens.
+  confirmDiscard: (texts) => ipcRenderer.invoke('sf:confirmDiscard', texts),
   // And the same rule again for the export: a document goes out, a result
   // comes back. `options` carries one thing only — whether the user has
   // answered "yes, overwrite it" — so there is nowhere here for a renderer

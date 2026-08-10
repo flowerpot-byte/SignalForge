@@ -249,6 +249,78 @@ function projectDialogOptions(fileName) {
   };
 }
 
+/**
+ * The three ways out of the unsaved-changes question, in the order their
+ * buttons appear.
+ *
+ * Exported because a harness that stubs the question below has to be able to
+ * answer it by ROLE rather than by a number typed out a second time: an
+ * answer given as `DISCARD_ANSWERS.indexOf('cancel')` still means "cancel"
+ * after somebody reorders the buttons, and a hard-coded 2 quietly starts
+ * meaning something else.
+ */
+export const DISCARD_ANSWERS = Object.freeze(['save', 'discard', 'cancel']);
+
+/**
+ * The question that stands between a user's unsaved work and the thing that
+ * would throw it away, behind the same kind of seam as the three dialogs
+ * above and for the same reason: an automated check that opened a real one
+ * would sit there until a human clicked something.
+ */
+export const discardDialog = {
+  ask: (win, options) => (win ? dialog.showMessageBox(win, options) : dialog.showMessageBox(options))
+};
+
+/**
+ * Ask before unsaved work is thrown away.
+ *
+ * Deliberately a native, window-modal message box rather than a panel in the
+ * window, which is otherwise this project's register (the first-start question
+ * is a panel on purpose, and the export's overwrite question is a button on
+ * the one line of feedback). Three reasons, in order of weight:
+ *
+ *  - It has to block. A panel the user can ignore while carrying on editing
+ *    is a question whose answer is out of date by the time it is given; this
+ *    one stands in front of an action that destroys work.
+ *  - It is the second half of a pair. Pressing "open project" already leads
+ *    to a modal OS file dialog, so asking here keeps one gesture in one
+ *    register instead of switching between a panel and an OS window.
+ *  - The renderer must not become the place where destructive choices are
+ *    styled — and, practically, this window's visuals are about to be rebuilt,
+ *    so a question that lives entirely out here survives that untouched.
+ *
+ * Every word of it comes from the window, which is where the language lives
+ * (app/renderer/i18n/{de,en}.json). Nothing is spelled out here in either
+ * language; a missing label is a bug in the window and is refused as one,
+ * which fails safe — the renderer's guard turns the rejection into its
+ * visible line and the project stays open.
+ */
+ipcMain.handle('sf:confirmDiscard', async (event, texts) => {
+  const buttons = DISCARD_ANSWERS.map((answer) => String(texts?.[answer] ?? '').trim());
+  if (buttons.some((label) => label === '')) {
+    throw new Error('the unsaved-changes question needs a label for each of its three answers');
+  }
+  // Cancel is what Escape does, what closing the dialog does, and what a
+  // reflex press of Enter does: the only answer that changes nothing is the
+  // only one that can happen by accident.
+  const cancel = DISCARD_ANSWERS.indexOf('cancel');
+  const { response } = await discardDialog.ask(BrowserWindow.fromWebContents(event.sender), {
+    type: 'warning',
+    buttons,
+    defaultId: cancel,
+    cancelId: cancel,
+    // Windows would otherwise turn three buttons into command links, which
+    // reads as a wizard rather than as a question with three answers.
+    noLink: true,
+    title: String(texts?.title ?? ''),
+    message: String(texts?.title ?? ''),
+    detail: String(texts?.body ?? '')
+  });
+  // An out-of-range answer can only come from a stub; treat anything
+  // unrecognised as the safe one rather than as permission to discard.
+  return DISCARD_ANSWERS[response] ?? 'cancel';
+});
+
 // Like sf:importImage, both project handlers report failure as a value
 // rather than a rejection: an ipcMain.handle rejection reaches the renderer
 // with its message stripped, and "this file could not be read as a
