@@ -337,7 +337,17 @@ Pfeil-links).
   10.08.2026.** Die Vorschau-Leinwand ist eine Station in der Tabulator-Reihenfolge, sobald es
   etwas zu verschieben gibt, und die Pfeiltasten verschieben den Ausschnitt in derselben
   Richtung wie die Maus. Belege stehen oben bei Punkt 11. **Damit ist die App vollständig mit
-  der Tastatur bedienbar** — das war die einzige Lücke.
+  der Tastatur bedienbar (mit den beiden Einschränkungen unten)** — das war die einzige
+  bekannte Lücke.
+- **Kein Vorleseprogramm hat das Fenster geprüft.** `role="application"` auf der
+  Vorschau-Leinwand ist begründet (siehe Punkt 11 oben), aber nicht mit NVDA oder der
+  Windows-Sprachausgabe (Narrator) ausprobiert. Seit dem Nachtrag liest die Leinwand nach jedem
+  Pfeildruck eine Positionsangabe vor (eine unsichtbare `aria-live`-Zeile); ob sich das mit
+  einem echten Vorleseprogramm auch so anhört wie beabsichtigt, ist damit noch nicht geprüft.
+- **Sehende Tastaturnutzer bekommen keinen sichtbaren Hinweis**, dass sich der Ausschnitt
+  überhaupt mit der Tastatur verschieben lässt — man findet es nur durch Ausprobieren. Ein Satz
+  in der Vorschauspalte oder ein kleines Tastensymbol wären beide vertretbar, das ist aber eine
+  Gestaltungsentscheidung, die bewusst Max überlassen bleibt.
 - **Der Fokusring und der Rahmen des Hauptknopfes haben dieselbe Farbe.** „In SignalRGB
   speichern" trägt von sich aus einen Rahmen in der Akzentfarbe; der Fokusring ist derselbe Ton,
   nur kräftiger und mit Abstand. Unterscheidbar, aber im ersten Moment ähnlich.
