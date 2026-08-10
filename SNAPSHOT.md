@@ -43,21 +43,31 @@ Nothing is running in the background. The loopback probe server on port 47821 wa
 - **An own lighting application on top of OpenRGB was considered and deliberately deferred**, at Max' decision on 2026-08-09: he wants a finished effect builder in reasonable time first. Findings and effort estimate are preserved in section 9b of the specification. Do not reopen it unless Max raises it.
 - **Licence GPLv3, code and commits in English, docs in German, interface bilingual.** Name SignalForge chosen by Max after being told it sits close to the SignalRGB trademark.
 
+## Since build plan 2 (10.08.2026)
+
+Max said three times that the window looked cheap, then: *"vergiss glass morphism aber designe es genauso wie signal rgb"*, plus too much blank space and missing icons. Also: no way to make an effect without a picture, and he could not find SignalForge in Windows search.
+
+- **The window was rebuilt in SignalRGB's own visual language.** Glassmorphism is gone. The colours were **measured** off a real screenshot of SignalRGB's Customize screen — `docs/erkenntnisse-signalrgb-oberflaeche.md` records the sample points. Icon sidebar, near-black neutral background, card per control group, transport-style bottom bar, hand-drawn inline SVG icons (no icon library, no download).
+- **Effects without a picture:** `solid` and `gradient` layer types. Radial is a *field* of `gradient`, not a second type — only a field can be switched from SignalRGB's own panel. The starting gallery renders each tile from the very defaults the tile creates; a test fails if a tile ever shows something the click does not build.
+- **Packaged as a real Windows app.** `npm run dist` → `release/SignalForge-Setup-0.1.0.exe`, per-user, **no administrator prompt**, Start-menu entry, own icon from the app's own mark. Not installed — that is Max' decision. Unsigned, so SmartScreen will warn.
+- **JPEG instead of PNG** for opaque pictures: his effect went 169.2 KB → 48.3 KB.
+- Crop by keyboard, an unsaved-changes question, and `requestSingleInstanceLock` all landed.
+
+**No visible windows.** Max complained that windows kept popping up — those were verification runs. Every harness now opens `BrowserWindow({ show: false })` and uses `capturePage()`. `npm test` shows no window (measured with a Win32 window watcher across three runs). Two facts worth keeping: `requestAnimationFrame` does not tick in a hidden window (drive frames from outside), and a hidden window needs **two** `capturePage()` calls or the canvas comes out blank.
+
+- Build the installer: `npm run dist` (runs `build:engine` first).
+- The one check that needs a visible window is opt-in: `npm run test:import` (Chromium's drag pipeline refuses a hidden window). It reports itself as skipped in a normal run rather than passing quietly.
+
 ## Waiting on Max
 
-Build plan 2 is finished. What is open is his, not the code's:
-
-1. **His own acceptance run** — Task 12 Step 4. `npm start`, drop a picture, move the crop, build an effect, export it, look at it in SignalRGB. The four questions are in `docs/abnahme-app.md`, section left blank on purpose. Nobody may fill it in for him.
-2. **Negative-minimum controls in SignalRGB are unmeasured.** `greenMagenta` and `blueYellow` are the first controls this project ships with a `min` below zero. When he opens the exported effect in SignalRGB, look at whether those two sliders really offer −100..100.
-3. **German UI without umlauts.** `app/renderer/i18n/de.json` says "Fuellen", "Staerke", "Gruen/Magenta" because the plan authored it that way. The ASCII-only rule binds *exported effect control labels* (`build-effect.js` throws otherwise) — **not** the app's own interface. Changing them is safe; only `test/app/boot.test.js` matches on two of those words. His call.
+1. **His verdict on the design.** He is the criterion; it has been rebuilt four times against his words.
+2. **His own acceptance run** — `docs/abnahme-app.md`, section left blank on purpose. Nobody may fill it in for him.
+3. **The thumbnail probe is still in his effects folder** — `SF Probe Mit Bild.html/.png` and `SF Probe Ohne Bild.html`, placed with his approval. One look at SignalRGB's effect list answers whether custom cover images are possible at all. **Remove all three as soon as he has looked.**
+4. **`appId` is a guess:** `de.maxblu.signalforge`. Settle it before the first real install; it is hard to change afterwards.
+5. **Unmeasured in SignalRGB itself:** `type="color"`, the `shape` combobox, and the two negative-minimum sliders (`greenMagenta`, `blueYellow`, −100..100 — the first of their kind this project ships).
 
 ## Deliberately deferred, with reasons
 
-- **The crop cannot be moved by keyboard** — the preview canvas is not in the tab order. Everything else in the window is keyboard-complete, so this is the single hole. Roughly `tabindex="0"` plus arrow keys calling the same `offsetFromDrag`.
-- **No unsaved-changes guard when opening a project.** The two open paths that can destroy a file are already safe; this is the one that succeeds and still loses work. Behaviour Max should choose.
-- **No `requestSingleInstanceLock`** — two windows share one `settings.json` and one effects folder, last writer wins.
-- Build plan 3 material, listed in the plan's own self-check: several layers on top of each other, gradient and shape layers, video as an image sequence, own cover images, JPEG instead of PNG, installer.
-
-## Next work, if nobody says otherwise
-
-Section 9c of `docs/entwurf-2026-08-09.md` — own cover images, JPEG instead of PNG, several layers. Smallest provable things first.
+- **A visible-window pass is owed.** The colour dialog end to end, Tab order through the rebuilt window, the canvas focus ring, the `aria-live` crop announcement with a real screen reader, drag-and-drop, and `test/harness/walkthrough.js` were all left unverified *because opening a window was forbidden*. The full list is in the whole-diff review (`.superpowers/sdd/`). Run it when Max is away from the machine.
+- **The first thing to try on the installed copy: drop a picture.** `prepare-image.js`'s default window factory has only ever run from a source checkout — every test injects its own. The `process.execPath` trap in that same file would have broken every import once installed and was caught only by testing the packaged build.
+- Build plan 3 material: several layers on top of each other, shape layers, video as an image sequence, own cover images.
