@@ -5,6 +5,14 @@
 const clamp = (value, lo, hi) => (value < lo ? lo : value > hi ? hi : value);
 
 /**
+ * Turn one offset component into "how far along the axis", as a percentage,
+ * 0 at one edge and 100 at the other. offset runs -1..+1 across the whole
+ * croppable span, so this is just a rescale — it is what the keyboard
+ * announcement below reads out to describe where the crop window sits.
+ */
+const percentAlong = (value) => Math.round(((value + 1) / 2) * 100);
+
+/**
  * Turn a drag in canvas pixels into a new crop offset.
  *
  * The picture follows the pointer, so dragging right must move the crop
@@ -148,12 +156,20 @@ export function cropSlack({ sourceWidth, sourceHeight, canvasWidth, canvasHeight
  * key straight back so this module stays usable — and testable — without the
  * language files.
  *
+ * `announce(message)` is where an arrow-key press's result goes for a screen
+ * reader to read out — see announceMove() below for why this exists and what
+ * it says. It defaults to a no-op, again so this module needs no DOM (and no
+ * caller-supplied element) to be testable. The caller owns the actual
+ * live-region element because crop.js otherwise has no reason to touch
+ * `document` at all; every other DOM object it deals with is `canvas` itself,
+ * handed in by the caller the same way.
+ *
  * Returns `{ refresh }`. Whether there is anything to move at all depends on
  * the picture and on the fit mode, and both can change long after this ran;
  * the caller says so by calling refresh(). A language switch is the third
  * reason to call it, because the accessible name is a translated string.
  */
-export function mountCrop(canvas, { getLayer, onChange, t = (key) => key }) {
+export function mountCrop(canvas, { getLayer, onChange, t = (key) => key, announce = () => {} }) {
   let drag = null;
   /** What the canvas is currently telling assistive technology, so that the
    *  attributes are only rewritten when the answer actually changes rather
@@ -273,6 +289,38 @@ export function mountCrop(canvas, { getLayer, onChange, t = (key) => key }) {
   canvas.addEventListener('pointercancel', endDrag);
 
   /**
+   * Tell a screen reader what an arrow-key press just did.
+   *
+   * `role="application"` (see syncAffordance() above) takes the canvas out of
+   * the reader's own navigation, so without this an arrow press is not just
+   * unannounced — it is completely silent to anyone not looking at the
+   * screen, which is the one thing a control that swallows the keyboard must
+   * never be.
+   *
+   * `before` and `after` are the offset the press started and ended at. When
+   * they come out equal the press was swallowed (its axis has slack) but
+   * changed nothing, because the crop window was already sitting at that
+   * edge — that gets its own message rather than repeating a position that
+   * did not move, so the edge is not mistaken for a press that did nothing.
+   *
+   * Only ever called from the keydown handler below, i.e. at most once per
+   * press: this is deliberately not wired into pointermove or into the
+   * preview's render loop, so it cannot fire on every pixel of a mouse drag
+   * or on every animation frame.
+   */
+  function announceMove(before, after) {
+    if (after.x === before.x && after.y === before.y) {
+      announce(t('preview.cropEdge'));
+      return;
+    }
+    announce(
+      t('preview.cropPosition')
+        .replace('{x}', String(percentAlong(after.x)))
+        .replace('{y}', String(percentAlong(after.y)))
+    );
+  }
+
+  /**
    * The same movement, from the keyboard.
    *
    * The current offset is read fresh on every press rather than remembered
@@ -297,15 +345,18 @@ export function mountCrop(canvas, { getLayer, onChange, t = (key) => key }) {
     if (!(step.dx !== 0 ? slackX > 0 : slackY > 0)) return;
 
     event.preventDefault();
-    onChange(offsetFromDrag({
-      startOffset: { x: layer.offset.x, y: layer.offset.y },
+    const before = { x: layer.offset.x, y: layer.offset.y };
+    const after = offsetFromDrag({
+      startOffset: before,
       dx: step.dx,
       dy: step.dy,
       canvasWidth: canvas.width,
       canvasHeight: canvas.height,
       slackX,
       slackY
-    }));
+    });
+    onChange(after);
+    announceMove(before, after);
   });
 
   syncAffordance();

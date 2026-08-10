@@ -8,6 +8,8 @@
   "preview.cost": "Rechenlast",
   "preview.canvasLabel": "Bildvorschau",
   "preview.cropLabel": "Bildvorschau - Ausschnitt mit den Pfeiltasten verschieben, mit Umschalt in groesseren Schritten",
+  "preview.cropPosition": "Ausschnitt {x} % von links, {y} % von oben",
+  "preview.cropEdge": "Rand erreicht",
   "inspector.fit": "Bildausschnitt",
   "inspector.fit.cover": "Fuellen",
   "inspector.fit.stretch": "Verzerren",

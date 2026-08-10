@@ -225,6 +225,26 @@ button.primary { background: var(--accent-soft); border-color: var(--accent); }
    replacement that is at least as visible. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* Content for a screen reader only — present in the accessibility tree,
+   invisible and untouchable on screen. Used for the crop's aria-live
+   position announcement (see app/renderer/main.js), which has nothing to
+   show sighted users because the preview canvas already shows the move. The
+   standard clip-rect recipe: 1x1px, clipped to nothing, so it never affects
+   layout or paints a pixel, rather than display:none, which most screen
+   readers ignore entirely. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+  padding: 0;
+  margin: -1px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

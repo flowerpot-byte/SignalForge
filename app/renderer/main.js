@@ -171,6 +171,16 @@ async function boot() {
     return { ...layer, sourceWidth: sourceSize.width, sourceHeight: sourceSize.height };
   }
 
+  // A visually hidden live region a screen reader announces on its own,
+  // updated after every arrow-key crop move (see components/crop.js). The
+  // canvas's role="application" is what stops a screen reader from noticing
+  // the move by itself, so without this an arrow press would be silent to
+  // anyone not looking at the screen.
+  const cropAnnouncement = document.createElement('div');
+  cropAnnouncement.className = 'visually-hidden';
+  cropAnnouncement.setAttribute('aria-live', 'polite');
+  regions.preview.append(cropAnnouncement);
+
   // Whether the canvas is a tab stop at all depends on whether there is
   // anything to move — which changes when a picture arrives and when the fit
   // mode changes, so crop.refresh() is called at both (and on a language
@@ -180,7 +190,8 @@ async function boot() {
     getLayer: draggableLayer,
     // Writes straight into the live document; the preview's frame loop shows
     // it on its next frame (see components/preview.js).
-    onChange: (offset) => preview.setLayerOffset(IMAGE_LAYER, offset)
+    onChange: (offset) => preview.setLayerOffset(IMAGE_LAYER, offset),
+    announce: (message) => { cropAnnouncement.textContent = message; }
   });
 
   const inspector = mountInspector(regions.inspector, {

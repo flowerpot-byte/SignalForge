@@ -555,3 +555,69 @@ test('hovering a draggable picture shows the grab cursor, and dragging shows the
   canvas.dispatchEvent(pointerEvent('pointerup', 10, 10));
   assert.equal(canvas.style.cursor, 'grab');
 });
+
+// --- the keyboard announcement -----------------------------------------
+//
+// role="application" takes the canvas out of a screen reader's own
+// navigation (see syncAffordance() in crop.js), so without an explicit
+// announcement an arrow press is not merely unannounced — it is silent to
+// anyone not looking at the screen. `t` below distinguishes the two message
+// keys so a test can tell which one actually fired, rather than merely that
+// *something* was said.
+const announceT = (key) => (
+  key === 'preview.cropPosition' ? '{x},{y}'
+    : key === 'preview.cropEdge' ? 'EDGE'
+      : key
+);
+
+test('a successful arrow-key move announces the new position', () => {
+  installEngine();
+  const canvas = new FakeCanvas();
+  const layer = wideLayer();
+  const seen = [];
+  mountCrop(canvas, {
+    getLayer: () => layer,
+    onChange: (offset) => { layer.offset = offset; },
+    t: announceT,
+    announce: (message) => seen.push(message)
+  });
+
+  canvas.dispatchEvent(keyEvent('ArrowRight'));
+  // Falsifiable the way this suite already insists on: if the announcement
+  // were never wired up, seen would still be empty here.
+  assert.equal(seen.length, 1, 'a move that actually happened must announce something');
+  // 160 canvas pixels of slack, four pixels a press: x moves from the centre
+  // (50%) to 49%, y is untouched at 50% — spelled out, not merely non-empty,
+  // so a message that forgot to interpolate the numbers would also fail this.
+  assert.equal(seen[0], '49,50', `expected the new position spelled out, got ${seen[0]}`);
+});
+
+test('hitting the edge announces that, not a repeated position', () => {
+  installEngine();
+  const canvas = new FakeCanvas();
+  const layer = wideLayer();
+  const seen = [];
+  mountCrop(canvas, {
+    getLayer: () => layer,
+    onChange: (offset) => { layer.offset = offset; },
+    t: announceT,
+    announce: (message) => seen.push(message)
+  });
+
+  // Drive it all the way to the edge first (four presses of the coarse step
+  // cover the 160 pixels of slack), then discard those announcements — the
+  // assertion below is only about the press that changes nothing.
+  for (let i = 0; i < 10; i += 1) canvas.dispatchEvent(keyEvent('ArrowRight', { shiftKey: true }));
+  assert.equal(layer.offset.x, -1, 'must be pinned at the edge before the real assertion');
+  seen.length = 0;
+
+  canvas.dispatchEvent(keyEvent('ArrowRight', { shiftKey: true }));
+  assert.equal(layer.offset.x, -1, 'the edge is still the edge');
+  // Falsifiable the other way round: a press that is swallowed (the axis has
+  // slack) but refused by the clamp must still say something — and say the
+  // RIGHT thing. An implementation that always announces the position
+  // regardless of whether it moved would print '0,50' here (percentAlong of
+  // offset -1), not 'EDGE', so this catches "fired without saying so" too.
+  assert.equal(seen.length, 1, 'a refused press must still announce something');
+  assert.equal(seen[0], 'EDGE', `must say the edge was hit, not repeat a position — got ${seen[0]}`);
+});
