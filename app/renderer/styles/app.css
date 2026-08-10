@@ -231,9 +231,9 @@ html, body {
    time a message comes and goes — the ghost gap the old `:empty { display:
    none }` was avoiding is now the point of the row. */
 .drop-message {
-  margin: 0;
-  min-height: 20px;
-  padding-top: 10px;
+  margin: 8px 0 0;
+  min-height: 19px;
+  padding-top: 8px;
   /* A rule across the panel, so the line reads as the preview's status strip
      rather than as a caption that drifted away from the picture. */
   border-top: 1px solid var(--glass-stroke);
@@ -242,6 +242,14 @@ html, body {
   text-align: center;
   overflow-wrap: anywhere;
 }
+/* Space kept, rule withdrawn. Reserving the row is right — a message arriving
+   must not resize the picture — but drawing a hairline the full width of the
+   panel with nothing under it made the reservation look like a leftover
+   element. The rule is the strip's frame, and a strip with nothing in it has
+   nothing to frame. Deliberately not `display: none` and deliberately not
+   `visibility: hidden` on the whole line: the first gives the jump back, the
+   second would also hide the rule when there IS something to say. */
+.drop-message:empty { border-top-color: transparent; }
 /* Two classes so this reliably outranks .muted regardless of source order —
    the drop-message starts out merely muted (the hint) and only turns warn
    once main.js adds this class for a rejection or a failed import. */
