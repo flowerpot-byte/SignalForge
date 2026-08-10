@@ -2,10 +2,22 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { coreShare, costLevel, FRAMES_PER_SECOND } from './cost.js';
+import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
 
 const FRAME_GAP = 1000 / FRAMES_PER_SECOND;
 /** Rolling average over this many frames, so the reading does not flicker. */
 const COST_WINDOW = 30;
+
+/**
+ * What the empty frame promises it will take, derived from the one list that
+ * decides it (isSupportedImage in components/drop.js) rather than written out
+ * again here. A second list would be a promise nothing keeps: add ".avif" to
+ * the importer and an invitation typed out by hand goes on naming five
+ * formats while the app accepts six.
+ */
+const SUPPORTED_FORMATS = SUPPORTED_IMAGE_EXTENSIONS
+  .map((extension) => extension.slice(1).toUpperCase())
+  .join(', ');
 
 /**
  * The live preview.
@@ -59,11 +71,35 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   readout.className = 'chip';
   readout.id = 'preview-cost';
 
-  viewport.append(canvas);
+  // The invitation lives INSIDE the frame, because the frame is what you are
+  // being invited to use. It used to sit under the frame, below a rule, which
+  // made the two read as separate objects — a large empty dashed rectangle
+  // with an unrelated caption beneath it — and that is the first thing anybody
+  // sees when they open the app. It says what to do and what is accepted; the
+  // stylesheet takes it away again the moment there is a picture.
+  const empty = document.createElement('div');
+  empty.className = 'stage-empty';
+  empty.id = 'preview-empty';
+  const invitation = document.createElement('p');
+  invitation.className = 'stage-empty-title';
+  invitation.id = 'preview-empty-title';
+  const formats = document.createElement('p');
+  formats.className = 'stage-empty-formats';
+  formats.id = 'preview-empty-formats';
+  empty.append(invitation, formats);
+
+  viewport.append(canvas, empty);
   meta.append(size, readout);
   inner.append(viewport, meta);
   stage.append(inner);
   container.append(stage);
+
+  /** The two lines of the empty state, in the language now in force. */
+  function relabel() {
+    invitation.textContent = t('preview.dropHint');
+    formats.textContent = t('preview.dropFormats').replace('{formats}', SUPPORTED_FORMATS);
+  }
+  relabel();
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const renderer = SF.createRenderer();
@@ -132,6 +168,7 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   }
 
   return {
+    relabel,
     setDocument,
     /**
      * The live document the loop renders, handed out so there is exactly one

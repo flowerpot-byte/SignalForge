@@ -2,6 +2,7 @@
   "app.title": "SignalForge",
   "inspector.title": "Settings",
   "preview.dropHint": "Drop an image here",
+  "preview.dropFormats": "Supported: {formats}",
   "preview.dropUnsupported": "Unsupported file type",
   "preview.dropFailed": "Could not load the image",
   "preview.cost": "Compute cost",

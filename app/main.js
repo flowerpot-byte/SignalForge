@@ -453,7 +453,7 @@ async function waitFor(read, expression, what) {
  * dialogs are: a modal OS dialog would sit waiting for a human.
  */
 async function selfTestFirstRun(win, effectsFolder) {
-  const { read, click, shoot } = windowDriver(win);
+  const { read, click, clickAndWait, shoot } = windowDriver(win);
   const out = {};
 
   await waitFor(read, `document.getElementById('first-run') !== null`, 'the window is built');
@@ -491,7 +491,15 @@ async function selfTestFirstRun(win, effectsFolder) {
       section: document.querySelector('#inspector-body .field-group > h3').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,
-      hint: document.querySelector('.drop-message').textContent,
+      // The invitation moved into the empty frame it is talking about (see
+      // components/preview.js), so this reads it where it now lives. Its
+      // second line names the file types the importer actually accepts, and
+      // is translated too — a list nobody translates is how "PNG, JPG" ends
+      // up being the only English left in a German window.
+      hint: document.getElementById('preview-empty-title').textContent,
+      formats: document.getElementById('preview-empty-formats').textContent,
+      awaitingImage: document.querySelector('#inspector-body .section-note').textContent,
+      lineOfFeedback: document.querySelector('.drop-message').textContent,
       firstRun: document.querySelector('#first-run h2').textContent,
       documentLanguage: document.documentElement.lang
     })`);
@@ -516,6 +524,20 @@ async function selfTestFirstRun(win, effectsFolder) {
   await waitFor(read, `document.getElementById('first-run').hidden === true`, 'the question is answered');
   out.targetAfterChoosing = await read(`document.getElementById('footer-target').textContent`);
   await shoot('00d-folder-chosen');
+
+  // The one line of feedback, and whether it follows a language switch.
+  //
+  // It used to carry the drop invitation from the moment the window opened,
+  // so the checks above covered this for free; the invitation now lives in
+  // the empty frame, which leaves the line honestly empty until something
+  // happens. So make something happen: pressing export with no picture is the
+  // cheapest keyed message there is — the export refuses before it touches the
+  // disk (reason 'empty', see src/main/export-effect.js), and it comes back as
+  // a KEY rather than as a sentence with a path in it, which is exactly the
+  // case applyLanguage has to be able to say again.
+  out.emptyExportMessage = await clickAndWait('footer-export');
+  out.emptyExportInEnglish = (await chooseLanguage('en')).lineOfFeedback;
+  out.emptyExportBackInGerman = (await chooseLanguage('de')).lineOfFeedback;
 
   return out;
 }

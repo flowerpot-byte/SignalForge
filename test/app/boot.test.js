@@ -118,13 +118,57 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   assert.equal(report.inEnglish.settings, 'Settings', 'and the frame');
   assert.equal(report.inEnglish.exportButton, 'Save to SignalRGB', 'the footer must follow it too');
   assert.equal(report.inEnglish.brightness, 'Brightness', 'and the settings column');
-  assert.equal(report.inEnglish.hint, 'Drop an image here', 'and the line of feedback');
+  // The invitation moved into the empty frame it is talking about, so this
+  // reads it there. Same key, same words, a place where it means something.
+  assert.equal(report.inEnglish.hint, 'Drop an image here', 'and the empty frame\'s invitation');
+  assert.equal(report.inGerman.hint, 'Bild hierher ziehen');
+  // The second line of the empty state: what the importer actually accepts.
+  // The list of formats is derived from SUPPORTED_IMAGE_EXTENSIONS rather than
+  // typed out, so it is checked as "the sentence is translated AND the list is
+  // in it" rather than against a copy of the list, which is the duplication
+  // this was built to avoid.
+  assert.match(report.inEnglish.formats, /^Supported: /, 'the accepted formats must be said in English too');
+  assert.match(report.inGerman.formats, /^Unterstützt: /);
+  for (const format of ['PNG', 'JPG', 'JPEG', 'WEBP', 'GIF', 'BMP']) {
+    assert.ok(
+      report.inGerman.formats.includes(format),
+      `the empty state must name ${format}, which the importer accepts`
+    );
+  }
+  // The settings column says why it is short while there is no picture.
+  assert.equal(
+    report.inEnglish.awaitingImage,
+    'Fit and motions appear here once an image is loaded.',
+    'the settings column must explain its own length, in the language in force'
+  );
   assert.equal(report.inEnglish.firstRun, 'Where should the effects go?', 'and the first-start question');
   assert.equal(report.inEnglish.documentLanguage, 'en');
   assert.deepEqual(
     report.backInGerman,
     report.inGerman,
     'switching back must restore every last word, not merely most of them'
+  );
+
+  // The line of feedback is empty until something happens, so a message is
+  // made to happen — export with nothing to export — and then the language is
+  // switched under it. This is the one path that has to re-state a message
+  // from its key (see applyLanguage in app/renderer/main.js); a message
+  // assembled with a path or a file name in it is a report about something
+  // that already happened and is deliberately left where it is.
+  assert.match(
+    report.emptyExportMessage,
+    /Erst ein Bild/,
+    'exporting with no picture must say so on the one line of feedback'
+  );
+  assert.equal(
+    report.emptyExportInEnglish,
+    'Drop an image in first',
+    'and that line must be said again in the language the user switches to'
+  );
+  assert.equal(
+    report.emptyExportBackInGerman,
+    'Erst ein Bild hineinziehen',
+    'and switching back must restore it'
   );
 
   // And the answer to the question, through the real sf:chooseFolder handler.

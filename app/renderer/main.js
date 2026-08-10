@@ -102,9 +102,11 @@ async function boot() {
 
   const preview = createPreview(regions.preview, (k) => i18n.t(k));
 
-  // Shown until the first successful drop, then reused for a rejection
-  // message — one line so there is only ever one thing to read, and it is
-  // always in the window, never only in the console (see components/drop.js).
+  // The one line of feedback in the window: rejections, failures, the path an
+  // export landed at. Deliberately empty until something happens — the
+  // invitation to drop a picture in is not feedback, it belongs in the empty
+  // frame it is talking about (see components/preview.js), and saying it here
+  // as well would have been the same sentence in two places.
   const message = document.createElement('p');
   message.className = 'muted drop-message';
   regions.preview.append(message);
@@ -128,8 +130,6 @@ async function boot() {
     showMessage(i18n.t(key), warn);
     messageKey = key;
   }
-
-  showKey('preview.dropHint');
 
   // The one question a first start has to ask, and only when there is one: it
   // shows itself if and only if no effects folder could be found (see
@@ -489,6 +489,10 @@ async function boot() {
     regions.relabel();
     firstRun.relabel();
     footer.relabel();
+    // The empty frame's invitation. The cost chip beside it re-states itself
+    // on the next frame it draws, but the invitation is only written when the
+    // language says so — and it is on screen exactly when nothing is drawing.
+    preview.relabel();
     // The canvas's accessible name is a translated string like any other; it
     // is just the only one nobody can see.
     crop.refresh();

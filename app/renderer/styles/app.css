@@ -110,8 +110,10 @@ html, body {
    with width:100% keeps the ratio only until max-height bites, at which point
    the box is clamped on one axis and the ratio is silently broken. Deriving
    the width from the measured height instead means one axis is chosen and the
-   other simply follows, so the ratio cannot break. The 34px is the caption row
-   under the frame plus its gap, which the frame must leave room for. */
+   other simply follows, so the ratio cannot break. --meta-row is the caption
+   row under the frame plus its gap, which the frame must leave room for — and
+   which is not there at all while the frame is empty, so it is a variable
+   rather than a number baked into the sum. */
 .stage {
   min-height: 0;
   display: grid;
@@ -119,10 +121,19 @@ html, body {
   container-type: size;
 }
 .stage-inner {
+  --meta-row: 34px;
   display: grid;
   gap: 8px;
-  width: min(100%, calc((100cqh - 34px) * 1.6));
+  width: min(100%, calc((100cqh - var(--meta-row)) * 1.6));
 }
+/* No picture, no caption about one. "320 x 200" is true of the effect but it
+   is information about a preview, and there is nothing being previewed: on an
+   empty screen it was a lone pill under a large empty rectangle, reading as
+   metadata for something absent. It comes back with the first picture, next to
+   the cost of drawing it. What the frame is stays legible without it — the
+   frame keeps the exact shape of the thing being built. */
+#preview-body:not(.has-picture) .stage-meta { display: none; }
+#preview-body:not(.has-picture) .stage-inner { --meta-row: 0px; }
 
 /* The frame. A screen, not a picture on a panel: its own surface, its own
    edge, and lifted off the glass by a shadow. */
@@ -147,6 +158,41 @@ html, body {
      Deliberately NOT overflow:hidden on .viewport — that would clip the
      canvas's own focus ring, which is drawn outside its box. */
   border-radius: calc(var(--radius) - 1px);
+}
+
+/* The empty state, inside the frame it is talking about. An empty state has to
+   teach the interface, and this one has exactly two things to teach: that a
+   picture can be dragged in, and what counts as one (derived from the
+   importer's own list — see SUPPORTED_FORMATS in components/preview.js).
+   Centred in the frame so the two read as one object; before this the words
+   sat under the frame, below a rule, and the pair read as a broken layout.
+
+   pointer-events: none is load-bearing, not tidiness: dragenter/dragleave fire
+   per element, so a child under the pointer would make the panel's own
+   .drop-active flicker on and off as the file moved across it. Untouchable, it
+   cannot be entered or left, and the drop gesture stays exactly one gesture. */
+.stage-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4px;
+  padding: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+#preview-body.has-picture .stage-empty { display: none; }
+.stage-empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+.stage-empty-formats {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-muted);
 }
 
 /* The caption belongs to the frame: what the effect is (320 x 200, always,

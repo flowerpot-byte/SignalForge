@@ -388,7 +388,8 @@ async function phaseOne(win, state) {
     section: document.querySelector('#inspector-body .field-group > h3').textContent,
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,
-    hint: document.querySelector('.drop-message').textContent,
+    hint: document.getElementById('preview-empty-title').textContent,
+    formats: document.getElementById('preview-empty-formats').textContent,
     lang: document.documentElement.lang
   })`);
   p['1'].startedIn = await words();
@@ -444,7 +445,16 @@ async function phaseOne(win, state) {
     await wait(120);
   }
   try {
-    await d.until(`document.querySelector('.drop-message').textContent === ''`, 'the picture is loaded', 100);
+    // "the message went blank" used to be the proof the picture arrived. It
+    // cannot be any more: the line starts blank now, because the invitation it
+    // used to carry moved into the empty frame — so waiting for blank would be
+    // satisfied before the drag had done anything at all. The class the window
+    // puts on the panel when it HAS a picture says the same thing positively.
+    await d.until(
+      `document.getElementById('preview-body').classList.contains('has-picture')`,
+      'the picture is loaded',
+      100
+    );
     p['2'].howDriven = 'CDP Input.dispatchDragEvent carrying a real file path';
   } catch (error) {
     p['2'].dragError = String(error.message || error);
