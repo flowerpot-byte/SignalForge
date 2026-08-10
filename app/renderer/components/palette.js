@@ -43,11 +43,17 @@ export const SAMPLE_HEIGHT = 30;
  */
 const LIGHTNESS = [0.30, 0.24, 0.34];
 const MIN_SATURATION = 0.28;
-/* The ceiling is low on purpose. The backdrop is blurred and then saturated
-   again by the filter over it (see #backdrop in styles/app.css), so a fully
-   saturated blob comes out as a poster paint rather than as a tint, and the
-   picture stops being the most colourful thing in the window. */
-const MAX_SATURATION = 0.55;
+/* The ceiling is low on purpose: a fully saturated blob comes out as poster
+   paint rather than as a tint, and the picture stops being the most colourful
+   thing in the window.
+   Lowered from 0.55 to 0.44 in the third pass, together with the blobs'
+   opacity and the removal of the saturate() filter that used to sit over them
+   (see #backdrop in styles/app.css). The three changes are one change: what is
+   wanted is a room lit by the picture, and a lit room takes the picture's HUE,
+   not its intensity. At 0.55 with saturate(1.2) over it, an orange picture
+   produced an orange edge around the window — a glow, which is one of the
+   three things an interface built by a machine is recognised by. */
+const MAX_SATURATION = 0.44;
 
 const clamp01 = (value) => (value < 0 ? 0 : value > 1 ? 1 : value);
 

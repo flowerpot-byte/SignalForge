@@ -20,21 +20,29 @@ html, body {
    picture that was imported (see samplePalette in components/palette.js),
    which is the reason this interface is made of glass rather than just
    decorated with it. */
+/* No saturate() here any more. Boosting an already-clamped colour by 20 % is
+   what turned three soft shapes into three lit shapes: a saturated edge on a
+   blurred blob is exactly the halo that reads as "glow". The blur is wider and
+   the shapes are larger instead, so what is left is a gradient across the whole
+   window rather than three light sources standing behind it. */
 #backdrop {
   position: fixed;
-  inset: -20%;
+  inset: -25%;
   z-index: 0;
-  filter: blur(80px) saturate(1.2);
+  filter: blur(110px);
 }
 #backdrop div {
   position: absolute;
-  width: 46%;
-  height: 46%;
+  width: 58%;
+  height: 58%;
   border-radius: 50%;
-  /* Dialled back from 0.55: with the blobs taking a picture's own colours,
-     0.55 turned an orange picture into an orange window and the picture
-     stopped being the brightest thing in it. This is a tint, not a flood. */
-  opacity: 0.4;
+  /* 0.55 -> 0.40 (second pass) -> 0.26. At 0.40 the window still read as
+     something with a light behind it; the test is whether you would call it a
+     glow, and at 0.40 you would. At 0.26, across a warm, a cool and a nearly
+     white picture, the colour is unmistakable the moment you switch pictures
+     and never nameable as a light source. The picture stays the only lit thing
+     in the window, which is the whole point of putting it in a frame. */
+  opacity: 0.26;
   /* State, not decoration: this is the window saying it has taken the new
      picture's colours. Fast enough to belong to the import that caused it. */
   transition: background 220ms ease-out;
