@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { describeInspector, widenToInclude } from '../../app/renderer/components/inspector.js';
 import { normalizeDocument, FIT_MODES, MOTION_KINDS } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
+import { CONTROL_RANGES } from '../../src/export/effect-controls.js';
 
 const docWith = (layer) => normalizeDocument({
   assets: { q: { kind: 'image', mime: 'image/png', data: 'AAAA' } },
@@ -64,6 +65,39 @@ test('no slider offers a value the engine would clamp away', () => {
         `${field.path} = ${value} does not survive normalizeDocument`);
     }
   }
+});
+
+// The app and the finished effect must present the same choices. They now
+// share one table (CONTROL_RANGES) instead of keeping a copy each, so what is
+// left to get wrong is the mapping between the two sets of names — the
+// exported control "tempo" steers a motion's `speed`, "strength" its
+// `amount`. Crossing those two would leave speed offering 0..100 and strength
+// 1..100, which no test of "the two tables are equal" would ever notice.
+test('every slider offers exactly the range the matching exported control offers', () => {
+  const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1');
+  const pairs = [
+    ['layers.0.motions.0.speed', 'tempo'],
+    ['layers.0.motions.0.amount', 'strength'],
+    ['brightness', 'brightness'],
+    ['saturation', 'saturation'],
+    ['greenMagenta', 'greenMagenta'],
+    ['blueYellow', 'blueYellow']
+  ];
+
+  for (const [path, property] of pairs) {
+    const field = fields.find((f) => f.path === path);
+    assert.ok(field, `${path} is not offered in the settings column at all`);
+    assert.equal(field.min, CONTROL_RANGES[property].min, `${path} min differs from ${property}`);
+    assert.equal(field.max, CONTROL_RANGES[property].max, `${path} max differs from ${property}`);
+  }
+
+  // And nothing the exported effect offers is left without a slider: a
+  // seventh range added over there has to be answered here.
+  assert.deepEqual(
+    Object.keys(CONTROL_RANGES).sort(),
+    pairs.map(([, property]) => property).sort(),
+    'every exported control range must have a slider in the app, and the other way round'
+  );
 });
 
 test('the dropdowns offer exactly the values the engine accepts', () => {

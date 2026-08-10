@@ -19,7 +19,20 @@ import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../engine/document.j
  */
 
 /**
- * Ranges the exported controls offer.
+ * Ranges the controls offer — the exported effect's and the app's alike.
+ *
+ * There is exactly one of these in the project, for the same reason there is
+ * exactly one control list: a second copy is the mistake this project has
+ * already made twice, and the symptom is always that one side gains a range
+ * and the other quietly does not. The settings column in the window imports
+ * this table (app/renderer/components/inspector.js) and maps it onto the names
+ * the document uses — tempo is a motion's `speed`, strength its `amount` — so
+ * the app and the finished effect present the same choices by construction
+ * rather than by two doc comments promising they do.
+ *
+ * Frozen metadata, nothing else: the renderer is permitted to import it for
+ * the same reason it may import FIT_MODES and MOTION_KINDS, and
+ * test/engine/boundary.test.js keeps this whole directory free of Node.
  *
  * Every one of these must stay inside what normalizeDocument (src/engine/
  * document.js) clamps the same field to, otherwise the control would offer
@@ -41,13 +54,13 @@ import { MOTION_KINDS, FIT_MODES, normalizeDocument } from '../engine/document.j
  * -100..100 controls are the first of their kind this project ships. If they
  * misbehave in SignalRGB's own UI, that is the thing to look at first.
  */
-const RANGES = Object.freeze({
-  tempo: { min: 1, max: 100 },
-  strength: { min: 0, max: 100 },
-  brightness: { min: 5, max: 100 },
-  saturation: { min: 0, max: 200 },
-  greenMagenta: { min: -100, max: 100 },
-  blueYellow: { min: -100, max: 100 }
+export const CONTROL_RANGES = Object.freeze({
+  tempo: Object.freeze({ min: 1, max: 100 }),
+  strength: Object.freeze({ min: 0, max: 100 }),
+  brightness: Object.freeze({ min: 5, max: 100 }),
+  saturation: Object.freeze({ min: 0, max: 200 }),
+  greenMagenta: Object.freeze({ min: -100, max: 100 }),
+  blueYellow: Object.freeze({ min: -100, max: 100 })
 });
 
 /**
@@ -63,7 +76,7 @@ const RANGES = Object.freeze({
  * reasoning, as widenToInclude in app/renderer/components/inspector.js.
  */
 function slider(property, de, en, value, bind) {
-  const { min, max } = RANGES[property];
+  const { min, max } = CONTROL_RANGES[property];
   return {
     property,
     label: { de, en },

@@ -11,36 +11,43 @@
 // the browser as a plain ES module just as it does in node:test, where this
 // file is imported with no DOM whatsoever.
 import { FIT_MODES, MOTION_KINDS } from '../../../src/engine/document.js';
+import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
 import { createField } from './field.js';
 
+/** A range plus the one thing a slider needs that a baked control does not. */
+const withStep = (range) => Object.freeze({ ...range, step: 1 });
+
 /**
- * Ranges for the sliders.
+ * Ranges for the sliders: the exported effect's own, under the names the
+ * document uses.
  *
- * Every number here must stay inside what normalizeDocument (src/engine/
- * document.js) clamps the same field to, otherwise the slider would offer
- * values the engine silently throws away. Where the exported effect's own
- * control list (src/export/effect-controls.js — the one place it lives)
- * picked a narrower range for the same field, that narrower range is used,
- * so the app and the finished effect present the same choices:
+ * The obligation — the app and the finished effect must present the same
+ * choices — used to be stated in a doc comment on each side of two identical
+ * tables, with nothing enforcing it: widen one and the other stayed silently
+ * narrower. Now there is one table (CONTROL_RANGES in
+ * src/export/effect-controls.js, the same file that holds the one control
+ * list) and this is a mapping of its names onto the document's: the exported
+ * control called "tempo" steers a motion's `speed`, "strength" its `amount`.
+ * The mapping itself is checked in test/app/inspector.test.js, pair by pair,
+ * so getting it crossed is not a silent mistake either.
  *
- *   speed        clamp 0..100   exported "tempo"        1..100  -> 1..100
- *   amount       clamp 0..100   exported "strength"     0..100  -> 0..100
- *   brightness   clamp 0..100   exported "brightness"   5..100  -> 5..100
- *   saturation   clamp 0..200   exported "saturation"   0..200  -> 0..200
- *   greenMagenta clamp -100..100 exported "greenMagenta" -100..100 -> -100..100
- *   blueYellow   clamp -100..100 exported "blueYellow"   -100..100 -> -100..100
+ * Those ranges are on purpose sometimes narrower than what normalizeDocument
+ * clamps the same field to (brightness 5..100 against a clamp of 0..100); see
+ * widenToInclude below for what happens when a document carries a value
+ * outside them.
  *
- * Step is 1 throughout: all six are whole-number percentages, and a step of
- * 1 is also what one arrow-key press moves, which is the resolution someone
- * working from the keyboard actually wants.
+ * Step is 1 throughout: all six are whole-number percentages, and a step of 1
+ * is also what one arrow-key press moves, which is the resolution someone
+ * working from the keyboard actually wants. It lives here rather than in the
+ * shared table because SignalRGB's own controls have no such notion.
  */
 const RANGES = Object.freeze({
-  speed: { min: 1, max: 100, step: 1 },
-  amount: { min: 0, max: 100, step: 1 },
-  brightness: { min: 5, max: 100, step: 1 },
-  saturation: { min: 0, max: 200, step: 1 },
-  greenMagenta: { min: -100, max: 100, step: 1 },
-  blueYellow: { min: -100, max: 100, step: 1 }
+  speed: withStep(CONTROL_RANGES.tempo),
+  amount: withStep(CONTROL_RANGES.strength),
+  brightness: withStep(CONTROL_RANGES.brightness),
+  saturation: withStep(CONTROL_RANGES.saturation),
+  greenMagenta: withStep(CONTROL_RANGES.greenMagenta),
+  blueYellow: withStep(CONTROL_RANGES.blueYellow)
 });
 
 /** The fields that belong to the document itself, in the order they appear. */
