@@ -269,7 +269,7 @@ Helligkeit macht aus 100 eine 95. Bilder: `walkthrough/p11-a-focus-ring.png`,
 jetzt selbst eine Station in der Tabulator-Reihenfolge — **fünfmal Tabulator vom Namensfeld aus,
 und die Markierung steht auf ihr**, mit sichtbarem Fokusring
 (`walkthrough/p11-c-canvas-focused.png`). Sie trägt dabei einen Namen für Vorleseprogramme
-(„Bildausschnitt - mit den Pfeiltasten verschieben, mit Umschalt in groesseren Schritten") und
+(„Bildvorschau - Ausschnitt mit den Pfeiltasten verschieben, mit Umschalt in groesseren Schritten") und
 sagt über ihre Rolle, dass sie die Tasten selbst verarbeitet.
 
 Bewegt wird mit echten Tastendrücken über das DevTools-Protokoll, gemessen wird am selben
