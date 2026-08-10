@@ -105,9 +105,16 @@ test('the coarse step crosses a wide picture in a reasonable number of presses',
     sourceWidth: 800, sourceHeight: 200,
     canvasWidth: CANVAS_WIDTH, canvasHeight: CANVAS_HEIGHT, fit: 'cover'
   });
+  // Pins the geometry against the engine — kept as an equality deliberately.
   assert.equal(slackX, 240);
   const travel = slackX * 2;
-  assert.equal(Math.ceil(travel / CROP_KEY_STEP), 120, 'the fine step alone would be a marathon');
+  // Shaped like the coarse-step check below, not an equality: this must fail
+  // if the fine step alone is unreasonable, not if CROP_KEY_STEP ever improves.
+  // A step of 5 would give 96 presses and still read as a marathon.
+  assert.ok(
+    Math.ceil(travel / CROP_KEY_STEP) > 60,
+    'the fine step alone would be a marathon'
+  );
   assert.ok(
     Math.ceil(travel / CROP_KEY_STEP_COARSE) <= 15,
     'the coarse step must get from one end to the other without wearing anybody out'
