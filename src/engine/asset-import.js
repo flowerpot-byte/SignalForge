@@ -11,9 +11,10 @@ import { CANVAS_HEIGHT } from './document.js';
  * characters, on a photo from 67,884 to 8,744. The price, measured on the
  * finished 320x200 frame rather than on the source picture, is at most 9/255
  * on any one channel and under 0.9/255 on average — far below anything an LED
- * can show. Going down to 0.85 would save another ~4 KB but quadruples the
- * number of noticeably different pixels; going up to 0.95 costs about a
- * quarter more bytes for another 0.1/255. So 0.92.
+ * can show. Going down to 0.85 would save another ~4 KB but roughly doubles
+ * to triples the number of noticeably different pixels (194 -> 366 on the
+ * screenshot, 875 -> 2,053 on the photo); going up to 0.95 costs a quarter to
+ * a third more bytes for another 0.1/255. So 0.92.
  */
 export const JPEG_QUALITY = 0.92;
 

@@ -186,10 +186,12 @@ eingebettete Bild, Pixel für Pixel:
 | Screenshot @ 0,92 | 6 / 4 / 9 | 0,65 / 0,47 / 0,85 | 194 von 64.000 |
 | Foto @ 0,92 | 7 / 4 / 8 | 0,84 / 0,56 / 1,30 | 875 von 64.000 |
 
-Im Mittel unter **0,4 %** eines Kanals — weit unter dem, was eine LED zeigen kann. **Warum
-0,92:** 0,85 spart nochmal rund 4 KB, vervierfacht aber die Zahl der sichtbar abweichenden
-Pixel; 0,95 kostet ein Viertel mehr Bytes für weitere 0,1/255. Der Sprung von 0,90 auf 0,92
-kostet 1,3 KB und ist billig erkauft.
+Gemittelt über alle drei Farbkanäle liegt die Abweichung unter **0,4 %** — weit unter dem, was
+eine LED zeigen kann. Pro Kanal einzeln liegt der schlechteste Wert höher: beim Foto **0,51 %**
+beim Blaukanal (1,30 von 255). **Warum 0,92:** 0,85 spart nochmal rund 4 KB, verdoppelt bis
+verdreifacht aber die Zahl der sichtbar abweichenden Pixel (194 → 366 beim Screenshot, 875 →
+2.053 beim Foto); 0,95 kostet ein Viertel bis ein Drittel mehr Bytes für weitere 0,1/255. Der
+Sprung von 0,90 auf 0,92 kostet 1,3 KB und ist billig erkauft.
 
 **Nebenbefund:** Chromium schreibt **immer** 4:2:0-Farbunterabtastung (`2x2,1x1,1x1` im
 SOF0-Marker), egal welche Qualität. Die verbreitete Annahme, ab 0,90 werde auf 4:4:4 umgeschaltet,
