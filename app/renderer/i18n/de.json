@@ -35,5 +35,15 @@
   "project.saveFailed": "Projekt konnte nicht gespeichert werden",
   "project.opened": "Projekt geoeffnet",
   "project.openFailed": "Projekt konnte nicht geoeffnet werden",
-  "project.repaired": "Projekt geoeffnet, aber etwas musste korrigiert werden"
+  "project.repaired": "Projekt geoeffnet, aber etwas musste korrigiert werden",
+  "export.sourceDetected": "erkannt",
+  "export.sourceConfigured": "gewaehlt",
+  "export.noFolder": "Kein SignalRGB-Ordner gefunden",
+  "export.done": "In SignalRGB gespeichert",
+  "export.failed": "Effekt konnte nicht gespeichert werden",
+  "export.exists": "Diese Datei gibt es schon. Ueberschreiben?",
+  "export.overwrite": "Ueberschreiben",
+  "export.badName": "Bitte einen Namen ohne \\ / : ? eingeben",
+  "export.nothing": "Erst ein Bild hineinziehen",
+  "export.needsFolder": "Bitte zuerst den Effektordner waehlen"
 }

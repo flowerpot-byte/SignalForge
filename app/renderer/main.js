@@ -7,6 +7,7 @@ import { createPreview } from './components/preview.js';
 import { mountDrop } from './components/drop.js';
 import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
+import { mountFooter } from './components/footer.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -188,13 +189,19 @@ async function boot() {
         }
         showMessage('');
         await preview.setDocument({
-          name: file.name,
+          // Without the extension: this name becomes the effect's own name
+          // and, through it, the file the export writes — "photo.png.html"
+          // is not what anybody meant. Same rule the command line has always
+          // followed for --image (see bin/sfexport.js). file.name is already
+          // just the leaf name, so there is no path to split here.
+          name: file.name.replace(/\.[^.]+$/, ''),
           layers: [{ id: IMAGE_LAYER, type: 'image', asset: 'image', fit: 'cover', motions: [] }],
           assets: { image: result.asset }
         });
         sourceSize = { width: result.asset.width, height: result.asset.height };
         // The column had nothing but the document-wide sliders until now.
         inspector.refresh();
+        footer.setName(preview.document().name);
         preview.start();
       } catch (err) {
         console.error('drop import failed:', err);
@@ -248,6 +255,7 @@ async function boot() {
     const layer = doc.layers.find((entry) => entry.id === IMAGE_LAYER);
     sourceSize = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
     inspector.refresh();
+    footer.setName(doc.name);
     preview.start();
 
     // A project that had to be corrected on the way in says so rather than
@@ -260,28 +268,88 @@ async function boot() {
   }
 
   /**
-   * A footer button. Every failure ends up on the same line of the window as
+   * Write the finished effect into SignalRGB's own folder.
+   *
+   * `preview.document()` again: the same one live document the crop drag,
+   * the settings column and the name field all write into, so what lands in
+   * SignalRGB is by construction what is on screen. No path is passed —
+   * `force` is the only thing this end gets to decide, and it is only ever
+   * true because the user answered the question below (see app/preload.cjs).
+   *
+   * A "not found" folder is asked about first, once, and the export is then
+   * tried again rather than making the user press the button twice.
+   */
+  async function exportEffect(force = false) {
+    footer.askOverwrite(false);
+
+    let result = await window.sf.exportEffect(preview.document(), { force });
+    if (result.reason === 'folder') {
+      footer.setTarget(await window.sf.chooseFolder());
+      result = await window.sf.exportEffect(preview.document(), { force });
+    }
+
+    if (result.ok) {
+      // Path and size, because "saved" without them is a claim the user
+      // cannot check. The restart hint the CLI still prints is deliberately
+      // left out: docs/erkenntnisse-signalrgb-motor.md records, measured,
+      // that a new file appears in SignalRGB's list at once.
+      const kb = (result.bytes / 1024).toFixed(1);
+      showMessage(`${i18n.t('export.done')}: ${result.path} (${kb} KB)`);
+      return;
+    }
+
+    if (result.reason === 'exists') {
+      // Never silently. The full path is in the question, and the answer is
+      // a button that has to be pressed on purpose.
+      showMessage(`${i18n.t('export.exists')} ${result.path}`, true);
+      footer.askOverwrite(true);
+      return;
+    }
+
+    const reasons = {
+      name: 'export.badName',
+      empty: 'export.nothing',
+      folder: 'export.needsFolder'
+    };
+    if (reasons[result.reason]) {
+      showMessage(i18n.t(reasons[result.reason]), true);
+      return;
+    }
+    showMessage(`${i18n.t('export.failed')}: ${result.message}`, true);
+  }
+
+  /**
+   * A footer action. Every failure ends up on the same line of the window as
    * every other one: these handlers are event callbacks with nobody awaiting
    * them, so an unexpected throw would otherwise be an unhandled rejection
    * nobody but the console ever hears about.
    */
-  function footerButton(labelKey, failedKey, run) {
-    const element = document.createElement('button');
-    element.type = 'button';
-    element.textContent = i18n.t(labelKey);
-    element.addEventListener('click', () => {
-      run().catch((err) => {
-        console.error(`${labelKey} failed:`, err);
-        showMessage(`${i18n.t(failedKey)}: ${err.message || err}`, true);
-      });
+  function guard(failedKey, run) {
+    return () => run().catch((err) => {
+      console.error(`${failedKey} failed:`, err);
+      showMessage(`${i18n.t(failedKey)}: ${err.message || err}`, true);
     });
-    return element;
   }
 
-  regions.footer.append(
-    footerButton('footer.save', 'project.saveFailed', saveProject),
-    footerButton('footer.open', 'project.openFailed', openProject)
-  );
+  const footer = mountFooter(regions.footer, {
+    t: (k) => i18n.t(k),
+    // Straight into the live document, through the engine's own setByPath,
+    // exactly like every field in the settings column — so the name the
+    // export uses and the name a saved project carries are the same one,
+    // with no second copy kept here to go stale.
+    onNameChange: (value) => {
+      if (!window.SignalForgeEngine.setByPath(preview.document(), 'name', value)) {
+        console.error('footer: refused to write the name');
+      }
+    },
+    onExport: guard('export.failed', () => exportEffect(false)),
+    onOverwrite: guard('export.failed', () => exportEffect(true)),
+    onSave: guard('project.saveFailed', saveProject),
+    onOpen: guard('project.openFailed', openProject)
+  });
+
+  footer.setName(preview.document().name);
+  footer.setTarget(await window.sf.effectsTarget());
 }
 
 boot().catch((err) => {

@@ -4,15 +4,26 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, writeFileSync, mkdtempSync, renameSync, unlinkSync, existsSync } from 'node:fs';
+import {
+  readFileSync, writeFileSync, readdirSync, mkdtempSync, mkdirSync, renameSync, unlinkSync,
+  existsSync, statSync
+} from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { createSettings } from '../src/main/settings.js';
 import { resolveEffectsTarget } from '../src/main/effects-target.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
+import { exportEffect } from '../src/main/export-effect.js';
 import { normalizeDocument } from '../src/engine/document.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * The engine source an exported effect embeds — the very same bundle the
+ * preview loads (see app/renderer/index.html), which is what makes the
+ * preview a promise rather than an approximation.
+ */
+const ENGINE_BUNDLE = join(here, '..', 'dist', 'engine.bundle.js');
 
 let settings;
 
@@ -170,6 +181,59 @@ ipcMain.handle('sf:openProject', async () => {
 });
 
 /**
+ * The filesystem exportEffect writes through.
+ *
+ * writeFileAtomic is reused deliberately: an effects folder is watched live
+ * by SignalRGB (docs/erkenntnisse-signalrgb-motor.md — a new file appears in
+ * its list at once, no restart), so a half-written file would be picked up
+ * half-written. Temp file plus rename means SignalRGB only ever sees a
+ * finished effect.
+ */
+const exportIo = {
+  exists: (path) => existsSync(path),
+  mkdir: (folder) => mkdirSync(folder, { recursive: true }),
+  writeFile: (path, text) => writeFileAtomic(path, text),
+  size: (path) => statSync(path).size
+};
+
+/**
+ * Write the effect the window is showing into SignalRGB's own folder.
+ *
+ * The renderer hands over a document and a single boolean, and nothing else.
+ * Which folder is written to is decided here, from resolveEffectsTarget or
+ * from the folder dialog behind sf:chooseFolder — there is no parameter on
+ * this channel a renderer could put a path into, so this cannot be turned
+ * into "write anything anywhere". The full path travels back for the window
+ * to show, because the overwrite question and the "it is here" message are
+ * both worthless without it; being able to READ a path is not being able to
+ * CHOOSE one.
+ *
+ * Same as the other handlers: failure comes back as a value, because an
+ * ipcMain.handle rejection reaches the renderer with its message stripped.
+ */
+ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
+  try {
+    const target = currentTarget();
+    if (!target.folder) return { ok: false, reason: 'folder' };
+    if (!existsSync(ENGINE_BUNDLE)) {
+      return { ok: false, reason: 'failed', message: 'dist/engine.bundle.js is missing. Run: npm run build:engine' };
+    }
+    return exportEffect({
+      doc,
+      folder: target.folder,
+      engineSource: readFileSync(ENGINE_BUNDLE, 'utf8'),
+      // The finished effect's controls are labelled in the language the app
+      // is being used in, so what SignalRGB shows matches what the window did.
+      lang: settings.get('language'),
+      force: options?.force === true,
+      io: exportIo
+    });
+  } catch (error) {
+    return { ok: false, reason: 'failed', message: String(error.message || error) };
+  }
+});
+
+/**
  * The renderer gets no Node at all. Everything it needs arrives through the
  * enumerated bridge in preload.cjs — see app/preload.cjs.
  */
@@ -211,6 +275,45 @@ function createWindow() {
  */
 const SELFTEST_PNG =
   'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAJ0lEQVR42mP4YGPzwcbG5kOFzYcKBhSOW94vt7xfv+7Y/Lpjg8IBAJkqGzE5EWVwAAAAAElFTkSuQmCC';
+
+/**
+ * Working the real window from the outside: read something out of it, click
+ * one of its buttons, wait for it to say something back, take its picture.
+ *
+ * Shared by both self-tests below so they drive the app the same way, and so
+ * "wait for the one line of feedback to change" is written once. A click
+ * hands back long before the bridge round trip, the picture decode or the
+ * file write are done, which is why nothing here is allowed to assume the
+ * work is finished when click() returns.
+ */
+function windowDriver(win) {
+  const shotDir = process.env.SF_SELFTEST_SHOTS;
+  const read = (expression) => win.webContents.executeJavaScript(expression);
+  const message = () => read(`document.querySelector('.drop-message').textContent`);
+  // By id, not by position in the row: a check that finds the save button by
+  // being "the first one" breaks every time a button is added beside it.
+  const click = (id) => read(`document.getElementById('${id}').click(), true`);
+
+  return {
+    read,
+    message,
+    click,
+    async shoot(name) {
+      if (!shotDir) return;
+      writeFileSync(join(shotDir, `${name}.png`), (await win.capturePage()).toPNG());
+    },
+    async clickAndWait(id) {
+      const before = await message();
+      await click(id);
+      for (let tries = 0; tries < 100; tries += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        const now = await message();
+        if (now !== before) return now;
+      }
+      throw new Error(`the window never reported anything after clicking #${id}`);
+    }
+  };
+}
 
 /**
  * Save and open, driven through the app's own footer buttons.
@@ -269,15 +372,7 @@ async function selfTestProjects(win) {
   projectDialogs.save = async () => ({ canceled: false, filePath: saveTo });
   projectDialogs.open = async () => ({ canceled: false, filePaths: [openFrom] });
 
-  const shotDir = process.env.SF_SELFTEST_SHOTS;
-  const shoot = async (name) => {
-    if (!shotDir) return;
-    writeFileSync(join(shotDir, `${name}.png`), (await win.capturePage()).toPNG());
-  };
-
-  const read = (expression) => win.webContents.executeJavaScript(expression);
-  const message = () => read(`document.querySelector('.drop-message').textContent`);
-  const click = (index) => read(`document.querySelectorAll('#footer-body button')[${index}].click(), true`);
+  const { read, message, click, clickAndWait, shoot } = windowDriver(win);
   /** The settings column's controls, by the ids field.js derives from the paths. */
   const controls = () => read(`({
     fit: document.getElementById('sf-layers-0-fit')?.value ?? null,
@@ -290,27 +385,14 @@ async function selfTestProjects(win) {
     greenMagenta: document.getElementById('sf-greenMagenta')?.value ?? null
   })`);
 
-  // The click hands back before the bridge round trip and the picture decode
-  // are done, so wait for the one line of feedback in the window to change.
-  async function clickAndWait(index) {
-    const before = await message();
-    await click(index);
-    for (let tries = 0; tries < 100; tries += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      const now = await message();
-      if (now !== before) return now;
-    }
-    throw new Error(`the window never reported anything after clicking footer button ${index}`);
-  }
-
-  const SAVE = 0;
-  const OPEN = 1;
+  const SAVE = 'footer-save';
+  const OPEN = 'footer-open';
   const out = {};
 
   // boot() is asynchronous (language files, settings), so the footer may not
   // exist yet when the checks above have finished.
   for (let tries = 0; tries < 100; tries += 1) {
-    if (await read(`document.querySelectorAll('#footer-body button').length === 2`)) break;
+    if (await read(`document.getElementById('${OPEN}') !== null`)) break;
     await new Promise((resolve) => setTimeout(resolve, 50));
   }
 
@@ -376,20 +458,119 @@ async function selfTestProjects(win) {
     return canvas.style.cursor;
   })()`);
 
-  if (shotDir) process.stdout.write(`self-test screenshots: ${shotDir}\n`);
+  return out;
+}
+
+/**
+ * Export, driven through the app's own footer.
+ *
+ * Nothing here is stubbed. There is no dialog to replace: the target folder
+ * comes from resolveEffectsTarget reading the settings, and the self-test's
+ * settings live in a throwaway folder of their own (see app.whenReady below),
+ * pointed at a throwaway Effects folder. That is the whole trick — the real
+ * IPC handler, the real control list, the real buildEffectHtml, the real
+ * atomic write, into a directory nobody cares about. A test must never
+ * install anything into the SignalRGB folder the machine's owner actually
+ * uses, and this one provably cannot: the path it wrote comes back in the
+ * report for the check in test/app/boot.test.js to look at.
+ */
+async function selfTestExport(win, folder) {
+  const { read, message, clickAndWait, shoot } = windowDriver(win);
+  const out = { exportFolder: folder };
+
+  const EXPORT = 'footer-export';
+  const OVERWRITE = 'footer-overwrite';
+
+  /** Type into the name field the way a person does, event and all. */
+  const setName = (text) => read(`(() => {
+    const field = document.getElementById('footer-name');
+    field.value = ${JSON.stringify(text)};
+    field.dispatchEvent(new Event('input', { bubbles: true }));
+    return field.value;
+  })()`);
+
+  const overwriteOffered = () => read(`document.getElementById('${OVERWRITE}').hidden === false`);
+
+  out.targetShown = await read(`document.getElementById('footer-target').textContent`);
+
+  // The project left open by selfTestProjects carries brightness 3, which
+  // would export as an effect nobody can see. Turning it back up with the
+  // app's own slider is also the proof that an export carries what the
+  // settings column currently says: the number that ends up in the written
+  // file is checked against this one below.
+  out.brightnessBeforeExport = await read(`(() => {
+    const slider = document.getElementById('sf-brightness');
+    slider.value = '100';
+    slider.dispatchEvent(new Event('input', { bubbles: true }));
+    return slider.value;
+  })()`);
+
+  await setName('Selftest Export');
+  out.exportedMessage = await clickAndWait(EXPORT);
+  out.exportedFiles = readdirSync(folder);
+  // Read straight out of the file that was written: the brightness control's
+  // advertised default has to be the value the slider was standing at.
+  out.exportedBrightnessDefault = /<meta property="brightness"[^>]*default="([^"]*)"/
+    .exec(readFileSync(join(folder, 'Selftest Export.html'), 'utf8'))?.[1] ?? null;
+  await shoot('06-exported');
+
+  // Exporting the same name again must ask, not overwrite. The question has
+  // to name the full path and the answer has to be a button somebody presses
+  // on purpose.
+  out.existsMessage = await clickAndWait(EXPORT);
+  out.existsWarned = await read(`document.querySelector('.drop-message').classList.contains('drop-warn')`);
+  out.overwriteOffered = await overwriteOffered();
+  await shoot('07-overwrite-question');
+
+  // Written before the answer, so "the file changed" below is a fact about
+  // the overwrite and not about the first export.
+  const target = join(folder, 'Selftest Export.html');
+  writeFileSync(target, 'the effect that was already there', 'utf8');
+  out.overwrittenMessage = await clickAndWait(OVERWRITE);
+  out.overwriteReplacedTheFile = readFileSync(target, 'utf8').includes('SignalForgeEngine');
+  out.overwriteWithdrawn = !(await overwriteOffered());
+  await shoot('08-overwritten');
+
+  // A name made only of path separators must be refused out loud, and must
+  // not have quietly become a folder, a drive or a file somewhere else.
+  await setName('///');
+  out.badNameMessage = await clickAndWait(EXPORT);
+  out.filesAfterBadName = readdirSync(folder);
+  await shoot('09-bad-name');
+
+  // And a name that IS usable but full of characters a path is made of has
+  // to land in this folder under a plain file name.
+  await setName('a/b:c?d');
+  out.sanitisedMessage = await clickAndWait(EXPORT);
+  out.filesAfterSanitised = readdirSync(folder);
+  await shoot('10-sanitised-name');
+
   return out;
 }
 
 app.whenReady().then(async () => {
+  const selfTest = process.env.SF_SELFTEST === '1';
+  // The self-test keeps its settings, and its effects folder, in a throwaway
+  // directory. Two reasons, both of them about not touching the machine this
+  // runs on: a test must not rewrite the settings of the app its owner
+  // actually uses, and the effects folder it exports into must provably not
+  // be the real SignalRGB one.
+  const selfTestDir = selfTest ? mkdtempSync(join(tmpdir(), 'signalforge-selftest-run-')) : null;
+  const selfTestEffects = selfTest ? join(selfTestDir, 'Effects') : null;
+  if (selfTest) mkdirSync(selfTestEffects, { recursive: true });
+
   settings = createSettings({
-    file: join(app.getPath('userData'), 'settings.json'),
+    file: join(selfTest ? selfTestDir : app.getPath('userData'), 'settings.json'),
     readFile: (f) => readFileSync(f, 'utf8'),
     writeFile: writeFileAtomic
   });
+  // Set before the window is created, so the footer shows the folder it will
+  // really export into rather than one that changed underneath it.
+  if (selfTest) await settings.set('effectsFolder', selfTestEffects);
 
   const win = createWindow();
 
-  if (process.env.SF_SELFTEST === '1') {
+  if (selfTest) {
     try {
       // Boot check for the test suite: prove the window came up, that the
       // renderer has the bridge but no Node, and that the navigation/popup
@@ -430,7 +611,11 @@ app.whenReady().then(async () => {
         forgedImportResult.message.length > 0;
 
       Object.assign(report, await selfTestProjects(win));
+      Object.assign(report, await selfTestExport(win, selfTestEffects));
 
+      const shotDir = process.env.SF_SELFTEST_SHOTS;
+      if (shotDir) process.stdout.write(`self-test screenshots: ${shotDir}\n`);
+      process.stdout.write(`self-test effects folder: ${selfTestEffects}\n`);
       process.stdout.write(JSON.stringify(report) + '\n');
       app.quit();
     } catch (err) {

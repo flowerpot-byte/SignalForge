@@ -33,5 +33,12 @@ contextBridge.exposeInMainWorld('sf', {
   // path into, so sf:saveProject cannot be turned into "write this anywhere"
   // and sf:openProject cannot be turned into "read anything".
   saveProject: (doc) => ipcRenderer.invoke('sf:saveProject', doc),
-  openProject: () => ipcRenderer.invoke('sf:openProject')
+  openProject: () => ipcRenderer.invoke('sf:openProject'),
+  // And the same rule again for the export: a document goes out, a result
+  // comes back. `options` carries one thing only — whether the user has
+  // answered "yes, overwrite it" — so there is nowhere here for a renderer
+  // to put a path. The folder is chosen in the main process (the detected
+  // one, or the one the folder dialog returned), and the path in the result
+  // is there to be shown, not to be sent back.
+  exportEffect: (doc, options) => ipcRenderer.invoke('sf:exportEffect', doc, { force: options?.force === true })
 });

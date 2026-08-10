@@ -57,7 +57,37 @@ html, body {
 #footer    { grid-area: footer; display: flex; align-items: center; gap: var(--gap); }
 /* The buttons live one level in, inside the region mountShell hands out, so
    the row has to be laid out here as well as on the panel itself. */
-#footer-body { display: flex; align-items: center; gap: var(--gap); }
+#footer-body { display: flex; align-items: center; gap: var(--gap); flex: 1 1 auto; min-width: 0; }
+#footer-body label { color: var(--text-muted); }
+/* Buttons keep their natural width and their single line; the row is made to
+   fit by the target folder giving way below, never by a button being cut in
+   half or pushed off the edge. Without min-width: 0 above, the row's own
+   min-content width includes every button and the panel scrolls sideways
+   instead — which is exactly what happened the first time the overwrite
+   button appeared. */
+#footer-body > button, #footer-body > label { flex: 0 0 auto; white-space: nowrap; }
+/* The target folder is the longest thing in the row and the least urgent, so
+   it is the one that gives way: it takes the leftover width and truncates,
+   leaving the name field and the buttons at their natural size. The full
+   path is never only here — it is also in the message after every export
+   and in the overwrite question. */
+#footer-target {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+input[type="text"] {
+  font: inherit;
+  color: var(--text-strong);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-stroke);
+  border-radius: 10px;
+  padding: 7px 10px;
+  min-width: 180px;
+}
 
 .muted { color: var(--text-muted); }
 

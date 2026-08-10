@@ -35,5 +35,15 @@
   "project.saveFailed": "Could not save the project",
   "project.opened": "Project opened",
   "project.openFailed": "Could not open the project",
-  "project.repaired": "Project opened, but something had to be corrected"
+  "project.repaired": "Project opened, but something had to be corrected",
+  "export.sourceDetected": "detected",
+  "export.sourceConfigured": "chosen",
+  "export.noFolder": "No SignalRGB folder found",
+  "export.done": "Saved to SignalRGB",
+  "export.failed": "Could not save the effect",
+  "export.exists": "That file already exists. Overwrite?",
+  "export.overwrite": "Overwrite",
+  "export.badName": "Please use a name without \\ / : ?",
+  "export.nothing": "Drop an image in first",
+  "export.needsFolder": "Choose the effects folder first"
 }

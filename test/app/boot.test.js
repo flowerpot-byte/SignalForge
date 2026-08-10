@@ -124,4 +124,77 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'an opened project must still be draggable: the picture has to be measured again, ' +
       'because the document does not carry its size'
   );
+
+  // Export, driven by clicking the app's own footer button in the real
+  // window. Nothing is stubbed here at all: the target folder is a throwaway
+  // one the self-test put in its own throwaway settings file, so the real
+  // handler, the real control list and the real atomic write are all
+  // exercised without a dialog and without touching anything that matters.
+  assert.ok(
+    !/WhirlwindFX/i.test(report.exportFolder),
+    `the self-test must never export into a real SignalRGB folder, it used ${report.exportFolder}`
+  );
+  assert.match(
+    report.targetShown,
+    /chosen|gewaehlt/,
+    'the footer must show where the effect is going and how that was decided'
+  );
+  assert.match(
+    report.exportedMessage,
+    /Selftest Export\.html/,
+    'a finished export must name the file it wrote'
+  );
+  assert.match(report.exportedMessage, /KB/, 'and how big it is');
+  assert.equal(
+    report.exportedBrightnessDefault,
+    report.brightnessBeforeExport,
+    'the exported effect must carry what the settings column was showing at the moment of export'
+  );
+  assert.deepEqual(
+    report.exportedFiles,
+    ['Selftest Export.html'],
+    'exactly one effect, named after the name field, must be in the target folder'
+  );
+
+  // A second export of the same name must ask, with the full path in the
+  // question, and must not have touched the file while asking.
+  assert.match(
+    report.existsMessage,
+    /Selftest Export\.html/,
+    'the overwrite question must name the full path'
+  );
+  assert.equal(report.existsWarned, true, 'the overwrite question must be marked as a warning');
+  assert.equal(
+    report.overwriteOffered,
+    true,
+    'the only way past the question must be a button the user presses on purpose'
+  );
+  assert.equal(
+    report.overwriteReplacedTheFile,
+    true,
+    'answering the question must actually replace the file that was there'
+  );
+  assert.equal(
+    report.overwriteWithdrawn,
+    true,
+    'the overwrite button must disappear again once the question has been answered'
+  );
+
+  // A name made only of separators must be refused out loud and must not
+  // have created anything anywhere.
+  assert.match(report.badNameMessage, /\\ \/ : \?/, 'a useless name must say what a usable one looks like');
+  assert.deepEqual(
+    report.filesAfterBadName,
+    ['Selftest Export.html'],
+    'a refused name must not have written anything'
+  );
+
+  // A usable name full of path characters must land in the target folder
+  // under a plain file name, never one folder up or on another drive.
+  assert.deepEqual(
+    report.filesAfterSanitised.sort(),
+    ['Selftest Export.html', 'a-b-c-d.html'],
+    'a name containing / \\ : ? must be sanitised into a plain file name in the chosen folder'
+  );
+  assert.match(report.sanitisedMessage, /a-b-c-d\.html/);
 });
