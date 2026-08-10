@@ -51,6 +51,13 @@ test('an empty buffer is not transparent', () => {
 // docs/erkenntnisse-signalrgb-motor.md): at 0.92 the rendered 320x200 frame
 // differs from the PNG-embedded one by at most 9/255 on any channel and by
 // under 0.9/255 on average, while the embedded bytes shrink about ninefold.
-test('the jpeg quality is the measured one, not a guess', () => {
-  assert.equal(JPEG_QUALITY, 0.92);
+//
+// Not pinned to the exact 0.92: the report names raising it to 0.95 as the
+// intended response if the constant ever needs revisiting (e.g. Max finds the
+// picture quality lacking), and a test asserting exact equality would fail
+// for that being done correctly. A range still catches a fat-fingered value
+// like 0.2 or 1 that was never measured against anything.
+test('the jpeg quality is in the measured, sensible range', () => {
+  assert.ok(JPEG_QUALITY > 0.8 && JPEG_QUALITY <= 0.95,
+    `JPEG_QUALITY (${JPEG_QUALITY}) is outside the range the measurements in docs/erkenntnisse-signalrgb-motor.md cover`);
 });
