@@ -42,11 +42,14 @@ export function offsetFromDrag({ startOffset, dx, dy, canvasWidth, canvasHeight,
  * fixed number of canvas pixels means one press always looks like the same
  * nudge, whatever picture is loaded.
  *
- * Why 4 and 40, measured rather than guessed. The canvas is 320 x 200 and is
- * shown at roughly twice that size, so 4 canvas pixels is about 8 pixels under
- * the eye — small enough to place a subject exactly (1.25 % of the width),
- * large enough to see that something happened. One canvas pixel would be
- * invisible at a glance.
+ * Why 4 and 40, measured rather than guessed. The canvas is 320 x 200 and, at
+ * the default window size, is shown at roughly twice that — so 4 canvas
+ * pixels is about 8 pixels under the eye there specifically; the canvas
+ * scales with the window, so that "8 pixels" is not a constant and was never
+ * the point. What is constant is the fraction of the picture: 4 canvas
+ * pixels is 1.25 % of the 320-pixel width and 2 % of the 200-pixel height —
+ * small enough to place a subject exactly, large enough to see that something
+ * happened. One canvas pixel would be invisible at a glance.
  *
  * The press count is what settles the second number. The acceptance
  * walkthrough's picture is 800 x 200; at `cover` the engine crops 480 of its
