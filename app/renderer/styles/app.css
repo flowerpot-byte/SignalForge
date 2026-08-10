@@ -88,6 +88,60 @@ html, body {
    once main.js adds this class for a rejection or a failed import. */
 .drop-message.drop-warn { color: var(--warn); }
 
+/* One field of the settings column: its name on the left, its current value
+   on the right, and the control itself across the full width underneath. */
+.field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px var(--gap);
+  margin-bottom: 14px;
+}
+.field label { color: var(--text-muted); }
+.field output { font-variant-numeric: tabular-nums; }
+.field input[type="range"] {
+  grid-column: 1 / -1;
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+select {
+  font: inherit;
+  color: var(--text-strong);
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-stroke);
+  border-radius: 10px;
+  padding: 4px 8px;
+}
+/* The dropdown list itself is drawn by the system and does not inherit the
+   glass above it, so it needs a solid background of its own — without this
+   the options come out as dark text on a dark list. */
+select option { background: var(--bg-base); color: var(--text-strong); }
+
+/* The motion list, and one motion's sliders. Both are fieldsets so what
+   belongs together is grouped for a screen reader as well as for the eye. */
+.motion-list, .motion-group {
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--radius);
+  padding: 8px 12px 12px;
+  margin: 0 0 14px;
+}
+.motion-list legend, .motion-group legend { color: var(--text-muted); padding: 0 4px; }
+/* The name goes on its own line above the dropdown and its remove button:
+   all three side by side do not fit the column, and a wrapped label reads
+   as if it belonged to the row below it. */
+.motion-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 8px;
+  margin-bottom: 10px;
+}
+.motion-row label { grid-column: 1 / -1; color: var(--text-muted); }
+.motion-row button, button.add-motion { padding: 4px 10px; }
+.motion-group .field:last-child { margin-bottom: 0; }
+
 button {
   font: inherit;
   color: var(--text-strong);
@@ -98,6 +152,9 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--glass-fill-hover); }
+/* Nothing left to add: say so by looking spent, and do not light up on hover. */
+button:disabled { color: var(--text-muted); cursor: default; }
+button:disabled:hover { background: var(--glass-fill); }
 button.primary { background: var(--accent-soft); border-color: var(--accent); }
 
 /* Focus must stay obvious on glass — never remove the ring without a
