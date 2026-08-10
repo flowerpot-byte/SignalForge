@@ -61,6 +61,12 @@ ipcMain.handle('sf:chooseFolder', async () => {
 // path must not have (see app/renderer/main.js).
 ipcMain.handle('sf:importImage', async (_e, path) => {
   try {
+    // preload.cjs resolves this path itself via webUtils.getPathForFile on
+    // the dropped File object — the renderer never supplies a path. A File
+    // with no real disk backing (anything a renderer script could forge)
+    // resolves to '', which must fail the same visible way as any other bad
+    // drop rather than being handed to prepareImageFile's readFileSync.
+    if (!path) throw new Error('no file path available for the dropped file');
     return { ok: true, asset: await prepareImageFile(path) };
   } catch (error) {
     return { ok: false, message: String(error.message || error) };
@@ -133,6 +139,21 @@ app.whenReady().then(async () => {
       );
       report.popupBlocked =
         openReturnedNull === true && BrowserWindow.getAllWindows().length === windowCountBefore;
+
+      // Finding-2 regression guard: a File object a renderer script forges
+      // itself (as opposed to one that came from a real OS drop) has no disk
+      // backing, so webUtils.getPathForFile resolves it to '' in the
+      // preload. Prove that reaches the user as the ordinary visible-error
+      // shape, not a silent no-op, an unhandled rejection, or — if the ''
+      // guard above ever regressed — an actual filesystem read.
+      const forgedImportResult = await win.webContents.executeJavaScript(
+        `window.sf.importImage(new File([], 'forged.png'))`
+      );
+      report.forgedFileImportRejected =
+        forgedImportResult != null &&
+        forgedImportResult.ok === false &&
+        typeof forgedImportResult.message === 'string' &&
+        forgedImportResult.message.length > 0;
 
       process.stdout.write(JSON.stringify(report) + '\n');
       app.quit();

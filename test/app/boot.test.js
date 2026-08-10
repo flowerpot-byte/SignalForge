@@ -43,4 +43,10 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     true,
     'window.open must be denied and must not create a new window (setWindowOpenHandler guard)'
   );
+  assert.equal(
+    report.forgedFileImportRejected,
+    true,
+    'sf:importImage must reject a File with no real disk path (webUtils.getPathForFile === "") ' +
+      'with the ordinary visible-error shape, never read an arbitrary renderer-forged path'
+  );
 });

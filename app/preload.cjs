@@ -15,10 +15,15 @@ contextBridge.exposeInMainWorld('sf', {
   },
   effectsTarget: () => ipcRenderer.invoke('sf:effectsTarget'),
   chooseFolder: () => ipcRenderer.invoke('sf:chooseFolder'),
-  // A dropped File object carries no usable path of its own under
-  // sandbox: true (the old File.path extension is gone) — webUtils is the
-  // supported replacement and, unlike ipcRenderer.invoke, resolves
-  // synchronously in the preload context.
-  pathForFile: (file) => webUtils.getPathForFile(file),
-  importImage: (path) => ipcRenderer.invoke('sf:importImage', path)
+  // The renderer hands over the dropped File object itself, never a path
+  // string: only this preload script (not the sandboxed, isolated renderer
+  // world) is trusted to turn that File into a real filesystem path, via
+  // webUtils.getPathForFile. A script running in the renderer cannot forge a
+  // File that resolves to an arbitrary path of its choosing — a synthetic
+  // `new File([...], 'x.png')` has no disk backing and getPathForFile
+  // returns '' for it, which the main-process handler below rejects the same
+  // way it rejects any other failed import. This is what keeps
+  // sf:importImage from being an arbitrary-file-read primitive despite
+  // sandbox: true isolating the renderer from Node.
+  importImage: (file) => ipcRenderer.invoke('sf:importImage', webUtils.getPathForFile(file))
 });

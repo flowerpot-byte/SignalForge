@@ -66,12 +66,23 @@ html, body {
   display: grid;
   place-items: center;
   justify-items: center;
+  /* Without this the three stacked children (canvas, cost readout,
+     drop-message) are implicit auto rows and the grid's default
+     align-content spreads the leftover vertical space between them instead
+     of packing them under the canvas — the readout would drift far below
+     it. Pack rows tightly from the top instead. */
+  align-content: start;
   gap: var(--gap);
   border-radius: var(--radius);
   border: 1px dashed transparent;
   text-align: center;
 }
 #preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
+/* The drop-message keeps its element (rather than being added/removed) so
+   main.js only ever has to set textContent/classList, but an empty <p> still
+   has its own row and its browser-default margin — collapse it out of the
+   layout entirely rather than leaving a ghost gap when there is no message. */
+#preview-body .drop-message:empty { display: none; }
 /* Two classes so this reliably outranks .muted regardless of source order —
    the drop-message starts out merely muted (the hint) and only turns warn
    once main.js adds this class for a rejection or a failed import. */

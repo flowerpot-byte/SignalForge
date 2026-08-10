@@ -14,9 +14,15 @@ export function isSupportedImage(name) {
 }
 
 /**
- * Wire drag-and-drop onto `element`. `onFile(path)` fires for a supported
- * image; `onReject(name)` fires for anything else, including a drop with no
- * file at all handled silently (nothing to reject or import).
+ * Wire drag-and-drop onto `element`. `onFile(file)` fires with the dropped
+ * `File` object for a supported image; `onReject(name)` fires for anything
+ * else, including a drop with no file at all handled silently (nothing to
+ * reject or import).
+ *
+ * This hands over the `File` object itself rather than resolving it to a
+ * path here — only `app/preload.cjs` is trusted to turn a File into a real
+ * filesystem path (via `webUtils.getPathForFile`), so the renderer never
+ * gets to compute or forge a path of its own for `sf:importImage` to read.
  *
  * `stopPropagation` here matters beyond tidiness: `app/renderer/main.js`
  * installs a window-wide dragover/drop guard so a drop outside this element
@@ -41,10 +47,7 @@ export function mountDrop(element, { onFile, onReject }) {
     element.classList.remove('drop-active');
     const file = event.dataTransfer?.files?.[0];
     if (!file) return;
-    // Electron gives the real path through webUtils; the renderer never
-    // reads the file itself, it only hands the path to the main process.
-    const path = window.sf.pathForFile(file);
     if (!isSupportedImage(file.name)) { onReject(file.name); return; }
-    onFile(path);
+    onFile(file);
   });
 }

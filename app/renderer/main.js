@@ -27,12 +27,6 @@ if (!window.SignalForgeEngine) {
 window.addEventListener('dragover', (event) => event.preventDefault());
 window.addEventListener('drop', (event) => event.preventDefault());
 
-/** The last path segment, without pulling in node:path (the renderer has no Node). */
-function baseName(path) {
-  const parts = path.split(/[\\/]/);
-  return parts[parts.length - 1] || path;
-}
-
 /**
  * Everything that can fail (missing/blocked language file, bridge call)
  * lives in here so a rejection can be turned into a visible message instead
@@ -72,14 +66,18 @@ async function boot() {
   regions.preview.append(message);
 
   mountDrop(regions.preview, {
-    onFile: async (path) => {
+    onFile: async (file) => {
       // sf:importImage already turns its own failures into { ok: false }
       // (see app/main.js) rather than a rejection, but this handler is an
       // event callback with nobody awaiting it — an unexpected throw
       // anywhere in here (a bridge error, setDocument rejecting) must still
       // end up on screen instead of an unhandled rejection in the console.
       try {
-        const result = await window.sf.importImage(path);
+        // The File itself goes to the bridge; only preload.cjs resolves it
+        // to a real path (see components/drop.js). file.name is already
+        // just the leaf name, so it doubles as the document name with no
+        // path-splitting needed here.
+        const result = await window.sf.importImage(file);
         if (!result.ok) {
           message.classList.add('drop-warn');
           message.textContent = `${i18n.t('preview.dropFailed')}: ${result.message}`;
@@ -88,7 +86,7 @@ async function boot() {
         message.classList.remove('drop-warn');
         message.textContent = '';
         await preview.setDocument({
-          name: baseName(path),
+          name: file.name,
           layers: [{ id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] }],
           assets: { image: result.asset }
         });
