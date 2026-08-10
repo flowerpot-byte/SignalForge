@@ -460,6 +460,142 @@ app.whenReady().then(async () => {
     report.unsavedAfterDiscard = await unsaved();
     await d.shot('06-discarded-and-opened');
 
+    // --- the same question in front of the four starting tiles --------------
+    //
+    // The three colour tiles are the only one-click destructive controls in
+    // this window: no file dialog to escape from, no drag to think better of,
+    // and they sit a few pixels under the stage the work is on. Everything
+    // below is the "open project" block above, asked of a tile instead — the
+    // same three answers, the same evidence.
+
+    /**
+     * Everything about the document that anything can see from out here: its
+     * name, every control the settings column built for it (id AND value, so a
+     * document of a different TYPE is a different snapshot even when the
+     * numbers happen to line up), the section headings, and the pixels.
+     *
+     * That is the document itself and not a proxy for it: a solid layer's
+     * colour, a gradient's stops and angle, the four document-wide sliders and
+     * the name are each a control here, and the one field none of them carries
+     * — a picture's crop offset — only the canvas can show.
+     */
+    const snapshot = async () => {
+      await d.settle();
+      return {
+        name: await d.js(`document.getElementById('footer-name').value`),
+        controls: await d.js(`[...document.querySelectorAll('#inspector-body input, #inspector-body select')]
+          .map((e) => e.id + '=' + e.value)`),
+        headings: await d.js(`[...document.querySelectorAll('.field-group > h3')].map((h) => h.textContent.trim())`),
+        pixels: (await d.stats()).hash
+      };
+    };
+
+    // Nothing unsaved: the project opened a few lines up came straight out of
+    // a file. A tile must ask nothing at all here, for the same reason "open
+    // project" does not.
+    const askedBeforeCleanTile = discardAsked.length;
+    await d.clickById('gallery-solid');
+    await d.until(`document.getElementById('sf-layers-0-color') !== null`, 'the solid tile started an effect', 100);
+    report.cleanTileAskedNothing = discardAsked.length === askedBeforeCleanTile;
+    report.unsavedAfterTile = await unsaved();
+
+    // Work worth losing: a name and a slider, on a document that is now a flat
+    // colour and looks nothing like the project the file holds.
+    await d.setInput('footer-name', 'A Colour Worth Keeping');
+    await d.setInput('sf-brightness', '31');
+    await wait(200);
+    const beforeTile = await snapshot();
+    const messageBeforeTile = await d.message();
+    report.unsavedBeforeTileCancel = await unsaved();
+
+    // --- a tile: cancel -----------------------------------------------------
+    discardAnswer = 'cancel';
+    const askedBeforeTileCancel = discardAsked.length;
+    await d.clickById('gallery-linear');
+    await waitFor(() => discardAsked.length > askedBeforeTileCancel, 'a tile asked before discarding');
+    await wait(LONG_ENOUGH_TO_HAVE_OPENED);
+    report.tileCancelAsked = discardAsked.length === askedBeforeTileCancel + 1;
+    report.snapshotBeforeTileCancel = beforeTile;
+    report.snapshotAfterTileCancel = await snapshot();
+    report.tileCancelSaidNothing = (await d.message()) === messageBeforeTile;
+    report.stillUnsavedAfterTileCancel = await unsaved();
+    await d.shot('07-tile-cancelled-nothing-changed');
+
+    // --- a tile: save first, and the save is cancelled ----------------------
+    saveCanceled = true;
+    discardAnswer = 'save';
+    const savesBeforeTile = saveDialogCalls;
+    await d.clickById('gallery-radial');
+    await waitFor(() => saveDialogCalls > savesBeforeTile, 'the tile opened the save dialog');
+    await wait(LONG_ENOUGH_TO_HAVE_OPENED);
+    saveCanceled = false;
+    report.snapshotAfterTileCanceledSave = await snapshot();
+    report.stillUnsavedAfterTileCanceledSave = await unsaved();
+
+    // --- a tile: discard ----------------------------------------------------
+    savedFiles = [];
+    discardAnswer = 'discard';
+    await d.clickById('gallery-radial');
+    await d.until(
+      `document.getElementById('sf-layers-0-shape')?.value === 'radial'`,
+      'the radial tile started an effect after discarding',
+      100
+    );
+    report.tileDiscardWroteNothing = savedFiles.length === 0;
+    report.snapshotAfterTileDiscard = await snapshot();
+    await d.shot('08-tile-discarded-and-started');
+
+    // --- and the picture tile, the fourth entrance --------------------------
+    //
+    // Driven through the gallery's own hidden <input type="file">, given a
+    // real path by the protocol: that is the same File the operating system's
+    // dialog would hand over, so it reaches app/renderer/main.js's importFile
+    // through the very handler a click reaches it through — and it opens no
+    // dialog on the machine's own screen.
+    try {
+      await d.send('DOM.enable');
+    } catch {
+      // Already enabled, or not needed on this revision.
+    }
+    const pickPicture = async () => {
+      const { result } = await d.send('Runtime.evaluate', {
+        expression: `document.getElementById('gallery-file')`
+      });
+      await d.send('DOM.setFileInputFiles', { files: [imageFile], objectId: result.objectId });
+      // Whether setFileInputFiles fires `change` by itself has changed between
+      // protocol revisions, and firing it twice would import twice. The
+      // gallery's own handler clears the field the moment it runs (see
+      // components/gallery.js), so the field itself is the answer.
+      const alreadyFired = await d.js(`document.getElementById('gallery-file').value === ''`);
+      if (!alreadyFired) {
+        await d.js(`document.getElementById('gallery-file')
+          .dispatchEvent(new Event('change', { bubbles: true })), true`);
+      }
+    };
+
+    const beforePicture = await snapshot();
+    report.unsavedBeforePictureTile = await unsaved();
+    discardAnswer = 'cancel';
+    const askedBeforePicture = discardAsked.length;
+    await pickPicture();
+    await waitFor(() => discardAsked.length > askedBeforePicture, 'the picture tile asked before discarding');
+    await wait(LONG_ENOUGH_TO_HAVE_OPENED);
+    report.snapshotBeforePictureCancel = beforePicture;
+    report.snapshotAfterPictureCancel = await snapshot();
+    report.stillUnsavedAfterPictureCancel = await unsaved();
+
+    // And discarding lets the picture in, so the guard is a question and not a
+    // wall: the fit dropdown exists for an image layer and for nothing else.
+    discardAnswer = 'discard';
+    await pickPicture();
+    await d.until(
+      `document.getElementById('sf-layers-0-fit') !== null`,
+      'the picture tile imported after discarding',
+      200
+    );
+    report.pictureTileImported = true;
+    await d.shot('09-picture-tile-imported-after-discard');
+
     // --- the genuine dialog, photographed -----------------------------------
     //
     // Only when a human asked for it, and never by the suite. The question is

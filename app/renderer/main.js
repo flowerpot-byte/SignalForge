@@ -493,8 +493,17 @@ async function boot() {
    * object and nothing else; only app/preload.cjs is trusted to turn that into
    * a filesystem path (webUtils.getPathForFile), so adding the second entrance
    * added no new way for the window to name a file.
+   *
+   * Asks about unsaved work first, exactly as openProject and startEffect do:
+   * all four entrances to a new document behave alike, and they behave alike in
+   * the one direction that cannot lose anything. The question comes after the
+   * file has been named here rather than before it — the other way round from
+   * openProject — because there is nothing to put it in front of: a drop
+   * arrives with the file already chosen, and the picture tile's file dialog is
+   * opened by the browser on the click itself.
    */
   async function importFile(file) {
+      if (!(await mayDiscard())) return;
       // sf:importImage already turns its own failures into { ok: false }
       // (see app/main.js) rather than a rejection, but this runs from an event
       // callback with nobody awaiting it — an unexpected throw anywhere in
@@ -572,11 +581,14 @@ async function boot() {
    * same reasons — document first, then the crop (which now has nothing to
    * drag and says so), then the column, then the name, then the loop.
    *
-   * Like the picture tile and like a drop, this replaces what is on screen
-   * without asking. That is deliberate consistency, not an oversight: all four
-   * tiles are the same gesture, and one of them stopping to ask while the
-   * others do not would be the surprising thing. Opening a project still asks,
-   * because that one comes with a file dialog attached.
+   * And, like all four of them, it asks about unsaved work before it throws any
+   * away. These three tiles are the only genuinely one-click destructive
+   * controls in the window — the picture tile at least puts a file dialog in
+   * front of the damage, and a drop takes a deliberate drag — and they sit
+   * directly under the stage, a few pixels from where the work is. A mis-click
+   * there used to replace the whole document with no dialog, no cancel and no
+   * undo. All four entrances now behave alike, and they behave alike in the
+   * direction that cannot lose work.
    */
   async function startEffect(kind) {
     const starter = STARTERS[kind];
@@ -584,6 +596,10 @@ async function boot() {
       console.error('gallery: no such effect kind', kind);
       return;
     }
+    // Before anything on screen is touched, and before the message line is
+    // cleared: a cancelled question must leave the window exactly as it was,
+    // down to the sentence it is showing.
+    if (!(await mayDiscard())) return;
     try {
       showMessage('');
       await preview.setDocument({

@@ -51,12 +51,16 @@ windowDisplay.show = false;
  * And the line that keeps a REAL modal question off the machine's screen.
  *
  * Starting an effect from a tile leaves unsaved work, exactly as importing a
- * picture does — so the next "open project" asks about it, through a native
- * window-modal message box (see discardDialog in app/main.js). With nobody
- * there to answer, that box would sit in front of whatever the machine's owner
- * is actually doing until this run gave up. Answered here instead, at the same
- * seam the two file dialogs are answered at: "discard", because everything
- * this run throws away it made itself, seconds earlier.
+ * picture does — so the NEXT tile, and the next "open project", ask about it
+ * through a native window-modal message box (see discardDialog in app/main.js).
+ * With nobody there to answer, that box would sit in front of whatever the
+ * machine's owner is actually doing until this run gave up. Answered here
+ * instead, at the same seam the two file dialogs are answered at: "discard",
+ * because everything this run throws away it made itself, seconds earlier.
+ *
+ * That the question is asked at all is not this file's business to prove; the
+ * three answers are checked one at a time, against the real document, in
+ * test/harness/unsaved.js.
  */
 discardDialog.ask = async () => ({ response: 1 });
 

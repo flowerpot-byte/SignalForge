@@ -221,4 +221,66 @@ test('unsaved work is known about, and asked about before it is thrown away', as
       'the other project must be on screen'
     );
   });
+
+  // The starting tiles. Three of them replace the whole document on a single
+  // click with no file dialog in front of them and nothing to undo them, and
+  // they sit directly under the stage the work is on — so they are the one
+  // place in this window where a slip of the mouse could cost everything. The
+  // fourth (the picture) reaches the same code by a different door.
+  await t.test('a tile with nothing unsaved asks nothing at all', () => {
+    assert.equal(
+      report.cleanTileAskedNothing,
+      true,
+      'a document that came straight out of a file has nothing to lose, so there is nothing to ask'
+    );
+    assert.equal(report.unsavedAfterTile, true, 'and an effect just begun is work that is in no file yet');
+  });
+
+  await t.test('starting an effect from a tile with unsaved work asks first', () => {
+    assert.equal(report.unsavedBeforeTileCancel, true, 'the fixture must genuinely have unsaved work');
+    assert.equal(report.tileCancelAsked, true, 'pressing a starting tile with unsaved work must ask');
+  });
+
+  await t.test('cancelling a tile leaves the document exactly as it was', () => {
+    assert.deepEqual(
+      report.snapshotAfterTileCancel,
+      report.snapshotBeforeTileCancel,
+      'the name, every control the column built, the headings AND the pixels must be untouched'
+    );
+    assert.equal(report.tileCancelSaidNothing, true, 'a cancelled tile must not even change the message line');
+    assert.equal(
+      report.stillUnsavedAfterTileCancel,
+      true,
+      'and the work must still be known to be unsaved, so the next press asks again'
+    );
+  });
+
+  await t.test('a tile whose "save first" is cancelled starts nothing either', () => {
+    assert.deepEqual(
+      report.snapshotAfterTileCanceledSave,
+      report.snapshotBeforeTileCancel,
+      'the work is still in no file, so nothing may be discarded'
+    );
+    assert.equal(report.stillUnsavedAfterTileCanceledSave, true);
+  });
+
+  await t.test('answering "discard" lets the tile start its effect', () => {
+    assert.equal(report.tileDiscardWroteNothing, true, 'discarding must not save anything behind the user\'s back');
+    assert.notDeepEqual(
+      report.snapshotAfterTileDiscard,
+      report.snapshotBeforeTileCancel,
+      'the new effect must actually be on the stage — a guard that never lets go is a wall'
+    );
+  });
+
+  await t.test('the picture tile asks the same question, and cancelling changes nothing', () => {
+    assert.equal(report.unsavedBeforePictureTile, true, 'the fixture must genuinely have unsaved work');
+    assert.deepEqual(
+      report.snapshotAfterPictureCancel,
+      report.snapshotBeforePictureCancel,
+      'a cancelled import must leave the document exactly as it was'
+    );
+    assert.equal(report.stillUnsavedAfterPictureCancel, true);
+    assert.equal(report.pictureTileImported, true, 'and discarding must let the picture in');
+  });
 });
