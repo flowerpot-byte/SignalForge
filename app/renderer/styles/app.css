@@ -10,62 +10,341 @@ html, body {
   color: var(--text-strong);
   font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   overflow: hidden;
+  /* Say the window is dark, so the controls the system draws for us — the
+     dropdown lists above all — are drawn dark too instead of as white
+     rectangles that appear out of nowhere on a click. */
+  color-scheme: dark;
 }
 
-/* The three soft blobs behind everything. They pick up the colours of the
-   effect being edited, which is the reason this interface is made of glass
-   rather than just decorated with it. */
+/* The three soft blobs behind everything. They take the colours of the
+   picture that was imported (see samplePalette in components/palette.js),
+   which is the reason this interface is made of glass rather than just
+   decorated with it. */
 #backdrop {
   position: fixed;
   inset: -20%;
   z-index: 0;
   filter: blur(80px) saturate(1.2);
-  transition: opacity 400ms ease;
 }
 #backdrop div {
   position: absolute;
   width: 46%;
   height: 46%;
   border-radius: 50%;
-  opacity: 0.55;
+  /* Dialled back from 0.55: with the blobs taking a picture's own colours,
+     0.55 turned an orange picture into an orange window and the picture
+     stopped being the brightest thing in it. This is a tint, not a flood. */
+  opacity: 0.4;
+  /* State, not decoration: this is the window saying it has taken the new
+     picture's colours. Fast enough to belong to the import that caused it. */
+  transition: background 220ms ease-out;
 }
 
+/* Two columns, not three. The picture takes the width the (empty) layer
+   column used to hold; the settings keep a comfortable measure that grows a
+   little on a very wide screen and never below 320px, which is what the
+   longest label plus its number needs at the smallest window.
+   minmax(0, 1fr) rather than 1fr: a bare 1fr is min-content wide, so one long
+   unbreakable word in the settings column could otherwise push the preview
+   off the window. */
 #app {
   position: relative;
   z-index: 1;
   height: 100%;
   display: grid;
-  grid-template-columns: 260px 1fr 300px;
-  grid-template-rows: 1fr auto;
-  grid-template-areas: "layers preview inspector" "footer footer footer";
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 22%, 400px);
+  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-areas: "preview inspector" "footer footer";
   gap: var(--gap);
   padding: var(--gap);
 }
 
 .panel {
-  background: var(--glass-fill);
+  background: var(--panel-fill);
   border: 1px solid var(--glass-stroke);
   border-radius: var(--radius);
   backdrop-filter: blur(var(--glass-blur));
   padding: var(--panel-pad);
-  overflow: auto;
+  min-width: 0;
+  min-height: 0;
 }
 
-#layers    { grid-area: layers; }
-#preview   { grid-area: preview; display: grid; place-items: center; }
-#inspector { grid-area: inspector; }
-#footer    { grid-area: footer; display: flex; align-items: center; gap: var(--gap); }
+/* ---------------------------------------------------------------------------
+   The preview: the one thing this app is for.
+   --------------------------------------------------------------------------- */
+
+#preview {
+  grid-area: preview;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  /* Nothing in here may ever scroll: the stage sizes itself to what is on
+     offer, so a scrollbar would mean the arithmetic below is wrong. */
+  overflow: hidden;
+}
+
+/* The drop zone fills the whole preview panel so a drag can land anywhere
+   over it, not just on the canvas — see mountDrop() in components/drop.js. */
+#preview-body {
+  /* The frame the first-start question centres itself in — see .first-run. */
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+  min-height: 0;
+  border-radius: var(--radius);
+  border: 1px dashed transparent;
+}
+#preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
+
+/* The stage measures itself, and the frame inside it is sized from that
+   measurement: `container-type: size` is what makes 100cqh below mean "the
+   height this stage actually got".
+
+   Why it has to be done this way. The canvas is 320 x 200 and must stay that
+   ratio at any window size, but the space it is offered is limited on BOTH
+   axes — width at the smallest window, height at a maximised one. aspect-ratio
+   with width:100% keeps the ratio only until max-height bites, at which point
+   the box is clamped on one axis and the ratio is silently broken. Deriving
+   the width from the measured height instead means one axis is chosen and the
+   other simply follows, so the ratio cannot break. The 34px is the caption row
+   under the frame plus its gap, which the frame must leave room for. */
+.stage {
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  container-type: size;
+}
+.stage-inner {
+  display: grid;
+  gap: 8px;
+  width: min(100%, calc((100cqh - 34px) * 1.6));
+}
+
+/* The frame. A screen, not a picture on a panel: its own surface, its own
+   edge, and lifted off the glass by a shadow. */
+.viewport {
+  position: relative;
+  aspect-ratio: 320 / 200;
+  border-radius: var(--radius);
+  border: 1px solid var(--glass-stroke);
+  background: var(--panel-fill);
+  box-shadow: var(--stage-shadow);
+}
+/* Empty, the frame is the drop target and says so with its edge — an opaque
+   black rectangle the size of the window read as a hole rather than as a
+   screen waiting for something. main.js adds .has-picture once there is one
+   (and takes it away again for a project that has none). */
+#preview-body:not(.has-picture) .viewport { border-style: dashed; }
+#preview-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Matched to the frame so the corners are clipped by the canvas itself.
+     Deliberately NOT overflow:hidden on .viewport — that would clip the
+     canvas's own focus ring, which is drawn outside its box. */
+  border-radius: calc(var(--radius) - 1px);
+}
+
+/* The caption belongs to the frame: what the effect is (320 x 200, always,
+   because that is what SignalRGB samples) on the left, what it costs on the
+   right. Loose text drifting under the picture is what this replaces. */
+.stage-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 22px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 2px 9px;
+  border: 1px solid var(--glass-stroke);
+  border-radius: 999px;
+  background: var(--glass-fill);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Above 15 % of a core the reading is the point, so it stops being quiet. */
+#preview-cost.cost-warn { color: var(--warn); border-color: var(--warn); }
+/* Before the loop has drawn a frame there is no cost to report, and an empty
+   pill is a promise of information that is not there. */
+#preview-cost:empty { display: none; }
+
+/* The one line of feedback in the window. Its row is reserved whether or not
+   there is anything to say, so the picture above it does not resize every
+   time a message comes and goes — the ghost gap the old `:empty { display:
+   none }` was avoiding is now the point of the row. */
+.drop-message {
+  margin: 0;
+  min-height: 20px;
+  padding-top: 10px;
+  /* A rule across the panel, so the line reads as the preview's status strip
+     rather than as a caption that drifted away from the picture. */
+  border-top: 1px solid var(--glass-stroke);
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+/* Two classes so this reliably outranks .muted regardless of source order —
+   the drop-message starts out merely muted (the hint) and only turns warn
+   once main.js adds this class for a rejection or a failed import. */
+.drop-message.drop-warn { color: var(--warn); }
+
+/* The first-start question. A panel, not a curtain: it sits in the middle of
+   the preview column and leaves the rest of the window usable, because
+   somebody who wants to drop a picture in and play first should not have to
+   answer a filing question to get there.
+
+   Taken out of the flow on purpose. In the flow it stacked on top of the
+   preview canvas and pushed "drop an image here" off the bottom, so the first
+   thing a first-time user saw was the one line that tells them what to do
+   gone missing. */
+.first-run {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  max-width: 46ch;
+  margin: 0;
+  padding: 18px;
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--radius);
+  background: var(--panel-fill);
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--stage-shadow);
+  text-align: left;
+}
+.first-run h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.first-run p { margin: 0 0 14px; color: var(--text-muted); font-size: 13px; }
+
+/* ---------------------------------------------------------------------------
+   The settings column.
+   --------------------------------------------------------------------------- */
+
+#inspector {
+  grid-area: inspector;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  /* The heading and the body carry their own padding, so the heading's rule
+     can run the full width of the panel and the scrollbar sits at its edge. */
+  padding: 0;
+  overflow: hidden;
+}
+#inspector-title {
+  margin: 0;
+  padding: 13px var(--panel-pad) 12px;
+  border-bottom: 1px solid var(--glass-stroke);
+  font-size: 15px;
+  font-weight: 600;
+}
+#inspector-body {
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Thin, and its space always reserved: a scrollbar that appears when a
+     motion is added would otherwise shift every control in the column
+     sideways at the moment the user pressed a button. */
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  padding: 14px var(--panel-pad) 18px;
+}
+
+/* A section of the column. The weight is carried by the heading and the rule
+   under it, not by a box: a box here would be a card inside a card. */
+.field-group {
+  margin: 0 0 20px;
+  border: 0;
+  padding: 0;
+}
+.field-group:last-child { margin-bottom: 0; }
+.field-group > h3 {
+  margin: 0 0 12px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--glass-stroke);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-strong);
+}
+
+/* One field: its name on the left, its current value on the right, and — for
+   a slider — the control across the full width underneath. */
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 4px;
+  margin: 0 0 12px;
+}
+.field:last-child { margin-bottom: 0; }
+.field > label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.field > output {
+  min-width: 3ch;
+  text-align: right;
+  color: var(--text-strong);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One motion: the kind it is, and the two sliders that steer it, together.
+   They used to be in two separate fieldsets several rows apart — a list of
+   motions above and a stack of "Bewegung 1", "Bewegung 2" below it — which
+   said the same structure twice and put a motion's name a long way from its
+   own sliders. */
+.motion {
+  min-inline-size: 0;
+  margin: 0 0 10px;
+  padding: 8px 12px 12px;
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--radius-sm);
+}
+.motion:last-of-type { margin-bottom: 12px; }
+.motion legend {
+  padding: 0 5px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.motion-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.motion-row select { width: 100%; }
+.motion-row button { padding: 5px 10px; font-size: 12px; }
+button.add-motion { width: 100%; }
+
+/* ---------------------------------------------------------------------------
+   The footer: one action that matters, and the quiet ones beside it.
+   --------------------------------------------------------------------------- */
+
+#footer { grid-area: footer; padding: 10px 12px; }
 /* The buttons live one level in, inside the region mountShell hands out, so
    the row has to be laid out here as well as on the panel itself. */
-#footer-body { display: flex; align-items: center; gap: var(--gap); flex: 1 1 auto; min-width: 0; }
-#footer-body label { color: var(--text-muted); }
+#footer-body { display: flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+#footer-body label { color: var(--text-muted); font-size: 13px; }
 /* Buttons keep their natural width and their single line; the row is made to
    fit by the target folder giving way below, never by a button being cut in
    half or pushed off the edge. Without min-width: 0 above, the row's own
    min-content width includes every button and the panel scrolls sideways
    instead — which is exactly what happened the first time the overwrite
    button appeared. */
-#footer-body > button, #footer-body > label { flex: 0 0 auto; white-space: nowrap; }
+#footer-body > button, #footer-body > label, #footer-body > select { flex: 0 0 auto; white-space: nowrap; }
 /* The target folder is the longest thing in the row and the least urgent, so
    it is the one that gives way: it takes the leftover width and truncates,
    leaving the name field and the buttons at their natural size. The full
@@ -77,153 +356,133 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-size: 13px;
 }
+
+/* ---------------------------------------------------------------------------
+   Controls. Every one of them has all five states.
+   --------------------------------------------------------------------------- */
 
 input[type="text"] {
   font: inherit;
+  font-size: 13px;
   color: var(--text-strong);
   background: var(--glass-fill);
   border: 1px solid var(--glass-stroke);
-  border-radius: 10px;
-  padding: 7px 10px;
-  min-width: 180px;
+  border-radius: var(--radius-sm);
+  padding: 6px 10px;
+  min-width: 170px;
+  transition: background 150ms ease-out, border-color 150ms ease-out;
 }
-
-.muted { color: var(--text-muted); }
-
-/* The drop zone fills the whole preview panel so a drag can land anywhere
-   over it, not just on the canvas — see mountDrop() in components/drop.js. */
-#preview-body {
-  width: 100%;
-  height: 100%;
-  /* The frame the first-start question centres itself in — see .first-run. */
-  position: relative;
-  display: grid;
-  place-items: center;
-  justify-items: center;
-  /* Without this the three stacked children (canvas, cost readout,
-     drop-message) are implicit auto rows and the grid's default
-     align-content spreads the leftover vertical space between them instead
-     of packing them under the canvas — the readout would drift far below
-     it. Pack rows tightly from the top instead. */
-  align-content: start;
-  gap: var(--gap);
-  border-radius: var(--radius);
-  border: 1px dashed transparent;
-  text-align: center;
-}
-#preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
-/* The drop-message keeps its element (rather than being added/removed) so
-   main.js only ever has to set textContent/classList, but an empty <p> still
-   has its own row and its browser-default margin — collapse it out of the
-   layout entirely rather than leaving a ghost gap when there is no message. */
-#preview-body .drop-message:empty { display: none; }
-/* Two classes so this reliably outranks .muted regardless of source order —
-   the drop-message starts out merely muted (the hint) and only turns warn
-   once main.js adds this class for a rejection or a failed import. */
-.drop-message.drop-warn { color: var(--warn); }
-
-/* The first-start question. A panel, not a curtain: it sits in the middle of
-   the middle column and leaves the rest of the window usable, because somebody
-   who wants to drop a picture in and play first should not have to answer a
-   filing question to get there.
-
-   Taken out of the flow on purpose. In the flow it stacked on top of the
-   preview canvas, which is as wide as the column and therefore several hundred
-   pixels tall — the column started scrolling and pushed "drop an image here"
-   off the bottom, so the first thing a first-time user saw was the one line
-   that tells them what to do gone missing. */
-.first-run {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  max-width: 44ch;
-  margin: 0;
-  padding: var(--panel-pad);
-  border: 1px solid var(--glass-stroke);
-  border-radius: var(--radius);
-  background: var(--glass-fill);
-  backdrop-filter: blur(var(--glass-blur));
-  text-align: left;
-}
-.first-run h2 { margin: 0 0 6px; font-size: 16px; }
-.first-run p { margin: 0 0 14px; color: var(--text-muted); }
-
-/* One field of the settings column: its name on the left, its current value
-   on the right, and the control itself across the full width underneath. */
-.field {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 2px var(--gap);
-  margin-bottom: 14px;
-}
-.field label { color: var(--text-muted); }
-.field output { font-variant-numeric: tabular-nums; }
-.field input[type="range"] {
-  grid-column: 1 / -1;
-  width: 100%;
-  margin: 0;
-  accent-color: var(--accent);
-}
+input[type="text"]:hover { background: var(--glass-fill-hover); }
+input[type="text"]:disabled { color: var(--text-muted); cursor: default; }
 
 select {
   font: inherit;
+  font-size: 13px;
   color: var(--text-strong);
   background: var(--glass-fill);
   border: 1px solid var(--glass-stroke);
-  border-radius: 10px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  max-width: 100%;
+  cursor: pointer;
+  transition: background 150ms ease-out, border-color 150ms ease-out;
 }
+select:hover { background: var(--glass-fill-hover); }
+select:active { background: var(--accent-soft); border-color: var(--accent); }
+select:disabled { color: var(--text-muted); cursor: default; }
+select:disabled:hover { background: var(--glass-fill); }
 /* The dropdown list itself is drawn by the system and does not inherit the
    glass above it, so it needs a solid background of its own — without this
    the options come out as dark text on a dark list. */
 select option { background: var(--bg-base); color: var(--text-strong); }
 
-/* The motion list, and one motion's sliders. Both are fieldsets so what
-   belongs together is grouped for a screen reader as well as for the eye. */
-.motion-list, .motion-group {
-  border: 1px solid var(--glass-stroke);
-  border-radius: var(--radius);
-  padding: 8px 12px 12px;
-  margin: 0 0 14px;
-}
-.motion-list legend, .motion-group legend { color: var(--text-muted); padding: 0 4px; }
-/* The dropdown and its remove button, side by side. The motion's name is
-   deliberately not printed here: the fieldset holding that motion's sliders
-   carries it as its legend, and having both meant the column said
-   "Bewegung 1" twice. The dropdown keeps the name for a screen reader
-   through an aria-label (see components/field.js). */
-.motion-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-.motion-row button, button.add-motion { padding: 4px 10px; }
-.motion-group .field:last-child { margin-bottom: 0; }
-
 button {
   font: inherit;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-strong);
   background: var(--glass-fill);
   border: 1px solid var(--glass-stroke);
-  border-radius: 10px;
-  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  padding: 7px 12px;
   cursor: pointer;
+  transition: background 150ms ease-out, border-color 150ms ease-out, color 150ms ease-out;
 }
 button:hover { background: var(--glass-fill-hover); }
+button:active { background: var(--accent-soft); border-color: var(--accent); }
 /* Nothing left to add: say so by looking spent, and do not light up on hover. */
 button:disabled { color: var(--text-muted); cursor: default; }
-button:disabled:hover { background: var(--glass-fill); }
-button.primary { background: var(--accent-soft); border-color: var(--accent); }
+button:disabled:hover, button:disabled:active {
+  background: var(--glass-fill);
+  border-color: var(--glass-stroke);
+}
+
+/* The one action the whole app exists for. Filled, not tinted: --bg-base on
+   --accent measures 4.53:1, and on --accent-hover 5.69:1. */
+button.primary {
+  color: var(--bg-base);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+button.primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+button.primary:active { background: var(--accent); border-color: var(--accent); }
+button.primary:disabled {
+  color: var(--text-muted);
+  background: var(--glass-fill);
+  border-color: var(--glass-stroke);
+}
+
+/* The answer to the first-start question. Marked out by its edge rather than
+   filled, so the window still has exactly one filled button in it. */
+button.accent-outline { border-color: var(--accent); }
+button.accent-outline:hover { background: var(--accent-soft); border-color: var(--accent); }
+
+/* The sliders. The filled part of the track is drawn here rather than left to
+   the browser's own accent-color: --sf-fill is set by field.js on every input
+   event, so how far along the value is can be seen without reading the
+   number. */
+input[type="range"] {
+  grid-column: 1 / -1;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 16px;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    var(--accent) 0 var(--sf-fill, 0%),
+    var(--glass-stroke) var(--sf-fill, 0%) 100%
+  );
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--text-strong);
+  transition: transform 150ms ease-out;
+}
+input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.15); background: var(--accent); }
+input[type="range"]:disabled { cursor: default; }
+input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-muted); }
 
 /* Focus must stay obvious on glass — never remove the ring without a
    replacement that is at least as visible. */
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.muted { color: var(--text-muted); }
 
 /* Content for a screen reader only — present in the accessibility tree,
    invisible and untouchable on screen. Used for the crop's aria-live

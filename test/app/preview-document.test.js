@@ -10,7 +10,13 @@ import { createPreview } from '../../app/renderer/components/preview.js';
 // jsdom in this project. Nothing here touches real rendering — what is under
 // test is which document and which assets the loop is left holding.
 function fakeElement() {
-  return { style: {}, getContext: () => ({}) };
+  return {
+    style: {},
+    children: [],
+    classList: { toggle() {}, add() {}, remove() {} },
+    append(...kids) { this.children.push(...kids); },
+    getContext: () => ({})
+  };
 }
 
 /**

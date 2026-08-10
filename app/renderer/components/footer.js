@@ -79,9 +79,14 @@ export function mountFooter(container, {
   languageSelect.value = language;
   languageSelect.addEventListener('change', () => onLanguageChange(languageSelect.value));
 
+  // The order is the reading order and the tab order at once, and it runs
+  // from what the effect is called, through where it is going, to the thing
+  // that puts it there: the one filled button, last and furthest right, with
+  // the quiet ones and the language switch in front of it. The overwrite
+  // answer sits directly beside the export it belongs to.
   container.append(
-    nameLabel, name, target, exportButton, overwrite, save, open,
-    languageLabel, languageSelect
+    nameLabel, name, target,
+    languageLabel, languageSelect, open, save, overwrite, exportButton
   );
 
   /**

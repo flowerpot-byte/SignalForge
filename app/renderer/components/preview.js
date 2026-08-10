@@ -26,16 +26,44 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   const SF = window.SignalForgeEngine;
 
   const canvas = document.createElement('canvas');
+  // The backing store is the engine's, always: this is what SignalRGB samples
+  // per LED, and only the size the canvas is DISPLAYED at is the window's
+  // business (see .viewport in styles/app.css, and toCanvasPixels() in
+  // components/crop.js, which converts screen pixels back through it).
   canvas.width = SF.CANVAS_WIDTH;
   canvas.height = SF.CANVAS_HEIGHT;
   canvas.id = 'preview-canvas';
-  canvas.style.width = '100%';
   canvas.style.imageRendering = 'auto';
 
-  const readout = document.createElement('p');
-  readout.className = 'muted';
+  // The frame around the picture, and the caption that belongs to it. The
+  // readout used to be a loose line of text drifting below the canvas with
+  // several hundred pixels of panel under it; it is now a chip attached to
+  // the frame, opposite a second chip stating what the effect actually is.
+  const stage = document.createElement('div');
+  stage.className = 'stage';
+  const inner = document.createElement('div');
+  inner.className = 'stage-inner';
+  const viewport = document.createElement('div');
+  viewport.className = 'viewport';
+  const meta = document.createElement('div');
+  meta.className = 'stage-meta';
 
-  container.append(canvas, readout);
+  // Not a translated string and deliberately not one: it is the engine's own
+  // two numbers, which mean the same in every language.
+  const size = document.createElement('p');
+  size.className = 'chip';
+  size.id = 'preview-size';
+  size.textContent = `${SF.CANVAS_WIDTH} × ${SF.CANVAS_HEIGHT}`;
+
+  const readout = document.createElement('p');
+  readout.className = 'chip';
+  readout.id = 'preview-cost';
+
+  viewport.append(canvas);
+  meta.append(size, readout);
+  inner.append(viewport, meta);
+  stage.append(inner);
+  container.append(stage);
 
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const renderer = SF.createRenderer();
@@ -98,7 +126,9 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
 
     const ms = samples.reduce((a, b) => a + b, 0) / samples.length;
     readout.textContent = `${t('preview.cost')}: ${ms.toFixed(2)} ms — ${Math.round(coreShare(ms) * 100)} %`;
-    readout.style.color = costLevel(ms) === 'warn' ? 'var(--warn)' : 'var(--text-muted)';
+    // A class rather than an inline colour, so the one place that decides what
+    // "too expensive" looks like is the stylesheet.
+    readout.classList.toggle('cost-warn', costLevel(ms) === 'warn');
   }
 
   return {

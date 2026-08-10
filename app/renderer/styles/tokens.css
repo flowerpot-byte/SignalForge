@@ -19,4 +19,31 @@
   --backdrop-seed-1: #2a3a5c;
   --backdrop-seed-2: #4a2f52;
   --backdrop-seed-3: #20404a;
+
+  /* A panel is dark glass, not white glass.
+     --glass-fill alone lightens whatever is behind it, and since the backdrop
+     now takes its colours from the imported picture, "whatever is behind it"
+     is no longer a colour anybody chose. A bright picture pushed the panel
+     surface up to roughly #5a5a5a, where --text-muted measures 3.5:1 — below
+     the 4.5:1 body-text floor. This dark tint puts a floor under the surface
+     instead: measured against the brightest backdrop the sampler can produce,
+     --text-muted on a panel comes out at 5.9:1, and against the calmest at
+     7.6:1. The blur still carries the colour through, so the glass is still
+     glass. --glass-fill stays what it always was and is now used for the
+     controls that sit ON a panel. */
+  --panel-fill:     rgba(14, 17, 26, 0.62);
+
+  /* The primary button is filled with --accent and labelled in --bg-base:
+     4.53:1, which white on the same fill does not reach (4.29:1). This is
+     its hover, one step brighter — --bg-base on it measures 5.69:1. */
+  --accent-hover:   #d9648c;
+
+  /* The preview frame has to read as the thing being produced rather than as
+     an image lying on a panel, so it is lifted off the glass. A shadow needs
+     a colour and colours live here. */
+  --stage-shadow:   0 18px 44px rgba(0, 0, 0, 0.5);
+
+  /* The small radius, for controls. It was written as a bare 10px in five
+     places in app.css; the same number in one place is the system. */
+  --radius-sm:      10px;
 }

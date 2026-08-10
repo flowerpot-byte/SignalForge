@@ -31,7 +31,10 @@ export function mountFirstRun(container, { t, onChoose }) {
   const choose = document.createElement('button');
   choose.type = 'button';
   choose.id = 'first-run-choose';
-  choose.className = 'primary';
+  // Marked out by its edge, not filled. The window has exactly one filled
+  // button — "save to SignalRGB" in the footer, which is what the whole app
+  // is for — and a second one here would have made that claim twice.
+  choose.className = 'accent-outline';
   choose.addEventListener('click', onChoose);
 
   panel.append(title, body, choose);

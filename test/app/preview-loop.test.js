@@ -11,7 +11,13 @@ import { createPreview } from '../../app/renderer/components/preview.js';
 // nothing in the loop-restart bug below touches real rendering, only the
 // scheduling around it.
 function fakeElement() {
-  return { style: {}, getContext: () => ({}) };
+  return {
+    style: {},
+    children: [],
+    classList: { toggle() {}, add() {}, remove() {} },
+    append(...kids) { this.children.push(...kids); },
+    getContext: () => ({})
+  };
 }
 
 function installFakeDom(renderCalls) {
