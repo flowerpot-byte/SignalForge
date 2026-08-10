@@ -78,8 +78,18 @@ export const SECTION_TITLES = Object.freeze({
   colour: 'inspector.section.colour'
 });
 
-/** The glyph that leads each section's heading, and the left column's entry. */
-const SECTION_GLYPHS = Object.freeze({
+/**
+ * The glyph that leads each section's heading — and the very same one the left
+ * column's entry carries, which is why this is exported.
+ *
+ * The pairing is the whole point: a sidebar entry and the heading it leads to
+ * are one thing said twice, so wearing different icons would be the window
+ * contradicting itself. The WORD half of that pairing is already held together
+ * by SECTION_TITLES and a test; this is the icon half, written down once here
+ * and pinned to components/sidebar.js's DESTINATIONS in
+ * test/app/fill-section.test.js.
+ */
+export const SECTION_GLYPHS = Object.freeze({
   fill: 'solid',
   image: 'image',
   motions: 'motion',

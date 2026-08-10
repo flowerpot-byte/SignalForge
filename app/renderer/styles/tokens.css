@@ -84,9 +84,10 @@
      src/engine/document.js — the colour a solid layer starts out as. That is
      what makes the "Farbflaeche" tile's preview swatch an honest picture of
      what pressing the tile produces. The two cannot import each other (one is
-     the window's palette, the other is a field in the user's document), so
-     nothing catches a drift: retuning the accent means retuning that constant
-     as well, or the tile quietly stops showing what it makes. */
+     the window's palette, the other is a field in the user's document), so a
+     test stands between them instead: test/app/accent-default-colour.test.js
+     reads this file and compares. Retuning the accent means retuning that
+     constant as well, and now the build says so rather than the comment. */
   --accent:         #ff0066;
   /* One step brighter, for the hover of that same button. --bg-base on it
      measures 4.62:1, still past the body-text floor. */

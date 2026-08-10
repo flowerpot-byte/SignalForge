@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeInspector, SECTION_TITLES } from '../../app/renderer/components/inspector.js';
+import {
+  describeInspector, SECTION_TITLES, SECTION_GLYPHS
+} from '../../app/renderer/components/inspector.js';
 import { nextStopPosition } from '../../app/renderer/components/field.js';
 import { TILES } from '../../app/renderer/components/gallery.js';
 import { DESTINATIONS } from '../../app/renderer/components/sidebar.js';
@@ -144,6 +146,24 @@ test('every left-column entry carries the very heading it leads to', () => {
     assert.equal(entry.labelKey, SECTION_TITLES[entry.key],
       `the entry "${entry.key}" and its heading must be the same word`);
   }
+});
+
+// And the same again for the icon, which was the half nothing held. The two
+// tables are written out separately — one beside the settings column's
+// headings, one beside the left column's entries — so an icon changed in one
+// of them would have left a sidebar entry and the heading it leads to wearing
+// different pictures, with every other check still green.
+test('every left-column entry carries the very glyph its heading carries', () => {
+  for (const entry of DESTINATIONS) {
+    assert.equal(entry.glyph, SECTION_GLYPHS[entry.key],
+      `the entry "${entry.key}" and its heading must show the same icon`);
+  }
+});
+
+// Neither table may quietly grow a section the other has never heard of.
+test('the two tables name exactly the same sections', () => {
+  assert.deepEqual(Object.keys(SECTION_GLYPHS).sort(), Object.keys(SECTION_TITLES).sort());
+  assert.deepEqual(DESTINATIONS.map((entry) => entry.key).sort(), Object.keys(SECTION_TITLES).sort());
 });
 
 // ---------------------------------------------------------- the gallery

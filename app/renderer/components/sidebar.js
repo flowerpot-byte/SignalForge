@@ -49,8 +49,12 @@ import { icon } from './icons.js';
  * column filters on; `labelKey` is the translation key; `glyph` is the icon.
  *
  * The document sections carry the very same labelKeys the settings column's
- * own headings do, deliberately: the entry and the heading it leads to must be
- * the same word, and one key is how that stays true.
+ * own headings do, and the very same glyphs, deliberately: the entry and the
+ * heading it leads to must be the same word AND the same picture. Both halves
+ * are pinned to that column's own tables (SECTION_TITLES and SECTION_GLYPHS in
+ * components/inspector.js) in test/app/fill-section.test.js — the word half
+ * always was, the icon half was not, and a glyph changed on one side alone
+ * used to leave an entry and its heading showing different things.
  */
 export const DESTINATIONS = Object.freeze([
   Object.freeze({ key: 'fill', labelKey: 'inspector.section.fill', glyph: 'solid' }),

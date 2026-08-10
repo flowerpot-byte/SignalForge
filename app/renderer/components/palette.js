@@ -3,12 +3,28 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 /**
- * The colours the backdrop takes from the picture that was imported.
+ * The few colours a picture is mostly made of.
  *
- * This is the idea the whole look rests on: the window is made of glass so
- * that what is behind the glass can be the effect being edited. Until now
- * mountBackdrop was called once with three fixed seeds and never again, which
- * left the glass showing nothing but itself — cost with no reason.
+ * WHAT USES IT NOW
+ *
+ * One thing: the 40px chip at the left of the transport bar, which shows the
+ * loaded effect as three bands of its own strongest colours (see setColours in
+ * components/footer.js). That is a decision rather than a shortcut — this app
+ * makes light, and a 320 x 200 crop shrunk to 40px is mush, whereas three
+ * bands of the colour the desk is actually going to be are legible at that
+ * size and are the thing being previewed.
+ *
+ * WHAT USED TO USE IT, SO THE NUMBERS BELOW MAKE SENSE
+ *
+ * The window used to be built of translucent panels over three large blurred
+ * blobs of these colours — "the window is made of glass so that what is behind
+ * the glass can be the effect being edited". That idea is gone: the rebuilt
+ * window has no translucency, no backdrop-filter and no blurred colour behind
+ * anything (see the note at the top of styles/app.css). The arithmetic here
+ * survived it unchanged and still earns its place, but the lightness band and
+ * the saturation ceiling below were tuned for blobs behind frosted glass, and
+ * their comments say so. Read them as history, not as a description of the
+ * window.
  *
  * Two halves, split so the arithmetic can be checked without a browser:
  * paletteFromPixels() below is pure and takes raw RGBA bytes;
