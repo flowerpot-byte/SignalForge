@@ -421,6 +421,23 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
  * The renderer gets no Node at all. Everything it needs arrives through the
  * enumerated bridge in preload.cjs — see app/preload.cjs.
  */
+/**
+ * Whether a window this process opens is shown as soon as it can paint.
+ *
+ * A seam, and the same kind as `folderDialog`, `projectDialogs` and
+ * `searchRoots` above: a harness sets it in its own top-level code, which runs
+ * after this module's top level and before `app.whenReady` fires.
+ *
+ * It exists for one reason. Photographing the window is how this app's look is
+ * checked, and until now every photograph meant a real window appearing in
+ * front of whoever is using the machine — several of them, one per harness
+ * run. A window that is never shown can still be loaded, driven and captured
+ * (`webContents.capturePage`), so nothing about the checking is weakened by
+ * this; only the interruption goes away. Nothing in the app itself ever sets
+ * it: the default is, and must stay, `true`.
+ */
+export const windowDisplay = { show: true };
+
 function createWindow() {
   const background = backgroundFromTokens();
   const win = new BrowserWindow({
@@ -438,7 +455,7 @@ function createWindow() {
       nodeIntegration: false
     }
   });
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => { if (windowDisplay.show) win.show(); });
 
   // Establish the process isolation boundary this whole app relies on: the
   // window may only ever show what we load into it. Block any attempt to
