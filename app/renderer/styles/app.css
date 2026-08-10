@@ -8,7 +8,7 @@ html, body {
   height: 100%;
   background: var(--bg-base);
   color: var(--text-strong);
-  font: 14px/1.5 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.5 var(--font-ui);
   overflow: hidden;
   /* Say the window is dark, so the controls the system draws for us — the
      dropdown lists above all — are drawn dark too instead of as white
@@ -212,6 +212,11 @@ html, body {
   gap: 10px;
   min-height: 22px;
 }
+/* Both chips are readings, so both are set in the data face — see --font-mono
+   in tokens.css. No font-variant-numeric here any more: a monospaced face
+   already advances every digit by the same amount, so tabular-nums asked for
+   something that was already true, and a declaration nothing depends on is a
+   claim that something does. */
 .chip {
   display: inline-flex;
   align-items: center;
@@ -221,8 +226,9 @@ html, body {
   border-radius: 999px;
   background: var(--glass-fill);
   color: var(--text-muted);
+  font-family: var(--font-mono);
   font-size: 12px;
-  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -375,12 +381,17 @@ html, body {
   color: var(--text-muted);
   font-size: 13px;
 }
+/* The value, in the data face. This is the figure a person is steering towards,
+   so it is set as a figure — see --font-mono in tokens.css. 12px rather than
+   the label's 13: Cascadia Mono runs wider and taller at the same nominal size,
+   and a number that outweighs its own label is the wrong hierarchy.
+   No font-variant-numeric, for the same reason as on .chip. */
 .field > output {
-  min-width: 3ch;
+  min-width: 4ch;
   text-align: right;
   color: var(--text-strong);
-  font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  font-size: 12px;
 }
 
 /* One motion: the kind it is, and the two sliders that steer it, together.
