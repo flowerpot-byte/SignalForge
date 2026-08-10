@@ -18,6 +18,7 @@ const FILES = [
   join(appDir, 'styles', 'app.css'),
   join(appDir, 'components', 'shell.js'),
   join(appDir, 'components', 'preview.js'),
+  join(appDir, 'components', 'drop.js'),
   join(appDir, 'main.js')
 ];
 
@@ -25,7 +26,7 @@ const FILES = [
 // the functional colour notations.
 const COLOR_LITERAL = /#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(/;
 
-test('app.css, shell.js, preview.js and main.js contain no colour literals outside tokens.css', () => {
+test('app.css, shell.js, preview.js, drop.js and main.js contain no colour literals outside tokens.css', () => {
   // A vacuous pass (nothing scanned) would be worthless, so fail loudly if
   // the file list is ever empty.
   assert.ok(FILES.length > 0, 'the scanned file list is empty — this test would pass vacuously');

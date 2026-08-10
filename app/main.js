@@ -8,6 +8,7 @@ import { readFileSync, writeFileSync, renameSync, unlinkSync, existsSync } from 
 import { homedir } from 'node:os';
 import { createSettings } from '../src/main/settings.js';
 import { resolveEffectsTarget } from '../src/main/effects-target.js';
+import { prepareImageFile } from '../src/main/prepare-image.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -53,6 +54,17 @@ ipcMain.handle('sf:chooseFolder', async () => {
   if (result.canceled || result.filePaths.length === 0) return currentTarget();
   await settings.set('effectsFolder', result.filePaths[0]);
   return currentTarget();
+});
+// The error comes back as a value, not a throw: an ipcMain.handle rejection
+// reaches the renderer as an opaque "Error invoking remote method" with the
+// real message stripped, which is exactly the silent failure the dropped-file
+// path must not have (see app/renderer/main.js).
+ipcMain.handle('sf:importImage', async (_e, path) => {
+  try {
+    return { ok: true, asset: await prepareImageFile(path) };
+  } catch (error) {
+    return { ok: false, message: String(error.message || error) };
+  }
 });
 
 /**

@@ -4,6 +4,7 @@
 import { createI18n } from './i18n/i18n.js';
 import { mountShell, mountBackdrop } from './components/shell.js';
 import { createPreview } from './components/preview.js';
+import { mountDrop } from './components/drop.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -15,31 +16,22 @@ if (!window.SignalForgeEngine) {
   throw new Error('engine bundle missing');
 }
 
-/**
- * Placeholder document for the preview until Task 7 wires up real image
- * import. It only exists to prove the preview draws frames through the
- * engine bundle, so it embeds a tiny image and a visible motion.
- */
-const DEMO_DOCUMENT = {
-  name: 'Preview',
-  layers: [
-    {
-      id: 'demo',
-      type: 'image',
-      asset: 'demo',
-      fit: 'cover',
-      motions: [{ kind: 'warp', speed: 30, amount: 60 }]
-    }
-  ],
-  assets: {
-    demo: {
-      kind: 'image',
-      mime: 'image/png',
-      data: 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/'
-        + 'P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC'
-    }
-  }
-};
+// Dropping a file anywhere Chromium considers a valid drop target normally
+// navigates the window to that file — the exact "blank/replace the window"
+// failure the drop zone below must never trigger. This guard sits at the
+// window level, outside boot(), so it is active even if boot() itself fails,
+// and it covers every drop that lands outside the dedicated zone (over the
+// layers or inspector panels, for instance): mountDrop()'s own handler
+// stops propagation for drops it handles, so this one only ever sees drops
+// nobody else claimed, and simply swallows them.
+window.addEventListener('dragover', (event) => event.preventDefault());
+window.addEventListener('drop', (event) => event.preventDefault());
+
+/** The last path segment, without pulling in node:path (the renderer has no Node). */
+function baseName(path) {
+  const parts = path.split(/[\\/]/);
+  return parts[parts.length - 1] || path;
+}
 
 /**
  * Everything that can fail (missing/blocked language file, bridge call)
@@ -70,8 +62,48 @@ async function boot() {
   const regions = mountShell(document.getElementById('app'), (k) => i18n.t(k));
 
   const preview = createPreview(regions.preview, (k) => i18n.t(k));
-  await preview.setDocument(DEMO_DOCUMENT);
-  preview.start();
+
+  // Shown until the first successful drop, then reused for a rejection
+  // message — one line so there is only ever one thing to read, and it is
+  // always in the window, never only in the console (see components/drop.js).
+  const message = document.createElement('p');
+  message.className = 'muted drop-message';
+  message.textContent = i18n.t('preview.dropHint');
+  regions.preview.append(message);
+
+  mountDrop(regions.preview, {
+    onFile: async (path) => {
+      // sf:importImage already turns its own failures into { ok: false }
+      // (see app/main.js) rather than a rejection, but this handler is an
+      // event callback with nobody awaiting it — an unexpected throw
+      // anywhere in here (a bridge error, setDocument rejecting) must still
+      // end up on screen instead of an unhandled rejection in the console.
+      try {
+        const result = await window.sf.importImage(path);
+        if (!result.ok) {
+          message.classList.add('drop-warn');
+          message.textContent = `${i18n.t('preview.dropFailed')}: ${result.message}`;
+          return;
+        }
+        message.classList.remove('drop-warn');
+        message.textContent = '';
+        await preview.setDocument({
+          name: baseName(path),
+          layers: [{ id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] }],
+          assets: { image: result.asset }
+        });
+        preview.start();
+      } catch (err) {
+        console.error('drop import failed:', err);
+        message.classList.add('drop-warn');
+        message.textContent = `${i18n.t('preview.dropFailed')}: ${err.message || err}`;
+      }
+    },
+    onReject: (name) => {
+      message.classList.add('drop-warn');
+      message.textContent = `${i18n.t('preview.dropUnsupported')}: ${name}`;
+    }
+  });
 }
 
 boot().catch((err) => {

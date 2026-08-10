@@ -58,6 +58,25 @@ html, body {
 
 .muted { color: var(--text-muted); }
 
+/* The drop zone fills the whole preview panel so a drag can land anywhere
+   over it, not just on the canvas — see mountDrop() in components/drop.js. */
+#preview-body {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  justify-items: center;
+  gap: var(--gap);
+  border-radius: var(--radius);
+  border: 1px dashed transparent;
+  text-align: center;
+}
+#preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
+/* Two classes so this reliably outranks .muted regardless of source order —
+   the drop-message starts out merely muted (the hint) and only turns warn
+   once main.js adds this class for a rejection or a failed import. */
+.drop-message.drop-warn { color: var(--warn); }
+
 button {
   font: inherit;
   color: var(--text-strong);

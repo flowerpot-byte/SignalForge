@@ -3,6 +3,8 @@
   "layers.title": "Layers",
   "inspector.title": "Settings",
   "preview.dropHint": "Drop an image here",
+  "preview.dropUnsupported": "Unsupported file type",
+  "preview.dropFailed": "Could not load the image",
   "preview.cost": "Compute cost",
   "footer.export": "Save to SignalRGB",
   "footer.save": "Save project",

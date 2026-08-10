@@ -3,6 +3,8 @@
   "layers.title": "Ebenen",
   "inspector.title": "Einstellungen",
   "preview.dropHint": "Bild hierher ziehen",
+  "preview.dropUnsupported": "Nicht unterstuetzter Dateityp",
+  "preview.dropFailed": "Bild konnte nicht geladen werden",
   "preview.cost": "Rechenlast",
   "footer.export": "In SignalRGB speichern",
   "footer.save": "Projekt speichern",
