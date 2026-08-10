@@ -21,7 +21,9 @@ const BG_BASE = /--bg-base:\s*([^;]+);/
   .exec(readFileSync(join(root, 'app', 'renderer', 'styles', 'tokens.css'), 'utf8'))[1].trim();
 
 test('the app boots, opens a window and exposes its bridge', async () => {
-  const child = spawn(require_('electron'), [join(root, 'app', 'main.js'), '--sf-selftest'], {
+  // SF_SELFTEST in the environment is what switches the self-test on, and the
+  // only thing that does — app/main.js never looks at argv.
+  const child = spawn(require_('electron'), [join(root, 'app', 'main.js')], {
     stdio: ['ignore', 'pipe', 'pipe'],
     env: { ...process.env, SF_SELFTEST: '1' }
   });
