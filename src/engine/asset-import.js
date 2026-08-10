@@ -88,6 +88,15 @@ export async function prepareImageAsset(dataUrl, { maxHeight = CANVAS_HEIGHT, bl
     ctx.filter = 'none';
   }
 
+  // Encoding an opaque picture as JPEG bakes that blur halo onto black,
+  // because JPEG has no alpha to keep it soft with. That is invisible today:
+  // render() (engine.js) fills the canvas with opaque black before any layer
+  // draws, so a halo faded to transparent and a halo faded to black composite
+  // to the very same pixels — measured, the whole-frame difference stays under
+  // 12/255 and is dominated by JPEG itself, not by the halo. It stops being
+  // invisible the day an image layer sits on top of ANOTHER layer: the outer
+  // ~2px would then show black instead of what is underneath. Worth
+  // remembering when stacked layers arrive.
   const mime = transparent ? 'image/png' : 'image/jpeg';
   const out = transparent
     ? canvas.toDataURL('image/png')
