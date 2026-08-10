@@ -146,11 +146,14 @@ html, body {
   grid-area: stage;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
-  /* Tighter above and below than at the sides: the reference's stage sits
-     almost flush with the top of the window, and every pixel taken off here
-     goes straight into the picture, which is the one thing this column is
-     for. */
-  padding: var(--space-3) var(--space-4);
+  /* Measured off the reference rather than chosen: its stage runs from x=213
+     to x=1257, with the sidebar ending at x=200 and the settings cards
+     beginning at x=1268 — 13px of margin on the left and 11px on the right,
+     i.e. --space-3 either side, not --space-4. Those four pixels a side are
+     not decoration: the frame here is width-limited at 16:10, so every pixel
+     of width becomes 0.625px of height, and the leftover height around the
+     frame is the "air" this column is judged by. */
+  padding: var(--space-3);
   min-width: 0;
   min-height: 0;
   /* Nothing in here may ever scroll: the stage sizes itself to what is on
@@ -888,18 +891,19 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-mute
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* The two scrollbars this window has — the settings column and the gallery
-   rail. `scrollbar-width: thin` alone left Chromium drawing its own light grey
-   bar, which on a near-black window was the brightest thing in it after the
-   picture. Same tokens as an unfilled slider track: present, findable, and
-   never the loudest edge on screen. */
-::-webkit-scrollbar { width: 8px; height: 8px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb {
-  background: var(--track-empty);
-  border-radius: var(--radius-pill);
-}
-::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
-::-webkit-scrollbar-corner { background: transparent; }
+   rail. Chromium's own is light grey, which on a near-black window was the
+   brightest thing in it after the picture: at 1040 x 700 the strip scrolls,
+   and the bar under it was a white rule across the bottom of the stage column
+   (see work/tiles-shots/03-strip-1040x700.png before this line existed).
+
+   `scrollbar-color`, the standard property, and NOT the ::-webkit-scrollbar
+   pseudo-elements this file used to carry. Those were dead: the moment an
+   element sets the standard `scrollbar-width`, which both of ours do,
+   Chromium takes the standard path and ignores the pseudo-elements entirely —
+   so the rules were there, the comment said they worked, and the bar was
+   light grey the whole time. Same tokens as an unfilled slider track:
+   present, findable, and never the loudest edge on screen. */
+* { scrollbar-color: var(--track-empty) transparent; }
 
 .muted { color: var(--text-muted); }
 
