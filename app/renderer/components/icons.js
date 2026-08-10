@@ -1,0 +1,170 @@
+// SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+// Copyright (C) 2026 Max
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+/**
+ * The window's icons, drawn here rather than downloaded.
+ *
+ * A dozen geometric glyphs is all this app needs, and hand-authoring them buys
+ * three things an icon library cannot: no dependency (`dependencies` in
+ * package.json stays empty, which is a promise this project makes), no licence
+ * question to answer before anybody may ship it, and — the one that actually
+ * shows on screen — one stroke weight and one corner style across every glyph,
+ * because they are all drawn on the same 16 x 16 grid by the same hand.
+ *
+ * Every glyph is:
+ *   - on a 16 x 16 viewBox, aligned to whole or half pixels so a 1.5px stroke
+ *     lands crisply at 100% zoom;
+ *   - stroked in `currentColor` and never filled, so an icon inherits the
+ *     state of whatever it sits in — a disabled button, an active nav entry,
+ *     the one filled action — with no second set of colours anywhere;
+ *   - round-capped and round-joined, which is the only corner style in the
+ *     set.
+ *
+ * Accessibility is a parameter, not an afterthought. `icon(name)` with no
+ * label is decoration and gets `aria-hidden="true"`, which is right whenever a
+ * text label sits beside it; `icon(name, label)` is a glyph standing alone and
+ * gets `role="img"` and that accessible name. There is no third case.
+ */
+
+const SVG_NS = 'http://www.w3.org/2000/svg';
+
+/**
+ * createElementNS where there is one, createElement where there is not.
+ *
+ * test/app/inspector-mount.test.js runs the settings column against a hand-made
+ * stand-in DOM with no namespaces in it (there is no jsdom in this project),
+ * and the settings column now puts an icon in its heading. Falling back keeps
+ * that test testing what it is about — where a failed change is reported — and
+ * not the shape of an SVG element.
+ */
+function create(tag) {
+  return document.createElementNS ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
+}
+
+/**
+ * The set. Each entry is a list of [tag, attributes] pairs — data, not markup
+ * strings, so nothing here is ever handed to innerHTML.
+ *
+ * Read them as sentences: `image` is a frame with a hill and a sun in it,
+ * `motion` is two waves, `colour` is a drop, `spark` is a bolt.
+ */
+const GLYPHS = Object.freeze({
+  /** The app's own mark: a bolt inside a rounded square. */
+  mark: [
+    ['rect', { x: 1.5, y: 1.5, width: 13, height: 13, rx: 3.5 }],
+    ['path', { d: 'M8.8 4.4 6 8.4h2.6L7.2 11.6l3.2-4.2H7.8z' }]
+  ],
+  /** A picture: a frame, a hill, a sun. */
+  image: [
+    ['rect', { x: 1.5, y: 2.5, width: 13, height: 11, rx: 2 }],
+    ['path', { d: 'M1.5 10.5 5 7l4 4' }],
+    ['path', { d: 'M9 11 11 9l3.5 3' }],
+    ['circle', { cx: 10.5, cy: 5.5, r: 1.2 }]
+  ],
+  /** Motion: two waves, the lower one trailing the upper. */
+  motion: [
+    ['path', { d: 'M1.5 6c1.6-2.2 3.2-2.2 4.8 0s3.2 2.2 4.8 0 3.2-2.2 3.4-1' }],
+    ['path', { d: 'M1.5 11c1.6-2.2 3.2-2.2 4.8 0s3.2 2.2 4.8 0 3.2-2.2 3.4-1' }]
+  ],
+  /** Colour: a drop. */
+  colour: [
+    ['path', { d: 'M8 1.6c2.6 3 4.2 5.1 4.2 7.1a4.2 4.2 0 0 1-8.4 0c0-2 1.6-4.1 4.2-7.1z' }],
+    ['path', { d: 'M5.9 9.2a2.1 2.1 0 0 0 2.1 2.1' }]
+  ],
+  /** Settings: a dial with four ticks — a gear without the teeth. */
+  settings: [
+    ['circle', { cx: 8, cy: 8, r: 3 }],
+    ['path', { d: 'M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4 4.5 4.5M11.5 11.5l1.1 1.1M12.6 3.4 11.5 4.5M4.5 11.5l-1.1 1.1' }]
+  ],
+  /** Add. */
+  plus: [['path', { d: 'M8 3.5v9M3.5 8h9' }]],
+  /** Remove. */
+  minus: [['path', { d: 'M3.5 8h9' }]],
+  /** Open: a folder. */
+  folder: [
+    ['path', { d: 'M1.5 12.5v-9h4.2l1.6 2h7.2v7z' }]
+  ],
+  /** Save: a tray with an arrow coming down into it. */
+  save: [
+    ['path', { d: 'M8 2v7.5' }],
+    ['path', { d: 'M5 6.8 8 9.8l3-3' }],
+    ['path', { d: 'M2.5 11v2.5h11V11' }]
+  ],
+  /** The one action the app is for: a bolt leaving for SignalRGB. */
+  spark: [
+    ['path', { d: 'M9.4 1.5 4 8.8h3.6L6.6 14.5 12 7.2H8.4z' }]
+  ],
+  /** A file coming in: a picture with a plus on it. */
+  imagePlus: [
+    ['path', { d: 'M14.5 8V4.5a2 2 0 0 0-2-2h-9a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2H8' }],
+    ['path', { d: 'M1.8 10.8 5 7.6l3 3' }],
+    ['circle', { cx: 10.3, cy: 5.6, r: 1.1 }],
+    ['path', { d: 'M11.5 12.5h4M13.5 10.5v4' }]
+  ],
+  /** A flat field of one colour. */
+  solid: [
+    ['rect', { x: 2.5, y: 2.5, width: 11, height: 11, rx: 2 }],
+    ['path', { d: 'M5 11 11 5' }]
+  ],
+  /** A gradient: a field with a ramp across it. */
+  gradient: [
+    ['rect', { x: 2.5, y: 2.5, width: 11, height: 11, rx: 2 }],
+    ['path', { d: 'M2.5 9.5 13.5 4.5' }],
+    ['path', { d: 'M2.5 12.5 13.5 7.5' }]
+  ],
+  /** Not built yet: a clock. */
+  soon: [
+    ['circle', { cx: 8, cy: 8, r: 6 }],
+    ['path', { d: 'M8 4.5V8l2.4 1.6' }]
+  ],
+  /** The drop target, and the empty stage's own sign. */
+  drop: [
+    ['path', { d: 'M8 1.8v7.4' }],
+    ['path', { d: 'M4.8 6 8 9.2 11.2 6' }],
+    ['path', { d: 'M2.5 11.5v1a1.5 1.5 0 0 0 1.5 1.5h8a1.5 1.5 0 0 0 1.5-1.5v-1' }]
+  ]
+});
+
+/** Every glyph there is, so a test can walk the set without repeating it. */
+export const ICON_NAMES = Object.freeze(Object.keys(GLYPHS));
+
+/**
+ * One icon, ready to append.
+ *
+ * @param {string} name  a key of GLYPHS; an unknown one throws rather than
+ *                       silently producing an empty box, because an icon that
+ *                       is not there is a button nobody can read.
+ * @param {string|null} label  the accessible name when the glyph stands alone.
+ *                       Leave it out whenever a text label sits beside it —
+ *                       the icon is then decoration and is hidden from the
+ *                       accessibility tree so the button is not announced
+ *                       twice.
+ */
+export function icon(name, label = null) {
+  const parts = GLYPHS[name];
+  if (!parts) throw new Error(`no such icon: ${name}`);
+
+  const svg = create('svg');
+  // The size, the weight, the corner style and `currentColor` are stated once
+  // for the whole set on `.icon` in styles/app.css rather than as presentation
+  // attributes here — a presentation attribute cannot read a custom property,
+  // and "one stroke weight" has to be a token somebody can change in one place
+  // rather than a promise repeated on 14 elements.
+  svg.setAttribute('class', 'icon');
+  svg.setAttribute('viewBox', '0 0 16 16');
+
+  if (label) {
+    svg.setAttribute('role', 'img');
+    svg.setAttribute('aria-label', label);
+  } else {
+    svg.setAttribute('aria-hidden', 'true');
+  }
+
+  for (const [tag, attributes] of parts) {
+    const node = create(tag);
+    for (const [key, value] of Object.entries(attributes)) node.setAttribute(key, String(value));
+    svg.append(node);
+  }
+  return svg;
+}

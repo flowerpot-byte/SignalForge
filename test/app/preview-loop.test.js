@@ -16,6 +16,9 @@ function fakeElement() {
     children: [],
     classList: { toggle() {}, add() {}, remove() {} },
     append(...kids) { this.children.push(...kids); },
+    // The empty stage now carries a hand-drawn line icon (components/icons.js),
+    // whose elements carry attributes. The fake only has to survive it.
+    setAttribute() {},
     getContext: () => ({})
   };
 }

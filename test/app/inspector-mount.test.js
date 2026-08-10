@@ -21,6 +21,12 @@ function makeElement(tag) {
     style: { properties: {}, setProperty(name, value) { this.properties[name] = value; } },
     attributes: {},
     listeners: {},
+    // The column's sections now carry a data attribute saying which one they
+    // are and a class saying whether the left column is pointing at them, and
+    // its headings carry a hand-drawn line icon. None of that is what this
+    // file is about; the stand-in just has to survive it.
+    dataset: {},
+    classList: { toggle() {}, add() {}, remove() {} },
     id: '',
     textContent: '',
     append(...kids) { node.children.push(...kids); },
