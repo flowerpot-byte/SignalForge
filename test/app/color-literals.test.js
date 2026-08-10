@@ -23,6 +23,7 @@ const FILES = [
   join(appDir, 'components', 'inspector.js'),
   join(appDir, 'components', 'field.js'),
   join(appDir, 'components', 'footer.js'),
+  join(appDir, 'components', 'firstrun.js'),
   join(appDir, 'main.js')
 ];
 

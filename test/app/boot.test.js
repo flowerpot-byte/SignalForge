@@ -50,6 +50,66 @@ test('the app boots, opens a window and exposes its bridge', async () => {
       'with the ordinary visible-error shape, never read an arbitrary renderer-forged path'
   );
 
+  // The first start. The self-test's settings file genuinely does not exist
+  // yet and its search for an existing SignalRGB installation is pointed at a
+  // throwaway folder, so this is the real "nothing found, ask the user" path.
+  assert.equal(
+    report.firstRunShown,
+    true,
+    'with no effects folder found, the window must ask for one'
+  );
+  assert.equal(
+    report.firstRunLeavesTheAppUsable,
+    true,
+    'the question must be a panel, not a curtain: the rest of the window stays reachable'
+  );
+  assert.ok(
+    /waehlen|choose/i.test(report.firstRunAsks),
+    `the question must offer the one button that answers it, got ${report.firstRunAsks}`
+  );
+
+  // Nobody has chosen a language, so the machine's own decides — and the
+  // choice is written back, so the next start no longer depends on it.
+  assert.ok(
+    ['de', 'en'].includes(report.storedLanguage),
+    `a first start must settle on a language the app speaks, got ${report.storedLanguage}`
+  );
+  assert.equal(
+    report.storedLanguage,
+    report.navigatorLanguage.toLowerCase().split('-')[0] === 'en' ? 'en' : 'de',
+    `a first start must follow navigator.language (${report.navigatorLanguage}) where it can`
+  );
+  assert.equal(
+    report.documentLanguage,
+    report.storedLanguage,
+    'the document element must announce the language, for screen readers as much as for hyphenation'
+  );
+
+  // The language switch, operated in the window. Every column has to change,
+  // not just the one the control sits in — the settings column is rebuilt, the
+  // frame and the footer are re-labelled in place, and the drop hint is
+  // re-stated from its key.
+  assert.equal(report.inGerman.layers, 'Ebenen');
+  assert.equal(report.inEnglish.layers, 'Layers', 'the frame must follow the switch');
+  assert.equal(report.inEnglish.settings, 'Settings');
+  assert.equal(report.inEnglish.exportButton, 'Save to SignalRGB', 'the footer must follow it too');
+  assert.equal(report.inEnglish.brightness, 'Brightness', 'and the settings column');
+  assert.equal(report.inEnglish.hint, 'Drop an image here', 'and the line of feedback');
+  assert.equal(report.inEnglish.firstRun, 'Where should the effects go?', 'and the first-start question');
+  assert.equal(report.inEnglish.documentLanguage, 'en');
+  assert.deepEqual(
+    report.backInGerman,
+    report.inGerman,
+    'switching back must restore every last word, not merely most of them'
+  );
+
+  // And the answer to the question, through the real sf:chooseFolder handler.
+  assert.match(
+    report.targetAfterChoosing,
+    /gewaehlt|chosen/,
+    'once the folder has been chosen the footer must show it as the chosen one'
+  );
+
   // Save and open, driven by clicking the app's own footer buttons in the
   // real window. Only the two OS file dialogs are stubbed (see
   // selfTestProjects in app/main.js) — a modal dialog would wait for a human.

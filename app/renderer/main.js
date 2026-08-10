@@ -1,13 +1,14 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { createI18n } from './i18n/i18n.js';
+import { createI18n, pickLanguage } from './i18n/i18n.js';
 import { mountShell, mountBackdrop } from './components/shell.js';
 import { createPreview } from './components/preview.js';
 import { mountDrop } from './components/drop.js';
 import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
 import { mountFooter } from './components/footer.js';
+import { mountFirstRun } from './components/firstrun.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -42,7 +43,18 @@ async function boot() {
   };
 
   const settings = await window.sf.settings.all();
-  const i18n = createI18n(dictionaries, settings.language);
+  // On a first start nothing has been chosen yet (DEFAULT_SETTINGS.language is
+  // '' — see src/main/settings.js), so the machine's own language decides;
+  // after that the stored choice does, whatever the machine is set to. The
+  // list of languages is the list of language files, so adding a third one
+  // needs no change here or in the footer's switch.
+  const languages = Object.keys(dictionaries);
+  const language = pickLanguage(settings.language, navigator.language, languages);
+  const i18n = createI18n(dictionaries, language);
+  // Announce the language to the browser itself, not only to the reader:
+  // hyphenation, quotation marks and, above all, what a screen reader sounds
+  // like all follow this attribute.
+  document.documentElement.lang = language;
 
   // These three seed colours are only the starting tint shown before any
   // effect has been loaded — a later task will pass the effect's own
@@ -65,14 +77,40 @@ async function boot() {
   // always in the window, never only in the console (see components/drop.js).
   const message = document.createElement('p');
   message.className = 'muted drop-message';
-  message.textContent = i18n.t('preview.dropHint');
   regions.preview.append(message);
+
+  // Which translation key the line is currently showing, or null when it is
+  // showing a sentence assembled from one (with a file name or a path in it).
+  // A switch of language can honestly repeat the former; the latter is a
+  // report about something that has already happened and is left where it is
+  // rather than being half-translated.
+  let messageKey = null;
 
   /** The one line of feedback in the window; `warn` colours it. */
   function showMessage(text, warn = false) {
+    messageKey = null;
     message.classList.toggle('drop-warn', warn);
     message.textContent = text;
   }
+
+  /** The same line, but from a key alone, so a language switch can redo it. */
+  function showKey(key, warn = false) {
+    showMessage(i18n.t(key), warn);
+    messageKey = key;
+  }
+
+  showKey('preview.dropHint');
+
+  // The one question a first start has to ask, and only when there is one: it
+  // shows itself if and only if no effects folder could be found (see
+  // components/firstrun.js). showTarget() below tells it, and the footer, the
+  // same answer.
+  const firstRun = mountFirstRun(regions.preview, {
+    t: (k) => i18n.t(k),
+    onChoose: guard('settings.folderFailed', async () => {
+      showTarget(await window.sf.chooseFolder());
+    })
+  });
 
   // The id the dropped picture always gets. One layer for now; the layer
   // list is a later task.
@@ -284,7 +322,7 @@ async function boot() {
 
     let result = await window.sf.exportEffect(preview.document(), { force });
     if (result.reason === 'folder') {
-      footer.setTarget(await window.sf.chooseFolder());
+      showTarget(await window.sf.chooseFolder());
       result = await window.sf.exportEffect(preview.document(), { force });
     }
 
@@ -318,7 +356,7 @@ async function boot() {
       folder: 'export.needsFolder'
     };
     if (reasons[result.reason]) {
-      showMessage(i18n.t(reasons[result.reason]), true);
+      showKey(reasons[result.reason], true);
       return;
     }
     showMessage(`${i18n.t('export.failed')}: ${result.message}`, true);
@@ -337,8 +375,51 @@ async function boot() {
     });
   }
 
+  /**
+   * Say everything in the window again, in the language now in force.
+   *
+   * Deliberately re-labelling the pieces that are already on screen instead of
+   * rebuilding the window: a rebuild would take the preview canvas (and the
+   * render loop drawing into it) with it, drop the picture and the crop the
+   * user has been working on, and throw away the keyboard focus — all for a
+   * change that alters nothing but words.
+   */
+  function applyLanguage(next) {
+    i18n.setLanguage(next);
+    document.documentElement.lang = i18n.language;
+    regions.relabel();
+    firstRun.relabel();
+    footer.relabel();
+    // Rebuilt rather than re-labelled: which fields exist depends on the
+    // document, and mountInspector puts the keyboard focus back by itself.
+    inspector.refresh();
+    if (messageKey) showKey(messageKey, message.classList.contains('drop-warn'));
+  }
+
+  /**
+   * A setting the window changed on the user's behalf.
+   *
+   * The write can fail (a read-only profile, a full disk), and `sf.settings.set`
+   * rejects when it does — in which case what is on screen is still what the
+   * user asked for, but it will not be there after a restart. That is worth a
+   * line in the window: silently forgetting a choice is exactly the kind of
+   * thing somebody blames themselves for.
+   */
+  function remember(key, value) {
+    return window.sf.settings.set(key, value).catch((err) => {
+      console.error(`could not store ${key}:`, err);
+      showKey('settings.saveFailed', true);
+    });
+  }
+
   const footer = mountFooter(regions.footer, {
     t: (k) => i18n.t(k),
+    language,
+    languages,
+    onLanguageChange: (next) => {
+      applyLanguage(next);
+      remember('language', next);
+    },
     // Straight into the live document, through the engine's own setByPath,
     // exactly like every field in the settings column — so the name the
     // export uses and the name a saved project carries are the same one,
@@ -354,8 +435,21 @@ async function boot() {
     onOpen: guard('project.openFailed', openProject)
   });
 
+  /** Both the footer line and the first-start question read the same target. */
+  function showTarget(target) {
+    footer.setTarget(target);
+    firstRun.setTarget(target);
+  }
+
   footer.setName(preview.document().name);
-  footer.setTarget(await window.sf.effectsTarget());
+  showTarget(await window.sf.effectsTarget());
+
+  // The first start's own language is not a choice the user made, so it is
+  // written back now: from the next start on, the machine's language has no
+  // say and the stored one decides. Deliberately last and deliberately not
+  // awaited — the window is already usable, and a settings file that cannot be
+  // written must not keep the app from starting.
+  if (settings.language !== language) remember('language', language);
 }
 
 boot().catch((err) => {

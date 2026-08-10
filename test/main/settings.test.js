@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSettings, DEFAULT_SETTINGS } from '../../src/main/settings.js';
+import { createSettings, DEFAULT_SETTINGS, FALLBACK_LANGUAGE } from '../../src/main/settings.js';
 
 function fake(initial) {
   let content = initial;
@@ -18,6 +18,23 @@ function fake(initial) {
 test('missing file yields the defaults', () => {
   const s = createSettings(fake(null));
   assert.deepEqual(s.all(), DEFAULT_SETTINGS);
+});
+
+// "Nobody has chosen a language yet" has to be a state of its own, otherwise
+// a first start cannot tell an untouched installation apart from somebody who
+// deliberately picked German — and the window would force German on a machine
+// that is set to English. The empty default is what app/renderer/main.js hands
+// to pickLanguage() as the signal to ask navigator.language instead.
+test('language starts out unchosen rather than defaulting to a language', () => {
+  assert.equal(DEFAULT_SETTINGS.language, '');
+  assert.equal(createSettings(fake(null)).get('language'), '');
+});
+
+// Everything outside the window that needs a language anyway — the labels of
+// the exported effect's own controls — has to have one even before the user
+// has been asked, and it must not silently become English for a German user.
+test('there is a stated fallback language for callers that cannot ask the window', () => {
+  assert.equal(FALLBACK_LANGUAGE, 'de');
 });
 
 test('a corrupt file is discarded rather than throwing', () => {

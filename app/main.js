@@ -9,7 +9,7 @@ import {
   existsSync, statSync
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
-import { createSettings } from '../src/main/settings.js';
+import { createSettings, FALLBACK_LANGUAGE } from '../src/main/settings.js';
 import { resolveEffectsTarget } from '../src/main/effects-target.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
@@ -27,11 +27,21 @@ const ENGINE_BUNDLE = join(here, '..', 'dist', 'engine.bundle.js');
 
 let settings;
 
+/**
+ * Where the app goes looking for SignalRGB's effects folder when the settings
+ * do not name one. Normally the real Documents and home folders; under the
+ * self-test, a throwaway directory instead — so a check of the "we found
+ * nothing, ask the user" path cannot accidentally succeed by finding the
+ * machine owner's actual SignalRGB installation, and so nothing the self-test
+ * does can end up anywhere near it.
+ */
+let searchRoots = null;
+
 function currentTarget() {
   return resolveEffectsTarget({
     settings,
-    documentsPath: app.getPath('documents'),
-    homePath: homedir(),
+    documentsPath: searchRoots ? searchRoots.documents : app.getPath('documents'),
+    homePath: searchRoots ? searchRoots.home : homedir(),
     exists: (p) => existsSync(p)
   });
 }
@@ -62,8 +72,18 @@ ipcMain.handle('sf:version', () => app.getVersion());
 ipcMain.handle('sf:settings:all', () => settings.all());
 ipcMain.handle('sf:settings:set', async (_e, key, value) => { await settings.set(key, value); return settings.all(); });
 ipcMain.handle('sf:effectsTarget', () => currentTarget());
+
+/**
+ * The folder dialog, behind the same seam as the two project dialogs below
+ * and for the same reason: an automated check that opened a real one would sit
+ * there until a human clicked something. Only the self-test replaces it.
+ */
+export const folderDialog = {
+  open: (options) => dialog.showOpenDialog(options)
+};
+
 ipcMain.handle('sf:chooseFolder', async () => {
-  const result = await dialog.showOpenDialog({ properties: ['openDirectory'] });
+  const result = await folderDialog.open({ properties: ['openDirectory'] });
   if (result.canceled || result.filePaths.length === 0) return currentTarget();
   await settings.set('effectsFolder', result.filePaths[0]);
   return currentTarget();
@@ -97,7 +117,7 @@ ipcMain.handle('sf:importImage', async (_e, path) => {
  * renderer can reach writes here; the renderer never sees a path at all, in
  * either direction, and cannot influence which one the dialog returns.
  */
-const projectDialogs = {
+export const projectDialogs = {
   save: (options) => dialog.showSaveDialog(options),
   open: (options) => dialog.showOpenDialog(options)
 };
@@ -224,7 +244,11 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
       engineSource: readFileSync(ENGINE_BUNDLE, 'utf8'),
       // The finished effect's controls are labelled in the language the app
       // is being used in, so what SignalRGB shows matches what the window did.
-      lang: settings.get('language'),
+      // The window writes its chosen language into the settings on its very
+      // first boot, so this is only ever empty if that write failed — in which
+      // case falling back to English (buildEffectHtml's own default) would
+      // silently hand a German user an English effect.
+      lang: settings.get('language') || FALLBACK_LANGUAGE,
       force: options?.force === true,
       io: exportIo
     });
@@ -300,6 +324,12 @@ function windowDriver(win) {
     click,
     async shoot(name) {
       if (!shotDir) return;
+      // capturePage() hands back the last frame the compositor actually
+      // painted, and a change made by the line above this one has only reached
+      // the DOM, not the screen — without waiting for a paint the picture
+      // shows the state BEFORE the thing it is meant to be evidence of. Two
+      // frames, because the first only gets as far as scheduling the paint.
+      await read(`new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)))`);
       writeFileSync(join(shotDir, `${name}.png`), (await win.capturePage()).toPNG());
     },
     async clickAndWait(id) {
@@ -313,6 +343,97 @@ function windowDriver(win) {
       throw new Error(`the window never reported anything after clicking #${id}`);
     }
   };
+}
+
+/** Poll until `expression` is true in the window, or give up after ~5 s. */
+async function waitFor(read, expression, what) {
+  for (let tries = 0; tries < 100; tries += 1) {
+    if (await read(expression)) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`the window never reached: ${what}`);
+}
+
+/**
+ * The first start, driven in the real window.
+ *
+ * Two things happen exactly once in the life of an installation and are
+ * therefore the easiest to get wrong and never notice again: the app has no
+ * effects folder and has to ask for it, and nobody has chosen a language so
+ * the machine's own has to decide. Both are checked here, on a settings file
+ * that genuinely does not exist yet (see app.whenReady below) and with the
+ * search for an existing SignalRGB installation pointed at a throwaway folder,
+ * so "found nothing" is a fact rather than an accident of this machine.
+ *
+ * Only the folder dialog is replaced, for the same reason the two project
+ * dialogs are: a modal OS dialog would sit waiting for a human.
+ */
+async function selfTestFirstRun(win, effectsFolder) {
+  const { read, click, shoot } = windowDriver(win);
+  const out = {};
+
+  await waitFor(read, `document.getElementById('first-run') !== null`, 'the window is built');
+
+  out.firstRunShown = await read(`document.getElementById('first-run').hidden === false`);
+  out.firstRunAsks = await read(`document.querySelector('#first-run button').textContent`);
+  // The rest of the window must stay usable while the question is on screen —
+  // that is the whole difference between a panel and a modal assistant.
+  out.firstRunLeavesTheAppUsable = await read(
+    `document.getElementById('footer-export').disabled === false`
+  );
+  await shoot('00-first-run');
+
+  // The language nobody chose. It has to be one the app actually speaks, it
+  // has to be reflected on the document element, and it has to be written back
+  // so the next start no longer depends on the machine's setting.
+  out.navigatorLanguage = await read(`navigator.language`);
+  out.documentLanguage = await read(`document.documentElement.lang`);
+  // executeJavaScript evaluates a plain script, where top-level await is not
+  // allowed — but it does resolve a promise the script hands back, so every
+  // bridge call here is written as .then().
+  await waitFor(read, `window.sf.settings.all().then((s) => s.language !== '')`, 'the language is stored');
+  out.storedLanguage = await read(`window.sf.settings.all().then((s) => s.language)`);
+
+  /** The language switch in the footer, operated the way a person operates it. */
+  const chooseLanguage = async (code) => {
+    await read(`(() => {
+      const select = document.getElementById('footer-language');
+      select.value = ${JSON.stringify(code)};
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      return select.value;
+    })()`);
+    return read(`({
+      layers: document.getElementById('layers-title').textContent,
+      settings: document.getElementById('inspector-title').textContent,
+      exportButton: document.getElementById('footer-export').textContent,
+      brightness: document.querySelector('label[for="sf-brightness"]').textContent,
+      hint: document.querySelector('.drop-message').textContent,
+      firstRun: document.querySelector('#first-run h2').textContent,
+      documentLanguage: document.documentElement.lang
+    })`);
+  };
+
+  out.inGerman = await chooseLanguage('de');
+  await shoot('00b-language-de');
+  out.inEnglish = await chooseLanguage('en');
+  await shoot('00c-language-en');
+  out.backInGerman = await chooseLanguage('de');
+  // A chosen language is only chosen if it is still there after a restart.
+  await waitFor(
+    read,
+    `window.sf.settings.all().then((s) => s.language === 'de')`,
+    'the chosen language is stored'
+  );
+
+  // And the answer to the question. The folder dialog is the stub; everything
+  // else is the real handler writing a real settings file.
+  folderDialog.open = async () => ({ canceled: false, filePaths: [effectsFolder] });
+  await click('first-run-choose');
+  await waitFor(read, `document.getElementById('first-run').hidden === true`, 'the question is answered');
+  out.targetAfterChoosing = await read(`document.getElementById('footer-target').textContent`);
+  await shoot('00d-folder-chosen');
+
+  return out;
 }
 
 /**
@@ -568,9 +689,15 @@ app.whenReady().then(async () => {
     readFile: (f) => readFileSync(f, 'utf8'),
     writeFile: writeFileAtomic
   });
-  // Set before the window is created, so the footer shows the folder it will
-  // really export into rather than one that changed underneath it.
-  if (selfTest) await settings.set('effectsFolder', selfTestEffects);
+  // The effects folder is deliberately NOT seeded: the self-test starts from a
+  // settings file that does not exist, so it goes through the genuine first
+  // start — no folder found, the window asks, the answer is given through the
+  // real sf:chooseFolder handler (see selfTestFirstRun). Pointing the search
+  // for an existing installation at the throwaway directory is what makes
+  // "found nothing" a fact rather than an accident of the machine this runs on,
+  // and is a second guarantee that nothing here can reach the real SignalRGB
+  // folder even if a later change stopped setting one.
+  if (selfTest) searchRoots = { documents: selfTestDir, home: selfTestDir };
 
   const win = createWindow();
 
@@ -614,6 +741,7 @@ app.whenReady().then(async () => {
         typeof forgedImportResult.message === 'string' &&
         forgedImportResult.message.length > 0;
 
+      Object.assign(report, await selfTestFirstRun(win, selfTestEffects));
       Object.assign(report, await selfTestProjects(win));
       Object.assign(report, await selfTestExport(win, selfTestEffects));
 

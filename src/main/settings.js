@@ -13,8 +13,26 @@ export const SETTING_TYPES = Object.freeze({
   lastProjectFolder: 'string'
 });
 
+/**
+ * The language for callers that cannot ask the window which one it is using.
+ *
+ * The exported effect's own controls have to be labelled at the moment the
+ * export runs, and that happens in the main process. It will normally read the
+ * stored language, but on a first start nothing is stored yet (see below), and
+ * defaulting to English there would quietly hand a German user an English
+ * effect.
+ */
+export const FALLBACK_LANGUAGE = 'de';
+
+/**
+ * `language: ''` means "nobody has chosen yet", which is deliberately not the
+ * same thing as "German". Only that distinction lets a first start follow the
+ * language the machine is actually set to (see pickLanguage in
+ * app/renderer/i18n/i18n.js); the window writes its choice back the first time
+ * it boots, so this stays empty for exactly one start.
+ */
 export const DEFAULT_SETTINGS = Object.freeze({
-  language: 'de',
+  language: '',
   effectsFolder: '',
   lastProjectFolder: ''
 });

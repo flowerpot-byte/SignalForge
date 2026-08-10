@@ -96,6 +96,8 @@ input[type="text"] {
 #preview-body {
   width: 100%;
   height: 100%;
+  /* The frame the first-start question centres itself in — see .first-run. */
+  position: relative;
   display: grid;
   place-items: center;
   justify-items: center;
@@ -120,6 +122,34 @@ input[type="text"] {
    the drop-message starts out merely muted (the hint) and only turns warn
    once main.js adds this class for a rejection or a failed import. */
 .drop-message.drop-warn { color: var(--warn); }
+
+/* The first-start question. A panel, not a curtain: it sits in the middle of
+   the middle column and leaves the rest of the window usable, because somebody
+   who wants to drop a picture in and play first should not have to answer a
+   filing question to get there.
+
+   Taken out of the flow on purpose. In the flow it stacked on top of the
+   preview canvas, which is as wide as the column and therefore several hundred
+   pixels tall — the column started scrolling and pushed "drop an image here"
+   off the bottom, so the first thing a first-time user saw was the one line
+   that tells them what to do gone missing. */
+.first-run {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  max-width: 44ch;
+  margin: 0;
+  padding: var(--panel-pad);
+  border: 1px solid var(--glass-stroke);
+  border-radius: var(--radius);
+  background: var(--glass-fill);
+  backdrop-filter: blur(var(--glass-blur));
+  text-align: left;
+}
+.first-run h2 { margin: 0 0 6px; font-size: 16px; }
+.first-run p { margin: 0 0 14px; color: var(--text-muted); }
 
 /* One field of the settings column: its name on the left, its current value
    on the right, and the control itself across the full width underneath. */
