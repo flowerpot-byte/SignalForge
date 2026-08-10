@@ -132,6 +132,14 @@ export function widenToInclude(field, value) {
  * the caller decides whether that means writing straight into the live
  * document or reloading it (see app/renderer/main.js).
  *
+ * `onError(err)` is where a rejected `onChange` goes. It has exactly one
+ * source: adding or removing a motion is the only change that returns a
+ * promise, and the only one that can genuinely fail, because it is the only
+ * one that reloads the picture. Without somewhere to send it, that failure
+ * reached the console alone — the user presses "add motion", the picture
+ * stops matching the list, and the window says nothing. Every other failure
+ * in this app arrives on the one line of feedback, and so must this one.
+ *
  * Redrawing is deliberately restrained. A slider reports a change on every
  * pixel of a drag, and rebuilding the column underneath a held-down mouse
  * (or an arrow key being repeated) would throw the focus away mid-gesture —
@@ -144,7 +152,7 @@ export function widenToInclude(field, value) {
  * There is no layer list yet (that is a later task), so the layer shown is
  * the document's first one.
  */
-export function mountInspector(container, { getDocument, onChange, t }) {
+export function mountInspector(container, { getDocument, onChange, t, onError }) {
   const SF = window.SignalForgeEngine;
 
   function rememberFocus() {
@@ -182,7 +190,14 @@ export function mountInspector(container, { getDocument, onChange, t }) {
           // A slider must never pull the ground out from under the drag it
           // is in the middle of; everything else may.
           if (field.type === 'number') return;
-          Promise.resolve(result).then(render, (err) => console.error('inspector change failed:', err));
+          Promise.resolve(result).then(render, (err) => {
+            console.error('inspector change failed:', err);
+            // Deliberately no redraw: the change did not take, so the column
+            // is already showing what the document actually holds (see
+            // setDocument in components/preview.js, which commits the new
+            // document and its assets together or neither).
+            onError?.(err);
+          });
         }
       });
       if (!element) continue;

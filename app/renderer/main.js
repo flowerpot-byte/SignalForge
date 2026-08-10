@@ -205,6 +205,16 @@ async function boot() {
         return;
       }
       if (Array.isArray(value)) await preview.setDocument(doc);
+    },
+    /**
+     * The one change above that can genuinely fail is the one that reloads
+     * the picture, and nobody is awaiting it — the settings column reports a
+     * change from an event handler. Send it to the same line every other
+     * failure in this window arrives on, exactly as guard() does for the
+     * footer's buttons.
+     */
+    onError: (err) => {
+      showMessage(`${i18n.t('inspector.changeFailed')}: ${err.message || err}`, true);
     }
   });
 

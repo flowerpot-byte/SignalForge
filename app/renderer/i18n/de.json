@@ -17,6 +17,7 @@
   "inspector.motions.drift": "Wandern",
   "inspector.motions.breathe": "Atmen",
   "inspector.addMotion": "Bewegung hinzufuegen",
+  "inspector.changeFailed": "Aenderung konnte nicht uebernommen werden",
   "inspector.removeMotion": "Entfernen",
   "inspector.speed": "Tempo",
   "inspector.amount": "Staerke",

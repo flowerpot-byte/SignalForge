@@ -17,6 +17,7 @@
   "inspector.motions.drift": "Drift",
   "inspector.motions.breathe": "Breathe",
   "inspector.addMotion": "Add motion",
+  "inspector.changeFailed": "The change could not be applied",
   "inspector.removeMotion": "Remove",
   "inspector.speed": "Speed",
   "inspector.amount": "Strength",
