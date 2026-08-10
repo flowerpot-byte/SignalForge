@@ -1,6 +1,7 @@
 {
   "app.title": "SignalForge",
   "nav.caption": "Effect",
+  "nav.label": "Sections",
   "gallery.title": "Start an effect with",
   "gallery.picture": "Your own picture",
   "gallery.solid": "Solid colour",

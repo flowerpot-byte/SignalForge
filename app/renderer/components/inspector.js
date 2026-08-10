@@ -360,7 +360,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
     group.dataset.section = name;
     group.classList.toggle('is-active', showing() === name);
 
-    const heading = document.createElement('h3');
+    const heading = document.createElement('h2');
     heading.append(icon(SECTION_GLYPHS[name]));
     const word = document.createElement('span');
     word.textContent = t(SECTION_TITLES[name]);

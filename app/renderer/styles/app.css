@@ -85,7 +85,11 @@ html, body {
   padding: var(--space-1) var(--space-2) var(--space-4);
   color: var(--accent);
 }
+/* The window's <h1>, which is why the margin has to be said: it is the app's
+   wordmark and is sized like one, not like a heading the browser has opinions
+   about. */
 .nav-wordmark {
+  margin: 0;
   color: var(--text-strong);
   font-size: 14px;
   font-weight: 700;
@@ -541,8 +545,8 @@ html, body {
    is where the reference puts a section's icon buttons. The one the left
    column is pointing at takes the accent under it and brightens: a marker, not
    a second selection. */
-.field-group.is-active > h3 { color: var(--text-strong); border-bottom-color: var(--accent); }
-.field-group > h3 {
+.field-group.is-active > h2 { color: var(--text-strong); border-bottom-color: var(--accent); }
+.field-group > h2 {
   display: flex;
   align-items: center;
   gap: var(--space-2);

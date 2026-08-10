@@ -101,6 +101,58 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     `the question must offer the one button that answers it, got ${report.firstRunAsks}`
   );
 
+  // The notice sits above the stage on screen (grid-row: 1), and the document
+  // has to say the same thing — otherwise Tab reaches the canvas before the
+  // button sitting above it and the reading order disagrees with the visual
+  // one. It is put there by prepend() rather than by the stylesheet; these two
+  // read it back off the real window so that cannot come apart again.
+  assert.equal(
+    report.firstRunPrecedesTheStage,
+    true,
+    'the first-start notice is drawn above the stage, so it must come before it in the document'
+  );
+  assert.equal(
+    report.firstRunButtonIsFirstInTheColumn,
+    true,
+    'and the keyboard must reach its button before anything else in the preview column'
+  );
+
+  /**
+   * The heading tree and the landmarks, after the rebuild left them incomplete:
+   * there was no <h1> at all, the settings column's <h3> headings sat under no
+   * <h2>, the navigation had no accessible name, the starting gallery had a
+   * heading but nothing tying the section to it, and the sidebar declared two
+   * `role="tablist"` elements whose tabs controlled no `role="tabpanel"`.
+   *
+   * The tablists were dropped rather than completed, because the contract they
+   * half-stated is not what this column does: all three effect sections stay on
+   * screen in one scrolling column and an entry scrolls to its own (see
+   * showSection in app/renderer/main.js), which is a table of contents and not
+   * a tab strip. What is left is five ordinary buttons in a named landmark,
+   * with `aria-current` on the one being pointed at and every one of them a tab
+   * stop.
+   */
+  const { landmarks } = report;
+  assert.deepEqual(landmarks.h1, ['SignalForge'], 'the window has exactly one <h1>: the app itself');
+  assert.equal(landmarks.h3, 0, 'and no <h3> under nothing — every section heading is an <h2>');
+  assert.ok(landmarks.navName, 'the navigation landmark must carry a name');
+  assert.equal(
+    landmarks.galleryNamedBy,
+    'gallery-title',
+    'the starting gallery must be named by the heading inside it'
+  );
+  assert.equal(
+    landmarks.tablists,
+    0,
+    'no half-stated tablist: tabs that control no tabpanel are worse than plain buttons'
+  );
+  assert.equal(landmarks.navCurrent.length, 1, 'exactly one entry says it is the current one');
+  assert.equal(
+    landmarks.navTabStops,
+    5,
+    'and every destination is reachable by Tab, not only by the arrow keys'
+  );
+
   // Nobody has chosen a language, so the machine's own decides — and the
   // choice is written back, so the next start no longer depends on it.
   assert.ok(

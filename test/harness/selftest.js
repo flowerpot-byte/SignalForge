@@ -115,6 +115,42 @@ async function selfTestFirstRun(win, folder) {
     `getComputedStyle(document.getElementById('first-run')).display !== 'none'`
   );
   out.firstRunAsks = await js(`document.querySelector('#first-run button').textContent`);
+  /**
+   * The notice sits ABOVE the stage (grid-row: 1 in styles/app.css), so it has
+   * to come before the stage in the document too — otherwise Tab would reach
+   * the canvas before the button sitting above it, and the reading order a
+   * screen reader follows would disagree with the one everybody else sees. It
+   * is put there by prepend() rather than by the stylesheet, which is the only
+   * way the two can be the same thing; this reads it back off the real window
+   * so the arrangement cannot quietly come apart.
+   */
+  out.firstRunPrecedesTheStage = await js(`(() => {
+    const notice = document.getElementById('first-run');
+    const stage = document.querySelector('#preview-body .stage');
+    return (notice.compareDocumentPosition(stage) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+  })()`);
+  // And the same claim made the way a keyboard makes it: of everything that can
+  // be tabbed to inside the preview column, the notice's button is first.
+  out.firstRunButtonIsFirstInTheColumn = await js(`(() => {
+    const stops = [...document.querySelectorAll(
+      '#preview-body button:not([disabled]), #preview-body [tabindex]:not([tabindex="-1"])'
+    )];
+    return stops.length > 0 && stops[0].id === 'first-run-choose';
+  })()`);
+
+  // The window's heading tree, read where it is: exactly one <h1>, no <h3>
+  // orphaned under nothing, and a name on both the navigation landmark and the
+  // starting gallery. Each of these was missing after the rebuild.
+  out.landmarks = await js(`({
+    h1: [...document.querySelectorAll('h1')].map((h) => h.textContent.trim()),
+    h3: document.querySelectorAll('h3').length,
+    navName: document.getElementById('nav').getAttribute('aria-label'),
+    galleryNamedBy: document.getElementById('gallery').getAttribute('aria-labelledby'),
+    tablists: document.querySelectorAll('[role="tablist"], [role="tab"]').length,
+    navCurrent: [...document.querySelectorAll('.nav-entry[aria-current]')].map((e) => e.id),
+    navTabStops: [...document.querySelectorAll('.nav-entry')]
+      .filter((e) => e.tabIndex >= 0).length
+  })`);
   // The rest of the window must stay usable while the question is on screen —
   // that is the whole difference between a panel and a modal assistant.
   out.firstRunLeavesTheAppUsable = await js(
@@ -143,7 +179,7 @@ async function selfTestFirstRun(win, folder) {
       // The word "Settings" is now the left column's fourth entry rather than
       // a heading over the settings column, so it is read where it lives.
       settings: document.getElementById('nav-settings-label').textContent,
-      section: document.querySelector('#inspector-body .field-group > h3').textContent,
+      section: document.querySelector('#inspector-body .field-group > h2').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,
       // The invitation moved into the empty frame it is talking about (see

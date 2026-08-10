@@ -30,7 +30,7 @@ export function mountAppSettings(container, { t, language, languages, onLanguage
   const group = document.createElement('section');
   group.className = 'field-group is-active';
   group.dataset.section = 'settings';
-  const heading = document.createElement('h3');
+  const heading = document.createElement('h2');
   heading.append(icon('settings'));
   const headingWord = document.createElement('span');
   heading.append(headingWord);

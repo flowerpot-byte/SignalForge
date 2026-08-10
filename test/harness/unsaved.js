@@ -628,7 +628,7 @@ app.whenReady().then(async () => {
         name: await d.js(`document.getElementById('footer-name').value`),
         controls: await d.js(`[...document.querySelectorAll('#inspector-body input, #inspector-body select')]
           .map((e) => e.id + '=' + e.value)`),
-        headings: await d.js(`[...document.querySelectorAll('.field-group > h3')].map((h) => h.textContent.trim())`),
+        headings: await d.js(`[...document.querySelectorAll('.field-group > h2')].map((h) => h.textContent.trim())`),
         pixels: (await d.stats()).hash
       };
     };

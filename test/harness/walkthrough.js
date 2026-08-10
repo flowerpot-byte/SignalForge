@@ -239,7 +239,7 @@ async function phaseOne(win, state) {
   // --- 1. language --------------------------------------------------------
   const words = () => d.js(`({
     settings: document.getElementById('nav-settings-label').textContent,
-    section: document.querySelector('#inspector-body .field-group > h3').textContent,
+    section: document.querySelector('#inspector-body .field-group > h2').textContent,
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,
     hint: document.getElementById('preview-empty-title').textContent,

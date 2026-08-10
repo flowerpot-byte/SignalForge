@@ -124,7 +124,7 @@ async function main() {
       section: document.querySelector('.nav-entry.is-active')?.dataset.destination ?? null,
       navDisabled: [...document.querySelectorAll('.nav-entry')]
         .filter((e) => e.disabled).map((e) => e.dataset.destination),
-      headings: [...document.querySelectorAll('.field-group > h3')].map((h) => h.textContent.trim()),
+      headings: [...document.querySelectorAll('.field-group > h2')].map((h) => h.textContent.trim()),
       controls: [...document.querySelectorAll('#inspector-body input, #inspector-body select')]
         .map((e) => e.id || e.type),
       swatches: [...document.querySelectorAll('input[type=color]')].map((e) => e.value),

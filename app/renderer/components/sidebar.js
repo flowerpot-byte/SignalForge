@@ -82,7 +82,13 @@ export function mountSidebar(container, { t, active, onSelect }) {
   const brand = document.createElement('div');
   brand.className = 'nav-brand';
   brand.append(icon('mark'));
-  const wordmark = document.createElement('span');
+  // The window's one <h1>, and the only honest candidate for it: this is the
+  // name of the whole thing, sitting above everything else in the reading
+  // order. Everything else that carries a heading — the stage's caption, the
+  // starting gallery, the first-start notice, each section of the settings
+  // column — is a part of it and is an <h2>. Before this there was no <h1> at
+  // all and the settings column's <h3>s sat under nothing.
+  const wordmark = document.createElement('h1');
   wordmark.className = 'nav-wordmark';
   wordmark.id = 'nav-wordmark';
   brand.append(wordmark);
@@ -91,18 +97,32 @@ export function mountSidebar(container, { t, active, onSelect }) {
   caption.className = 'nav-caption';
   caption.id = 'nav-caption';
 
+  // WHY THIS IS NOT A TABLIST, HAVING BEEN ONE
+  //
+  // It used to declare two separate `role="tablist"` elements — this one and
+  // the foot below — whose tabs controlled no `role="tabpanel"` and carried no
+  // `aria-controls`. That contract was half stated, and worse, the half that
+  // was stated is not true here: a tablist promises that one panel is showing
+  // and the others are not, and the three effect destinations do not work that
+  // way. All three sections stay on screen in one scrolling column and the
+  // entry SCROLLS to its own (see showSection in app/renderer/main.js, which
+  // says why one at a time was tried and dropped) — so this is a table of
+  // contents, not a tab strip. Two of them, side by side, would have been two
+  // tab strips of three and one.
+  //
+  // So the role is gone rather than propped up: a screen reader now meets five
+  // ordinary buttons inside a named navigation landmark, and `aria-current`
+  // says which one is being pointed at — which is exactly what it is for and
+  // is true whether the entry scrolls or swaps. The arrow keys still work,
+  // because they were the good half of it, and every entry is a tab stop of
+  // its own now: the roving tabindex a tablist owes the keyboard would, in a
+  // plain group of buttons, silently hide four of the five from Tab with
+  // nothing announcing that the arrows are the way in.
   const list = document.createElement('div');
   list.className = 'nav-list';
-  // A list of destinations is a tab strip in everything but name: one of them
-  // is showing, the arrow keys should move between them, and a screen reader
-  // should say "3 of 4" rather than reading four unrelated buttons.
-  list.setAttribute('role', 'tablist');
-  list.setAttribute('aria-orientation', 'vertical');
 
   const foot = document.createElement('div');
   foot.className = 'nav-foot';
-  foot.setAttribute('role', 'tablist');
-  foot.setAttribute('aria-orientation', 'vertical');
 
   /** One entry: line icon, text label, and the pill that marks the active one. */
   function entry(destination) {
@@ -110,7 +130,6 @@ export function mountSidebar(container, { t, active, onSelect }) {
     button.type = 'button';
     button.className = 'nav-entry';
     button.id = `nav-${destination.key}`;
-    button.setAttribute('role', 'tab');
     button.dataset.destination = destination.key;
 
     // Decoration: the word is right there beside it, so the icon is hidden
@@ -137,6 +156,10 @@ export function mountSidebar(container, { t, active, onSelect }) {
   function relabel() {
     wordmark.textContent = t('app.title');
     caption.textContent = t('nav.caption');
+    // The landmark's own name. Two <nav>s would be told apart by it; one still
+    // needs it, because "navigation" on its own says nothing about what this
+    // navigates. A UI string like any other, from the language files.
+    container.setAttribute('aria-label', t('nav.label'));
     for (const item of all) item.label.textContent = t(item.destination.labelKey);
   }
 
@@ -145,10 +168,12 @@ export function mountSidebar(container, { t, active, onSelect }) {
     for (const item of all) {
       const on = item.destination.key === key;
       item.button.classList.toggle('is-active', on);
-      item.button.setAttribute('aria-selected', String(on));
-      // Only the active tab is a tab stop; the arrow keys move within the
-      // strip, which is what a tablist owes the keyboard.
-      item.button.tabIndex = on ? 0 : -1;
+      // `aria-current`, not `aria-selected`: nothing here is selected out of a
+      // set of panels — one entry is the one being pointed at, which is the
+      // word aria-current exists for. Removed rather than set to "false", so a
+      // screen reader announces it on one entry instead of on all five.
+      if (on) item.button.setAttribute('aria-current', 'true');
+      else item.button.removeAttribute('aria-current');
     }
   }
 
@@ -172,8 +197,9 @@ export function mountSidebar(container, { t, active, onSelect }) {
   }
 
   /**
-   * The arrow keys, because this is a tablist and a tablist that cannot be
-   * arrowed through is a row of buttons wearing a role it does not honour.
+   * The arrow keys: the good half of what the tablist role was here for, kept
+   * on its own merits. A column of five destinations is quicker to walk with
+   * Up and Down than with Tab, and Tab still reaches every one of them.
    * Wraps at both ends and skips whatever is disabled.
    */
   function move(from, step) {

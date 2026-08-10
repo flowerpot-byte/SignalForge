@@ -110,6 +110,10 @@ export function mountGallery(container, { t, onPicture, onStart, starterDocument
   const heading = document.createElement('h2');
   heading.className = 'gallery-title';
   heading.id = 'gallery-title';
+  // The strip is a <section>, which is a landmark only once it has a name —
+  // without this it is an anonymous region a screen reader cannot offer to jump
+  // to, although the heading naming it is right there inside it.
+  strip.setAttribute('aria-labelledby', heading.id);
 
   const rail = document.createElement('div');
   rail.className = 'gallery-rail';
