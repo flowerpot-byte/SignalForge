@@ -13,6 +13,7 @@ import { createSettings, FALLBACK_LANGUAGE } from '../src/main/settings.js';
 import {
   resolveEffectsTarget, SANDBOX_ENV, SANDBOX_REQUIRED_ENV, SANDBOX_MISSING_MESSAGE
 } from '../src/main/effects-target.js';
+import { SINGLE_INSTANCE_TEST_ENV } from '../src/main/single-instance.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
 import { exportEffect } from '../src/main/export-effect.js';
@@ -821,6 +822,44 @@ async function selfTestExport(win, folder) {
 }
 
 app.whenReady().then(async () => {
+  // Refuse to become a second running copy of the app. Two windows sharing
+  // one settings.json (src/main/settings.js reads it once and keeps it in
+  // memory) means the last one to write wins — a language choice or a chosen
+  // effects folder from the other window vanishes without a word.
+  //
+  // Skipped only under SINGLE_INSTANCE_TEST_ENV (see src/main/single-instance.js):
+  // app.requestSingleInstanceLock() is scoped to Electron's own userData
+  // directory, which almost none of this project's harnesses redirect, so
+  // left armed during a test run every self-test spawn would be fighting a
+  // real running copy of the app, or each other, over the very same lock.
+  //
+  // This check runs from inside whenReady, not before it, on purpose. It
+  // means a losing second instance pays for Electron's own startup before it
+  // finds out it should quit, but createWindow() below is still the first
+  // thing that could ever show a window, so nothing is shown either way.
+  // What that ordering buys: test/harness/walkthrough.js redirects userData
+  // (app.setPath) in its OWN top-level code, which runs AFTER importing
+  // app/main.js has already run this module's top level — so a lock taken
+  // any earlier than this would be taken out on the wrong (default) userData
+  // directory, the one a real installed copy of the app uses.
+  if (process.env[SINGLE_INSTANCE_TEST_ENV] !== '1') {
+    const gotLock = app.requestSingleInstanceLock();
+    if (!gotLock) {
+      // Another copy already holds the lock; it is the one that gets this
+      // launch's attempt via 'second-instance' below. Quit before doing
+      // anything this process would otherwise do next — no settings file is
+      // read or written, and createWindow() is never reached.
+      app.quit();
+      return;
+    }
+    app.on('second-instance', () => {
+      const [win] = BrowserWindow.getAllWindows();
+      if (!win) return;
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    });
+  }
+
   const selfTest = process.env.SF_SELFTEST === '1';
   // The self-test keeps its settings, and its effects folder, in a throwaway
   // directory. Two reasons, both of them about not touching the machine this
