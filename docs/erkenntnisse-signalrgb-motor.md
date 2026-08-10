@@ -146,6 +146,82 @@ derer SignalForge arbeitet.
 Für das Wallpaper heißt das: Quelldatei lesen, einmal umrechnen, als Schleife einbetten. Kein
 Gleichlauf mit dem echten Wallpaper — und das darf auch nicht versprochen werden.
 
+## Bilder einbetten: JPEG statt PNG (gemessen am 10.08.2026)
+
+Umsetzung von Wunsch 4 aus Abschnitt 9c des Entwurfs. Die Schätzung dort („bei einem Foto wäre
+JPEG etwa ein Viertel so groß") war deutlich zu vorsichtig — gemessen wird es **rund neunmal**
+kleiner. Der Grund: der Importer zeichnet das Bild mit 1,4 px weich, und weiche Farbverläufe sind
+genau das, was PNG am schlechtesten packt.
+
+Gemessen an zwei echten Bildern, jeweils so verkleinert und weichgezeichnet, wie der Importer es
+tut. Die Zahlen sind **base64-Zeichen** — das ist, was wirklich in der Effektdatei landet.
+
+| Kodierung | Screenshot 1128×463 → 487×200 | Foto 1200×1600 → 150×200 |
+|---|---|---|
+| PNG (bisher) | 139.900 | 67.884 |
+| JPEG 0,80 | 10.204 | 6.044 |
+| JPEG 0,85 | 11.800 | 6.888 |
+| JPEG 0,88 | 13.240 | 7.600 |
+| JPEG 0,90 | 14.356 | 8.204 |
+| **JPEG 0,92 (gewählt)** | **15.656** | **8.744** |
+| JPEG 0,95 | 20.544 | 10.956 |
+
+Ganze Effektdatei, über `bin/sfexport.js` in einen Wegwerf-Ordner gebaut:
+
+| Bild | vorher | nachher |
+|---|---|---|
+| Max' Screenshot | 173.237 Bytes (169,2 KB) | 49.474 Bytes (48,3 KB) |
+| Foto | 101.241 Bytes (98,9 KB) | 42.582 Bytes (41,6 KB) |
+
+Damit ist der Motor (28 KB) jetzt der größere Teil der Datei, nicht mehr das Bild.
+
+### Was es an Bildqualität kostet
+
+Nicht am Quellbild gemessen, sondern **am fertigen 320×200-Bild**, das SignalRGB später je LED
+abtastet — nur das zählt. Verglichen wurde das mit PNG eingebettete gegen das mit JPEG
+eingebettete Bild, Pixel für Pixel:
+
+| Bild | größte Abweichung (R/G/B) | mittlere Abweichung (R/G/B) | Pixel mit mehr als 4/255 |
+|---|---|---|---|
+| Screenshot @ 0,92 | 6 / 4 / 9 | 0,65 / 0,47 / 0,85 | 194 von 64.000 |
+| Foto @ 0,92 | 7 / 4 / 8 | 0,84 / 0,56 / 1,30 | 875 von 64.000 |
+
+Im Mittel unter **0,4 %** eines Kanals — weit unter dem, was eine LED zeigen kann. **Warum
+0,92:** 0,85 spart nochmal rund 4 KB, vervierfacht aber die Zahl der sichtbar abweichenden
+Pixel; 0,95 kostet ein Viertel mehr Bytes für weitere 0,1/255. Der Sprung von 0,90 auf 0,92
+kostet 1,3 KB und ist billig erkauft.
+
+**Nebenbefund:** Chromium schreibt **immer** 4:2:0-Farbunterabtastung (`2x2,1x1,1x1` im
+SOF0-Marker), egal welche Qualität. Die verbreitete Annahme, ab 0,90 werde auf 4:4:4 umgeschaltet,
+stimmt hier nicht — nachgesehen im erzeugten JPEG selbst.
+
+### Transparenz: die Falle mit dem Weichzeichner
+
+JPEG kennt kein Alpha, also muss ein wirklich durchsichtiges Bild PNG bleiben. Zwei Dinge sind
+dabei gemessen worden, und beide waren nicht offensichtlich:
+
+1. **Ein Alphakanal ist noch keine Transparenz.** Windows-Screenshots bringen einen mit, in dem
+   jedes einzelne Pixel 255 ist. Würde man nach dem Kanal entscheiden statt nach den Pixeln,
+   ginge die ganze Ersparnis bei genau den Bildern verloren, die Max am häufigsten benutzt.
+2. **Der Weichzeichner erfindet Transparenz.** `blur()` tastet über den Bildrand hinaus und legt
+   einen halbdurchsichtigen Saum um alle vier Kanten: bei Max' Screenshot — einem Bild ohne ein
+   einziges durchsichtiges Pixel — **4.086 von 97.400 Pixeln**, Alpha bis herunter auf 101.
+   Nach dem Weichzeichnen zu fragen, würde also *jedes* Bild für durchsichtig halten und nie
+   bei JPEG landen.
+
+Deshalb wird die Frage an einer **unverwischten** Zeichnung gestellt. Das ist auch belastbar:
+Verkleinern allein erzeugt bei einem deckenden Bild nie Alpha unter 255 (gemessen), und ein
+einziges wirklich durchsichtiges Pixel in einem 2000×1200-Bild kommt nach dem Verkleinern auf
+333×200 immer noch als Alpha 249 an — wird also gefunden.
+
+### Offen: WebP wäre nochmal halb so groß
+
+In derselben Messreihe: WebP mit Qualität 0,9 braucht für den Screenshot nur **8.056** Zeichen —
+gut die Hälfte von JPEG 0,92 — und kann außerdem Alpha, würde die PNG-Sonderbehandlung also ganz
+überflüssig machen. **Nicht umgesetzt, weil ungemessen:** in der Bausteine-Tabelle oben steht
+nicht, ob SignalRGBs eingefrorenes Chromium WebP aus einer `data:`-Adresse dekodiert. Das gehört
+erst in den Motorcheck, dann in den Bau — nicht umgekehrt.
+
 ## Der Motorcheck bleibt
 
 `tools/motorcheck/` erzeugt den Prüfeffekt neu. Bei jedem neuen Browser-Baustein, den ein
