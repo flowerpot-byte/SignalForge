@@ -85,6 +85,16 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   return {
     setDocument,
     /**
+     * The live document the loop renders, handed out so there is exactly one
+     * of it. The crop drag reads the layer's fit and offset from here and the
+     * settings column reads and writes its values here; a second copy kept
+     * alongside would only be a copy waiting to go stale (it was, until the
+     * settings column became a second writer). Whoever writes into it must
+     * keep to what normalizeDocument accepts — every path the settings column
+     * writes goes through the engine's own setByPath for exactly that reason.
+     */
+    document() { return doc; },
+    /**
      * Move one image layer's crop window, in place.
      *
      * Deliberately NOT setDocument(): that replaces the document and reloads

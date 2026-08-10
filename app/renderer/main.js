@@ -6,6 +6,7 @@ import { mountShell, mountBackdrop } from './components/shell.js';
 import { createPreview } from './components/preview.js';
 import { mountDrop } from './components/drop.js';
 import { mountCrop } from './components/crop.js';
+import { mountInspector } from './components/inspector.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -66,19 +67,66 @@ async function boot() {
   message.textContent = i18n.t('preview.dropHint');
   regions.preview.append(message);
 
-  // The picture the user can drag around, or null while there is none.
-  // Its source size cannot be read back out of the document: normalizeDocument
-  // keeps only an asset's kind, mime and bytes. The importer returns the size
-  // it scaled the picture down to, so it is remembered here instead.
-  let cropLayer = null;
+  // The id the dropped picture always gets. One layer for now; the layer
+  // list is a later task.
+  const IMAGE_LAYER = 'image';
+
+  // The only thing about the picture the document does not carry:
+  // normalizeDocument keeps an asset's kind, mime and bytes, not the size the
+  // importer scaled it down to. Everything else about the layer — its fit,
+  // its offset — is read straight out of the live document below, never
+  // copied, so the crop drag and the settings column cannot disagree about
+  // it. null while no picture has been dropped yet.
+  let sourceSize = null;
+
+  /**
+   * The picture the user can drag around, assembled fresh on every call from
+   * the live document plus the importer's source size. Deliberately not
+   * stored: a stored copy is what used to hold its own `fit`, which the
+   * settings column now also writes — the crop would have gone on computing
+   * its slack for whichever fit was in force when the picture was dropped.
+   */
+  function draggableLayer() {
+    if (!sourceSize) return null;
+    const layer = preview.document().layers.find((entry) => entry.id === IMAGE_LAYER);
+    if (!layer) return null;
+    return { ...layer, sourceWidth: sourceSize.width, sourceHeight: sourceSize.height };
+  }
 
   mountCrop(preview.canvas, {
-    getLayer: () => cropLayer,
-    onChange: (offset) => {
-      cropLayer.offset = offset;
-      // Writes straight into the live document; the preview's frame loop
-      // shows it on its next frame (see components/preview.js).
-      preview.setLayerOffset(cropLayer.id, offset);
+    getLayer: draggableLayer,
+    // Writes straight into the live document; the preview's frame loop shows
+    // it on its next frame (see components/preview.js).
+    onChange: (offset) => preview.setLayerOffset(IMAGE_LAYER, offset)
+  });
+
+  const inspector = mountInspector(regions.inspector, {
+    t: (k) => i18n.t(k),
+    getDocument: () => preview.document(),
+    /**
+     * Which way a change reaches the picture depends on what kind of change
+     * it is:
+     *
+     *  - A whole new motions list (adding or removing one) is the only
+     *    change that alters the document's shape, so it is the only one that
+     *    goes back through setDocument: normalizeDocument then fills a new
+     *    entry's speed and amount, clamps them and drops any duplicate kind,
+     *    which is work no code here should be repeating. It costs a reload
+     *    of the picture, which is fine for something that happens on a
+     *    button press.
+     *  - Everything else — every slider, the fit dropdown, a motion's kind —
+     *    is a single value at a path that already exists, so it is written
+     *    straight into the live document and the running loop shows it on
+     *    its next frame. Reloading the picture on every pixel of a slider
+     *    drag would be unusable.
+     */
+    onChange: async (path, value) => {
+      const doc = preview.document();
+      if (!window.SignalForgeEngine.setByPath(doc, path, value)) {
+        console.error('inspector: refused to write', path);
+        return;
+      }
+      if (Array.isArray(value)) await preview.setDocument(doc);
     }
   });
 
@@ -102,19 +150,14 @@ async function boot() {
         }
         message.classList.remove('drop-warn');
         message.textContent = '';
-        const layer = { id: 'image', type: 'image', asset: 'image', fit: 'cover', motions: [] };
         await preview.setDocument({
           name: file.name,
-          layers: [layer],
+          layers: [{ id: IMAGE_LAYER, type: 'image', asset: 'image', fit: 'cover', motions: [] }],
           assets: { image: result.asset }
         });
-        cropLayer = {
-          id: layer.id,
-          fit: layer.fit,
-          offset: { x: 0, y: 0 },
-          sourceWidth: result.asset.width,
-          sourceHeight: result.asset.height
-        };
+        sourceSize = { width: result.asset.width, height: result.asset.height };
+        // The column had nothing but the document-wide sliders until now.
+        inspector.refresh();
         preview.start();
       } catch (err) {
         console.error('drop import failed:', err);
