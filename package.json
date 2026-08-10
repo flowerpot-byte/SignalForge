@@ -12,7 +12,7 @@
   "scripts": {
     "build:engine": "esbuild src/engine/index.js --bundle --format=iife --global-name=SignalForgeEngine --outfile=dist/engine.bundle.js",
     "pretest": "npm run build:engine",
-    "test": "node --test \"test/**/*.test.js\"",
+    "test": "node --test --import ./test/support/effects-sandbox.js \"test/**/*.test.js\"",
     "start": "npm run build:engine && electron app/main.js",
     "export": "node bin/sfexport.js"
   },

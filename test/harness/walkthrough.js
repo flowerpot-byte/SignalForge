@@ -86,6 +86,13 @@ mkdirSync(effectsFolder, { recursive: true });
 // footer back before pressing any export button, so a future mistake of the
 // same shape stops the run instead of writing somewhere real.
 app.setPath('userData', userDataDir);
+// The fourth guard, and the only one that is not specific to this file: name
+// the sandbox app/main.js must stay inside (src/main/effects-target.js). It is
+// set here rather than passed in because app/main.js reads it at call time, not
+// at import time — an ES import runs before every statement in this file, so
+// setting it earlier is not possible. With it set, even a settings file that
+// named somewhere real would be refused rather than written into.
+process.env.SF_EFFECTS_SANDBOX = OUT;
 const settingsFile = join(userDataDir, 'settings.json');
 if (!existsSync(settingsFile)) {
   // Deliberately no language: phase 1 is meant to be a genuine first start for

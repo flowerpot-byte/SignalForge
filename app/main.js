@@ -10,7 +10,9 @@ import {
 } from 'node:fs';
 import { homedir, tmpdir } from 'node:os';
 import { createSettings, FALLBACK_LANGUAGE } from '../src/main/settings.js';
-import { resolveEffectsTarget } from '../src/main/effects-target.js';
+import {
+  resolveEffectsTarget, SANDBOX_ENV, SANDBOX_REQUIRED_ENV, SANDBOX_MISSING_MESSAGE
+} from '../src/main/effects-target.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
 import { exportEffect } from '../src/main/export-effect.js';
@@ -37,12 +39,38 @@ let settings;
  */
 let searchRoots = null;
 
+/**
+ * The self-test's own sandbox, set below once it has made its throwaway folder.
+ * Any other harness names one in SF_EFFECTS_SANDBOX instead.
+ */
+let selfTestSandbox = null;
+
+/**
+ * The test-only circuit breaker around every effects-folder decision.
+ *
+ * The environment is read here, at call time, and never at module load: a
+ * harness that imports app/main.js (test/harness/walkthrough.js does) can only
+ * set variables after that import has already run, because ES imports are
+ * hoisted above everything else in the importing file. Reading late is what
+ * makes the gate reachable for those harnesses at all.
+ *
+ * Nothing here does anything unless SF_EFFECTS_SANDBOX_REQUIRED is set, which
+ * only `npm test` sets. Ordinary use of the app is untouched.
+ */
+function sandbox() {
+  return {
+    sandboxRoot: selfTestSandbox || process.env[SANDBOX_ENV] || null,
+    sandboxRequired: process.env[SANDBOX_REQUIRED_ENV] === '1'
+  };
+}
+
 function currentTarget() {
   return resolveEffectsTarget({
     settings,
     documentsPath: searchRoots ? searchRoots.documents : app.getPath('documents'),
     homePath: searchRoots ? searchRoots.home : homedir(),
-    exists: (p) => existsSync(p)
+    exists: (p) => existsSync(p),
+    ...sandbox()
   });
 }
 
@@ -683,6 +711,19 @@ app.whenReady().then(async () => {
   const selfTestDir = selfTest ? mkdtempSync(join(tmpdir(), 'signalforge-selftest-run-')) : null;
   const selfTestEffects = selfTest ? join(selfTestDir, 'Effects') : null;
   if (selfTest) mkdirSync(selfTestEffects, { recursive: true });
+  if (selfTest) selfTestSandbox = selfTestDir;
+
+  // The circuit breaker, checked before a window exists and therefore before
+  // anything at all can be exported. A harness that redirects userData and
+  // stops there — the exact mistake that once put two files in the machine
+  // owner's real SignalRGB folder — dies here with a message naming the fix,
+  // instead of quietly searching the real Documents folder and finding it.
+  const { sandboxRoot, sandboxRequired } = sandbox();
+  if (sandboxRequired && !sandboxRoot) {
+    process.stderr.write(`${SANDBOX_MISSING_MESSAGE}\n`);
+    app.exit(1);
+    return;
+  }
 
   settings = createSettings({
     file: join(selfTest ? selfTestDir : app.getPath('userData'), 'settings.json'),
