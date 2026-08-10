@@ -12,13 +12,15 @@
   "scripts": {
     "build:engine": "esbuild src/engine/index.js --bundle --format=iife --global-name=SignalForgeEngine --outfile=dist/engine.bundle.js",
     "pretest": "npm run build:engine",
+    "pretest:import": "npm run build:engine",
     "test": "node --test --import ./test/support/effects-sandbox.js --import ./test/support/single-instance-test.js \"test/**/*.test.js\"",
+    "test:import": "node --test --import ./test/support/effects-sandbox.js --import ./test/support/single-instance-test.js --import ./test/support/drop-import-test.js \"test/**/*.test.js\"",
     "start": "npm run build:engine && electron app/main.js",
     "export": "node bin/sfexport.js"
   },
-  "dependencies": {},
   "devDependencies": {
     "electron": "43.3.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "0.28.2"
   }
 }

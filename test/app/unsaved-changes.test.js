@@ -18,14 +18,36 @@ const dictionary = (name) => JSON.parse(
 );
 
 /**
+ * The one check in this file that cannot be made to a window nobody is
+ * showing, and what it costs to make it.
+ *
+ * Chromium's drag-and-drop pipeline will not serve a hidden window, so proving
+ * that a picture can be DRAGGED in means putting a window on screen in front of
+ * whoever is using the machine. Every other route into the same importFile —
+ * the gallery's file input, which is what the picture tile leads to — needs no
+ * such thing, and that is what an ordinary run uses.
+ *
+ * So the drag is opt-in, in the shape this project already uses for
+ * SF_EFFECTS_SANDBOX_REQUIRED and SF_SINGLE_INSTANCE_TEST: an environment
+ * variable armed for a whole run by an --import script in package.json. It is
+ * skipped by node:test's own `{ skip }` rather than by an `if` that returns
+ * quietly, so a run that does not make this check SAYS it did not make it.
+ */
+const DROP_IMPORT_ENV = 'SF_UNSAVED_DROP_IMPORT';
+const dropImportSkip = process.env[DROP_IMPORT_ENV] === '1'
+  ? false
+  : `needs a visible window (Chromium will not drag onto a hidden one); run \`npm run test:import\``;
+
+/**
  * Run test/harness/unsaved.js — the real app/main.js, the real window, real
  * mouse and keyboard events — and hand back the one line of JSON it prints.
  *
- * The environment is passed on whole: SF_EFFECTS_SANDBOX_REQUIRED and
- * SF_SINGLE_INSTANCE_TEST are armed for the whole suite by the two --import
- * scripts in package.json, and the child has to inherit both. SF_UNSAVED_REAL
- * — the one switch that would open a genuine OS dialog — is deliberately not
- * set here and is never set by the suite.
+ * The environment is passed on whole: SF_EFFECTS_SANDBOX_REQUIRED,
+ * SF_SINGLE_INSTANCE_TEST and — for `npm run test:import` only —
+ * SF_UNSAVED_DROP_IMPORT are armed for the whole suite by the --import scripts
+ * in package.json, and the child has to inherit them. SF_UNSAVED_REAL — the
+ * one switch that would open a genuine OS dialog — is deliberately not set
+ * here and is never set by the suite.
  */
 async function runHarness() {
   const child = spawn(require_('electron'), [join(root, 'test', 'harness', 'unsaved.js')], {
@@ -104,6 +126,21 @@ test('unsaved work is known about, and asked about before it is thrown away', as
       );
     });
   }
+
+  // The drag itself, as a check of its own. The subtest above says "importing
+  // a picture marks the document unsaved" whichever door the picture came
+  // through; this one says the door was Chromium's own drag pipeline, carrying
+  // a real file path — the only kind webUtils.getPathForFile in the preload can
+  // resolve, and therefore the only proof that a dropped file works at all.
+  await t.test('a picture DROPPED on the preview is imported', { skip: dropImportSkip }, () => {
+    assert.equal(
+      report.dropImportRequested,
+      true,
+      'the harness must have been told to drag rather than to pick'
+    );
+    assert.equal(report.pictureWasDropped, true, 'and the drop must have been what got the picture in');
+    assert.equal(report.afterImport, true, 'a dropped picture is work that is in no file yet');
+  });
 
   await t.test('the arrow keys reached the canvas at all', () => {
     // Without this the arrow-key subtest above could pass on a stray keypress

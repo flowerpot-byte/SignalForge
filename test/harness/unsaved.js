@@ -17,16 +17,39 @@
  *   npx electron test/harness/unsaved.js
  *
  * `npm test` spawns exactly that (see test/app/unsaved-changes.test.js) and
- * judges the one line of JSON this prints. Two optional environment variables
- * are for a human running it by hand:
+ * judges the one line of JSON this prints.
  *
- *   SF_UNSAVED_SHOTS   a folder to photograph the window into
- *   SF_UNSAVED_REAL    with '1', the last question is NOT stubbed: the genuine
- *                      OS dialog is opened, left standing for ninety seconds
- *                      so somebody outside can photograph it, and the run then
- *                      kills itself — nothing in here can answer a real modal.
- *                      Never set by the test suite; a test that waits for a
- *                      human is not a test.
+ * THE WINDOW IS NEVER SHOWN
+ *
+ * `windowDisplay.show = false`, the same line test/harness/shots.js opens with
+ * and for the same reason: a run of `npm test` used to make this window appear
+ * in front of whoever was using the machine. It is created, loaded, driven,
+ * measured and photographed without ever being shown — which needs the frame
+ * pump below, because a window Chromium is not showing does not tick
+ * requestAnimationFrame.
+ *
+ * The one gesture that cannot be made to a hidden window is a drag-and-drop:
+ * Chromium's drag pipeline will not serve a window nobody is looking at. That
+ * check is therefore opt-in (SF_UNSAVED_DROP_IMPORT below) and skipped by
+ * default; the picture then comes in through the gallery's own file input,
+ * which reaches the very same importFile in app/renderer/main.js.
+ *
+ * Three optional environment variables are for a human running it by hand:
+ *
+ *   SF_UNSAVED_SHOTS       a folder to photograph the window into
+ *   SF_UNSAVED_DROP_IMPORT with '1', the picture is dragged onto the preview
+ *                          instead — a real drag through Chromium's own
+ *                          pipeline, carrying a real file path. That needs a
+ *                          window that is on screen, so this is the one switch
+ *                          that makes a window appear. Armed for a whole run by
+ *                          `npm run test:import` (see package.json), never by
+ *                          `npm test`.
+ *   SF_UNSAVED_REAL        with '1', the last question is NOT stubbed: the
+ *                          genuine OS dialog is opened, left standing for
+ *                          ninety seconds so somebody outside can photograph
+ *                          it, and the run then kills itself — nothing in here
+ *                          can answer a real modal. Never set by the test
+ *                          suite; a test that waits for a human is not a test.
  *
  * Nothing here may touch the machine's real SignalRGB folder: userData goes to
  * a throwaway directory, SF_EFFECTS_SANDBOX names that same directory as the
@@ -40,7 +63,9 @@ import { tmpdir } from 'node:os';
 import { SANDBOX_ENV } from '../../src/main/effects-target.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
-import { projectDialogs, discardDialog, searchRoots, DISCARD_ANSWERS } from '../../app/main.js';
+import {
+  projectDialogs, discardDialog, searchRoots, DISCARD_ANSWERS, windowDisplay
+} from '../../app/main.js';
 import { driver, wait } from './driver.js';
 
 // This block has to run before app/main.js's own app.whenReady handler does,
@@ -53,6 +78,26 @@ app.setPath('userData', runDir);
 process.env[SANDBOX_ENV] = runDir;
 searchRoots.documents = () => runDir;
 searchRoots.home = () => runDir;
+
+/**
+ * Whether the picture is dragged onto the preview rather than picked.
+ *
+ * The name is spelled out here and in test/app/unsaved-changes.test.js, the
+ * two ends of the same switch: the test decides whether its drop subtest runs,
+ * this decides which gesture the run actually makes, and both read the very
+ * same variable out of the environment they share.
+ */
+const DROP_IMPORT = process.env.SF_UNSAVED_DROP_IMPORT === '1';
+
+// The one line that keeps a full test run out of the machine owner's way.
+//
+// Shown only when the drag-and-drop import was asked for, and then from the
+// very first paint rather than part-way through: Chromium's drag pipeline
+// wants a window that has been on screen and focused for a while, and a window
+// raised at the last moment made the drop take a minute and a half longer than
+// one that was there all along. So a run that asks for the drop gets exactly
+// the window this harness used to have, and every other run gets none.
+windowDisplay.show = DROP_IMPORT;
 
 // The effects folder is named up front, unlike in the self-test: the
 // first-start question is not what this harness is about, and a panel sitting
@@ -67,9 +112,10 @@ writeFileSync(
 );
 
 // A window Chromium thinks nobody is looking at stops being given animation
-// frames, and everything here that photographs or measures the canvas waits
-// for two of them. These three switches belong to the harness and change
-// nothing about the app.
+// frames. The frame pump below is what actually keeps the render loop turning;
+// these three switches are what keep everything else in the page — timers, the
+// renderer process itself — running at full speed while it does. They belong to
+// the harness and change nothing about the app.
 app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
 app.commandLine.appendSwitch('disable-renderer-backgrounding');
 app.commandLine.appendSwitch('disable-background-timer-throttling');
@@ -77,6 +123,30 @@ app.commandLine.appendSwitch('disable-background-timer-throttling');
 const SHOTS = process.env.SF_UNSAVED_SHOTS || null;
 if (SHOTS) mkdirSync(SHOTS, { recursive: true });
 const REAL_DIALOG = process.env.SF_UNSAVED_REAL === '1';
+
+/**
+ * A frame pump installed in the page, copied from test/harness/shots.js
+ * because the reason is the same one: a window that is never shown gets no
+ * animation frames from Chromium, and the preview's render loop is a
+ * requestAnimationFrame chain. `createPreview` reaches
+ * `window.requestAnimationFrame` through a closure at the moment it schedules
+ * a frame, so replacing that function puts every subsequent frame into a queue
+ * this file drains by hand. It is also why `driver.settle()` is not used
+ * anywhere below: settle() waits for two REAL frames, which never arrive here.
+ */
+const PUMP = `(() => {
+  window.__sfQueue = [];
+  window.requestAnimationFrame = (cb) => { window.__sfQueue.push(cb); return window.__sfQueue.length; };
+  window.__sfPump = (n) => {
+    for (let i = 0; i < n; i += 1) {
+      const due = window.__sfQueue;
+      window.__sfQueue = [];
+      due.forEach((cb) => cb(performance.now()));
+    }
+    return true;
+  };
+  return true;
+})()`;
 
 /**
  * A 4x4 PNG, one colour per quarter — the same one the self-test uses. Written
@@ -158,8 +228,69 @@ app.whenReady().then(async () => {
       await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
     }
 
-    const d = driver(win, { shotsDir: SHOTS });
+    // No shotsDir: `shot` below takes the photographs, because driver.shot()
+    // waits for real animation frames that a hidden window never produces.
+    const d = driver(win);
     await d.until(`document.getElementById('footer-open') !== null`, 'the window is built', 200);
+    await d.js(PUMP);
+
+    /**
+     * Two painted frames, driven from out here.
+     *
+     * Everything that reads the canvas — every `stats()` and every photograph
+     * — needs the render loop to have run since the change it is evidence of,
+     * and in a window nobody is showing the only thing that runs it is this.
+     */
+    const settle = async (frames = 4) => {
+      await d.js(`window.__sfPump(${frames})`);
+      await wait(80);
+    };
+
+    /**
+     * One photograph, taken twice.
+     *
+     * capturePage() on a window nobody is showing renders on demand, and the
+     * FIRST such render is what commits the canvas's own layer — so the first
+     * picture of a freshly drawn frame shows an empty stage and the second
+     * shows the effect. Measured in test/harness/shots.js, which says so at
+     * length; the same is true here.
+     */
+    const shot = async (name) => {
+      if (!SHOTS) return null;
+      await settle(10);
+      const file = join(SHOTS, `${name}.png`);
+      await win.capturePage();
+      await wait(140);
+      writeFileSync(file, (await win.capturePage()).toPNG());
+      return file;
+    };
+
+    /**
+     * The gallery's own hidden <input type="file">, given a real path by the
+     * protocol: that is the same File the operating system's dialog would hand
+     * over, so it reaches app/renderer/main.js's importFile through the very
+     * handler a click reaches it through — and it needs no window on screen.
+     */
+    try {
+      await d.send('DOM.enable');
+    } catch {
+      // Already enabled, or not needed on this revision.
+    }
+    const pickPicture = async () => {
+      const { result } = await d.send('Runtime.evaluate', {
+        expression: `document.getElementById('gallery-file')`
+      });
+      await d.send('DOM.setFileInputFiles', { files: [imageFile], objectId: result.objectId });
+      // Whether setFileInputFiles fires `change` by itself has changed between
+      // protocol revisions, and firing it twice would import twice. The
+      // gallery's own handler clears the field the moment it runs (see
+      // components/gallery.js), so the field itself is the answer.
+      const alreadyFired = await d.js(`document.getElementById('gallery-file').value === ''`);
+      if (!alreadyFired) {
+        await d.js(`document.getElementById('gallery-file')
+          .dispatchEvent(new Event('change', { bubbles: true })), true`);
+      }
+    };
 
     /** The flag, read where the window says it out loud. */
     const unsaved = () => d.js(`document.documentElement.classList.contains('has-unsaved-changes')`);
@@ -206,65 +337,78 @@ app.whenReady().then(async () => {
 
     report.freshStart = await unsaved();
 
-    // --- the picture, dragged in the way a person drags it ------------------
+    // --- the picture gets in ------------------------------------------------
     //
-    // A real drag through the protocol, carrying a real file path: the only
-    // kind webUtils.getPathForFile in the preload can resolve, so this is also
-    // the proof that the import is reachable by dragging rather than only by
-    // calling the handler.
-    //
-    // The window is brought to the front first, because this is the one
-    // gesture here that goes through Chromium's own drag pipeline rather than
-    // straight into the page, and that pipeline takes its time about a window
-    // nobody is looking at — `npm test` runs its files side by side, so another
-    // harness's window can perfectly well be in front of this one.
+    // Two doors into the very same importFile in app/renderer/main.js. Which
+    // one this run uses is the difference between a run that shows a window and
+    // one that does not, and nothing else about the checks below changes.
     const hasPicture =
       `document.getElementById('preview-body').classList.contains('has-picture')`;
-    const preview = await d.box('#preview-body');
-    win.show();
-    // Raised rather than merely asked for: Windows may refuse a background
-    // process's focus request outright, and Z-order does not need its
-    // permission. Put back the moment the picture is in.
-    win.setAlwaysOnTop(true);
-    win.focus();
-    win.moveTop();
-    await wait(400);
-    try {
-      await d.send('Input.setInterceptDrags', { enabled: false });
-    } catch {
-      // Older protocol revisions do not have it; the drop below is what
-      // matters and reports its own failure.
+    report.dropImportRequested = DROP_IMPORT;
+
+    if (DROP_IMPORT) {
+      // A real drag through Chromium's own pipeline, carrying a real file path:
+      // the only kind webUtils.getPathForFile in the preload can resolve, so
+      // this is the proof that the import is reachable by DRAGGING rather than
+      // only by picking a file.
+      //
+      // The window has to be on screen for it. That pipeline will not serve a
+      // window nobody is looking at, which is the whole reason this block is
+      // behind a switch: it is the one thing in this file that interrupts
+      // whoever is using the machine.
+      const preview = await d.box('#preview-body');
+      // Raised rather than merely asked for: Windows may refuse a background
+      // process's focus request outright, and Z-order does not need its
+      // permission. Put back the moment the picture is in.
+      win.setAlwaysOnTop(true);
+      win.focus();
+      win.moveTop();
+      await wait(400);
+      try {
+        await d.send('Input.setInterceptDrags', { enabled: false });
+      } catch {
+        // Older protocol revisions do not have it; the drop below is what
+        // matters and reports its own failure.
+      }
+      for (const type of ['dragEnter', 'dragOver', 'drop']) {
+        await d.send('Input.dispatchDragEvent', {
+          type, x: preview.cx, y: preview.cy,
+          data: { items: [], files: [imageFile], dragOperationsMask: 1 }
+        });
+        await wait(150);
+      }
+      // Dropped exactly once, and then waited for as long as it takes.
+      //
+      // Retrying was tried and is a trap: Chromium does not refuse a drag it is
+      // too busy for, it QUEUES it — so a second drop dispatched because the
+      // first "had not worked yet" arrives anyway, minutes later, and imports
+      // the picture again in the middle of a completely different check. That
+      // is not a theory; it is what turned three of the checks below red at
+      // random under the load of a full test run, each time with the freshly
+      // imported picture sitting where the project under test should have been.
+      let dropped = false;
+      for (let waited = 0; waited < 300 && !dropped; waited += 1) {
+        await wait(100);
+        dropped = await d.js(hasPicture);
+      }
+      win.setAlwaysOnTop(false);
+      if (!dropped) {
+        throw new Error(
+          `the drag-and-drop import never took; the window says: ${await d.message()}`
+        );
+      }
+      report.pictureWasDropped = true;
+    } else {
+      // The gallery's file input, which is what a click on the picture tile
+      // leads to and needs nothing on screen at all.
+      await pickPicture();
+      await d.until(hasPicture, 'the picked picture is on the stage', 300);
+      report.pictureWasDropped = false;
     }
-    for (const type of ['dragEnter', 'dragOver', 'drop']) {
-      await d.send('Input.dispatchDragEvent', {
-        type, x: preview.cx, y: preview.cy,
-        data: { items: [], files: [imageFile], dragOperationsMask: 1 }
-      });
-      await wait(150);
-    }
-    // Dropped exactly once, and then waited for as long as it takes.
-    //
-    // Retrying was tried and is a trap: Chromium does not refuse a drag it is
-    // too busy for, it QUEUES it — so a second drop dispatched because the
-    // first "had not worked yet" arrives anyway, minutes later, and imports the
-    // picture again in the middle of a completely different check. That is not
-    // a theory; it is what turned three of the checks below red at random under
-    // the load of a full test run, each time with the freshly imported picture
-    // sitting where the project under test should have been.
-    let dropped = false;
-    for (let waited = 0; waited < 300 && !dropped; waited += 1) {
-      await wait(100);
-      dropped = await d.js(hasPicture);
-    }
-    win.setAlwaysOnTop(false);
-    if (!dropped) {
-      throw new Error(
-        `the drag-and-drop import never took; the window says: ${await d.message()}`
-      );
-    }
+
     report.afterImport = await unsaved();
     report.afterImportSaved = await save();
-    await d.shot('01-picture-imported-and-saved');
+    await shot('01-picture-imported-and-saved');
 
     // --- the crop, dragged with a real mouse --------------------------------
     const canvas = await d.box('#preview-canvas');
@@ -331,7 +475,7 @@ app.whenReady().then(async () => {
     report.cleanOpenAskedNothing = discardAsked.length === askedBeforeCleanOpen;
     report.afterOpen = await unsaved();
     report.controlsAfterOpen = await controls();
-    await d.shot('02-other-project-opened');
+    await shot('02-other-project-opened');
 
     // --- the question: cancel ----------------------------------------------
     //
@@ -358,11 +502,11 @@ app.whenReady().then(async () => {
     // would be of the frame before the drag — and the comparison would then
     // fail on the paint that was still to come rather than on anything the
     // cancelled open did.
-    await d.settle();
+    await settle();
     const beforePixels = await d.stats();
     const beforeMessage = await d.message();
     report.unsavedBeforeCancel = await unsaved();
-    await d.shot('03-unsaved-work');
+    await shot('03-unsaved-work');
 
     discardAnswer = 'cancel';
     const askedBeforeCancel = discardAsked.length;
@@ -372,7 +516,7 @@ app.whenReady().then(async () => {
     report.cancelAsked = discardAsked.length === askedBeforeCleanOpen + 1;
     report.questionInEnglish = discardAsked[discardAsked.length - 1];
     const afterCancel = await controls();
-    await d.settle();
+    await settle();
     const afterCancelPixels = await d.stats();
     report.cancelLeftControls = JSON.stringify(afterCancel) === JSON.stringify(before);
     report.cancelLeftThePicture = afterCancelPixels.hash === beforePixels.hash;
@@ -384,7 +528,7 @@ app.whenReady().then(async () => {
     report.stillUnsavedAfterCancel = await unsaved();
     report.controlsBeforeCancel = before;
     report.controlsAfterCancel = afterCancel;
-    await d.shot('04-after-cancel-nothing-changed');
+    await shot('04-after-cancel-nothing-changed');
 
     // --- the question: cancel again, in German ------------------------------
     //
@@ -440,7 +584,7 @@ app.whenReady().then(async () => {
     }
     report.controlsAfterSaveFirst = await controls();
     report.unsavedAfterSaveFirst = await unsaved();
-    await d.shot('05-saved-then-opened');
+    await shot('05-saved-then-opened');
 
     // --- the question: discard ---------------------------------------------
     await d.setInput('sf-brightness', '9');
@@ -458,7 +602,7 @@ app.whenReady().then(async () => {
     report.discardWroteNothing = savedFiles.length === 0;
     report.controlsAfterDiscard = await controls();
     report.unsavedAfterDiscard = await unsaved();
-    await d.shot('06-discarded-and-opened');
+    await shot('06-discarded-and-opened');
 
     // --- the same question in front of the four starting tiles --------------
     //
@@ -480,7 +624,7 @@ app.whenReady().then(async () => {
      * — a picture's crop offset — only the canvas can show.
      */
     const snapshot = async () => {
-      await d.settle();
+      await settle();
       return {
         name: await d.js(`document.getElementById('footer-name').value`),
         controls: await d.js(`[...document.querySelectorAll('#inspector-body input, #inspector-body select')]
@@ -519,7 +663,7 @@ app.whenReady().then(async () => {
     report.snapshotAfterTileCancel = await snapshot();
     report.tileCancelSaidNothing = (await d.message()) === messageBeforeTile;
     report.stillUnsavedAfterTileCancel = await unsaved();
-    await d.shot('07-tile-cancelled-nothing-changed');
+    await shot('07-tile-cancelled-nothing-changed');
 
     // --- a tile: save first, and the save is cancelled ----------------------
     saveCanceled = true;
@@ -543,36 +687,13 @@ app.whenReady().then(async () => {
     );
     report.tileDiscardWroteNothing = savedFiles.length === 0;
     report.snapshotAfterTileDiscard = await snapshot();
-    await d.shot('08-tile-discarded-and-started');
+    await shot('08-tile-discarded-and-started');
 
     // --- and the picture tile, the fourth entrance --------------------------
     //
-    // Driven through the gallery's own hidden <input type="file">, given a
-    // real path by the protocol: that is the same File the operating system's
-    // dialog would hand over, so it reaches app/renderer/main.js's importFile
-    // through the very handler a click reaches it through — and it opens no
-    // dialog on the machine's own screen.
-    try {
-      await d.send('DOM.enable');
-    } catch {
-      // Already enabled, or not needed on this revision.
-    }
-    const pickPicture = async () => {
-      const { result } = await d.send('Runtime.evaluate', {
-        expression: `document.getElementById('gallery-file')`
-      });
-      await d.send('DOM.setFileInputFiles', { files: [imageFile], objectId: result.objectId });
-      // Whether setFileInputFiles fires `change` by itself has changed between
-      // protocol revisions, and firing it twice would import twice. The
-      // gallery's own handler clears the field the moment it runs (see
-      // components/gallery.js), so the field itself is the answer.
-      const alreadyFired = await d.js(`document.getElementById('gallery-file').value === ''`);
-      if (!alreadyFired) {
-        await d.js(`document.getElementById('gallery-file')
-          .dispatchEvent(new Event('change', { bubbles: true })), true`);
-      }
-    };
-
+    // Driven through `pickPicture` above: the gallery's own hidden
+    // <input type="file">, given a real path by the protocol, which is the
+    // same File the operating system's dialog would hand over.
     const beforePicture = await snapshot();
     report.unsavedBeforePictureTile = await unsaved();
     discardAnswer = 'cancel';
@@ -594,7 +715,7 @@ app.whenReady().then(async () => {
       200
     );
     report.pictureTileImported = true;
-    await d.shot('09-picture-tile-imported-after-discard');
+    await shot('09-picture-tile-imported-after-discard');
 
     // --- the genuine dialog, photographed -----------------------------------
     //
@@ -606,7 +727,9 @@ app.whenReady().then(async () => {
     if (REAL_DIALOG) {
       discardDialog.ask = (w, options) => dialog.showMessageBox(w, options);
       // Above everything, including a full-screen game: the question has to
-      // be the thing on screen for anybody to photograph it.
+      // be the thing on screen for anybody to photograph it — which means
+      // undoing the hidden window this harness otherwise runs with.
+      win.show();
       win.setAlwaysOnTop(true, 'screen-saver');
       win.focus();
       await d.setInput('sf-brightness', '33');
