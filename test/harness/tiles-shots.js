@@ -277,7 +277,19 @@ async function main() {
   })()`);
 
   // ------------------------------------------------------------ the states
-  await d.js(`document.getElementById('gallery-linear').focus(), true`);
+  // A REAL Tab, through the protocol, and not element.focus(): Chromium only
+  // matches :focus-visible when the last interaction was a keyboard one, so a
+  // programmatic focus photographs a tile with no ring on it and proves
+  // nothing about whether the ring exists. The tile before it is focused
+  // first only so the Tab has one step to make.
+  await win.webContents.debugger.attach('1.3');
+  await d.js(`document.getElementById('gallery-solid').focus(), true`);
+  await d.key('Tab', 'Tab', 9);
+  notes.keyboard = await d.js(`(() => {
+    const active = document.activeElement;
+    return { id: active.id, ring: getComputedStyle(active).outlineColor,
+             visible: active.matches(':focus-visible') };
+  })()`);
   await shot('02-strip-focused');
 
   await shot('03-strip-1040x700', { size: [1040, 700] });
