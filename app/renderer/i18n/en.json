@@ -1,6 +1,5 @@
 {
   "app.title": "SignalForge",
-  "layers.title": "Layers",
   "inspector.title": "Settings",
   "preview.dropHint": "Drop an image here",
   "preview.dropUnsupported": "Unsupported file type",
@@ -10,6 +9,7 @@
   "preview.cropLabel": "Image section - move it with the arrow keys, hold Shift for bigger steps",
   "preview.cropPosition": "Crop {x}% from left, {y}% from top",
   "preview.cropEdge": "Edge reached",
+  "inspector.section.image": "Image",
   "inspector.fit": "Fit",
   "inspector.fit.cover": "Cover",
   "inspector.fit.stretch": "Stretch",
@@ -25,6 +25,7 @@
   "inspector.removeMotion": "Remove",
   "inspector.speed": "Speed",
   "inspector.amount": "Strength",
+  "inspector.section.colour": "Colour",
   "inspector.saturation": "Saturation",
   "inspector.greenMagenta": "Green/Magenta",
   "inspector.blueYellow": "Blue/Yellow",
