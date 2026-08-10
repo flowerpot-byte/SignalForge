@@ -58,11 +58,30 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   // frame already in flight is invalidated even before the next start().
   let generation = 0;
 
+  /**
+   * Show a different document — both halves of it, or neither.
+   *
+   * Building the new document and its assets first and committing them only
+   * once both exist is the whole point. Assigning `doc` before awaiting the
+   * assets would leave the window rendering the NEW document's layers against
+   * the PREVIOUS picture for as long as the load takes, and permanently if it
+   * rejects or hits loadAssets' watchdog — with the crop drag computing its
+   * slack from the wrong source size all the while. openProject (see
+   * app/renderer/main.js) is built on exactly this promise: it measures the
+   * pictures first so a file that cannot be used leaves the project already
+   * open alone, and that guarantee has to survive its last step too.
+   *
+   * The rejection is deliberately not swallowed: every caller — the drop path,
+   * openProject, the settings column's motion list — turns it into the one
+   * visible line of feedback.
+   */
   async function setDocument(next) {
-    doc = SF.normalizeDocument(next).doc;
-    assets = await SF.loadAssets(doc, {
+    const nextDoc = SF.normalizeDocument(next).doc;
+    const nextAssets = await SF.loadAssets(nextDoc, {
       resolveUrl: (asset) => (asset.data ? `data:${asset.mime};base64,${asset.data}` : asset.file)
     });
+    doc = nextDoc;
+    assets = nextAssets;
   }
 
   function frame(gen, stamp) {
