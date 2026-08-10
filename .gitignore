@@ -9,3 +9,11 @@ scratch/
 # What electron-builder writes: the unpacked app and the installer. Built from
 # what is in here, so it belongs to nobody's history.
 release/
+
+# Where every harness puts its screenshots, probe assets and measurements
+# (test/harness/shots.js, tiles-shots.js, gradient-shots.js, walkthrough.js all
+# default into it). Evidence for whoever is looking at the app today, made again
+# by re-running the harness, and 78 MB of it — one `git add -A` away from being
+# in the history for ever. Nothing in it is tracked, which was checked before
+# this line was written.
+work/

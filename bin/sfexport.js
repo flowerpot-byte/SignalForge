@@ -233,8 +233,15 @@ function buildColourDocument(options, name) {
       // deliberately not a command-line option: it is the one gradient
       // setting that needs to be seen while it is being chosen, which is
       // what the window is for.
+      //
+      // No guard against a single colour here: MIN_GRADIENT_STOPS is checked a
+      // few lines above and throws first, so there is exactly one place that
+      // decides what too few colours means. There used to be a second — an
+      // `at: colours.length === 1 ? 0 : ...` — which could not run, and a
+      // branch that cannot run is a claim about behaviour that nobody can
+      // check.
       stops: colours.map((color, index) => ({
-        at: colours.length === 1 ? 0 : (index / (colours.length - 1)) * 100,
+        at: (index / (colours.length - 1)) * 100,
         color
       })),
       motions: [{ kind: options.motion }]
