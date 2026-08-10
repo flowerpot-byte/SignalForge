@@ -109,6 +109,33 @@
   --track-fill:     #97b3c9;
   --track-empty:    #485969;
 
+  /* ---------------------------------------------------------------------
+     The starting strip's tiles.
+
+     A tile is now a picture of its own output — the real effect, rendered by
+     the real engine onto a real canvas (see components/gallery.js). So its
+     name has to stay legible over whatever that effect happens to be, and the
+     brightest thing a starting effect can be is a full-strength ramp into
+     #00b3ff. The reference does this with weight and a dark edge; this does it
+     with weight, a dark edge AND a scrim, because "weight and an edge" alone
+     is a judgement call and a scrim is a number that can be measured.
+
+     Near-opaque exactly where the words sit and gone entirely above them, so
+     the top two thirds of every tile show the effect untouched. rgba() of
+     --bg-base: the page's own colour, i.e. the tile fades into the strip it
+     lies in rather than into a grey nobody chose. Measured over the loudest
+     of the three tiles the label reads at 15.8:1 — the figures are in
+     .superpowers/sdd/signalrgb-look-report.md. */
+  --tile-scrim: linear-gradient(to top,
+      rgba(6, 11, 17, 0.90) 0,
+      rgba(6, 11, 17, 0.84) 26px,
+      rgba(6, 11, 17, 0.00) 46px);
+  /* The dark edge under the name, so the letterforms keep their shape where
+     the scrim is thinnest. Not load-bearing for the contrast figure above —
+     that is the scrim's job — but it is what stops bright type on a bright
+     ramp from looking like a sticker. */
+  --tile-ink-edge:  0 1px 2px rgba(6, 11, 17, 0.85);
+
   /* A line that merely separates: the rule under the left column's caption,
      the edge between the stage and the settings column. Measured at the
      sidebar's right edge (200,600): #212d3a — the same value as a card fill,

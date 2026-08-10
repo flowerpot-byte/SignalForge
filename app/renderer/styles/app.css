@@ -369,46 +369,109 @@ html, body {
   scrollbar-width: thin;
 }
 
+/* A tile is a picture with its name across it, exactly as the reference's
+   effect strip is — not a glyph on a card with a caption underneath. The
+   picture is the real thing: a 320 x 200 canvas the engine draws frame zero of
+   the starting document onto (see components/gallery.js). So there is no card
+   left to draw: no border, no fill, no padding. The tile IS the picture, and
+   the only thing over it is its name.
+
+   16:10, the shape of everything this app makes, so a tile is a true miniature
+   of the stage rather than a differently proportioned crop of it. */
 .tile {
   position: relative;
-  flex: 0 0 170px;
-  height: 84px;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  gap: var(--space-2);
-  padding: var(--space-3);
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius);
-  background: var(--surface-card);
+  flex: 0 0 168px;
+  height: 105px;
+  display: block;
+  padding: 0;
+  border: 0;
+  /* The strip's own radius, one step up from a card's: the reference's tiles
+     are noticeably rounder than its settings cards. 168 x 105 is 16:10 — the
+     shape of everything this app makes, so the tile is a true miniature of
+     the stage and not a differently proportioned crop of it. */
+  border-radius: var(--radius-lg);
+  /* The canvas has square corners of its own; this is what rounds them. Safe
+     here, unlike on .viewport, because the focus ring below is an outline and
+     an outline is never clipped by its own element's overflow. */
+  overflow: hidden;
+  background: var(--surface-sunk);
   color: var(--text-strong);
   font: inherit;
   text-align: left;
   cursor: pointer;
-  transition: background 120ms ease-out, border-color 120ms ease-out;
 }
-.tile:hover:not(:disabled) { background: var(--surface-raise); border-color: var(--track-empty); }
+.tile-art {
+  position: absolute;
+  inset: 0;
+  transition: transform 140ms ease-out;
+}
+/* The gallery gesture: the picture leans in under the pointer. Nothing else
+   moves — the name stays exactly where it was, because a label that drifts
+   under the cursor is harder to read, not friendlier. */
+.tile:hover:not(:disabled) .tile-art { transform: scale(1.05); }
+.tile-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* The preview is 320 x 200 shown at 168 x 105, i.e. downscaled by about
+     half: smoothing, so the ramp reads as a ramp rather than as stair steps. */
+  image-rendering: auto;
+}
+/* The picture tile, which has no output to show yet: the empty stage in
+   miniature, in the frame's own dashed edge and with the frame's own sign. */
+.tile-blank {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding-bottom: 26px;
+  border: 1px dashed var(--track-empty);
+  border-radius: var(--radius-lg);
+  background: var(--surface-sunk);
+  color: var(--text-dim);
+}
+.tile-blank svg { width: 22px; height: 22px; }
+/* The scrim that keeps the name legible over a full-strength ramp. Absent on
+   the picture tile: there is nothing bright under its name, and darkening a
+   near-black tile would only blur the dashed edge that tile is about. */
+.tile::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--tile-scrim);
+  pointer-events: none;
+}
+.tile[data-tile="picture"]::after { background: none; }
 .tile-label {
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 600;
+  position: absolute;
+  /* Above the scrim. Both are positioned and neither is in a stacking context
+     of its own, so without this the ::after — which comes after every child in
+     paint order — is drawn OVER the name and swallows it. Measured, not
+     guessed: the first run of test/harness/tiles-shots.js read 1.09:1 off the
+     label band, because there was no label left in the picture to read. */
+  z-index: 1;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 var(--space-2) 11px;
+  /* Centred, and sitting at about three quarters of the tile's height, which
+     is where the reference puts the names on its own tiles (NEBULA, CUBES,
+     RAINBOW PULSE are all centred; only its one promotional tile is not). */
+  text-align: center;
+  /* Bigger than any other label in the window, and the only text in it set at
+     700. Measured off the reference: its tile names have a cap height of about
+     11px on a 166px-wide tile, i.e. roughly a 15px bold face — the names are
+     the loudest type on that screen after the effect title, and that is a
+     large part of why the strip reads as a shelf of things rather than as a
+     row of buttons. */
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: var(--tile-ink-edge);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.tile-art {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius);
-  background: var(--surface-sunk);
-  color: var(--text-muted);
-}
-.tile-art-picture { background: var(--surface-quiet); color: var(--text-strong); }
-.tile-art-solid { background: var(--accent); color: var(--bg-base); }
-.tile-art-linear { background: linear-gradient(115deg, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
-.tile-art-radial { background: radial-gradient(circle at 32% 30%, var(--accent), var(--surface-quiet)); color: var(--text-strong); }
 
 
 /* ---------------------------------------------------------------------------

@@ -575,6 +575,25 @@ async function boot() {
   });
 
   /**
+   * The document a tile produces, as data — the ONE definition of it.
+   *
+   * Handed to the starting gallery so each tile can draw what it makes, and
+   * used by startEffect below to actually make it. That is the whole guard
+   * against a tile that lies: there is no second description of a starting
+   * document anywhere for the preview to drift away from, so a change to
+   * STARTERS above, or to any default normalizeDocument fills in, moves the
+   * picture on the tile in the same instant it moves the effect.
+   *
+   * Hands back null for a kind nothing starts, which is how the picture tile
+   * is told apart from the other three without either side naming it.
+   */
+  function starterDocument(kind) {
+    const starter = STARTERS[kind];
+    if (!starter) return null;
+    return { layers: [{ id: COLOUR_LAYER, ...starter, motions: [] }] };
+  }
+
+  /**
    * Begin an effect that has no picture in it.
    *
    * The counterpart of importFile above, and it follows the same order for the
@@ -591,7 +610,7 @@ async function boot() {
    * direction that cannot lose work.
    */
   async function startEffect(kind) {
-    const starter = STARTERS[kind];
+    const starter = starterDocument(kind);
     if (!starter) {
       console.error('gallery: no such effect kind', kind);
       return;
@@ -608,7 +627,7 @@ async function boot() {
         // lists, and the export refuses an empty one rather than inventing
         // "Untitled" (see src/main/export-effect.js).
         name: i18n.t(`gallery.${kind}`),
-        layers: [{ id: COLOUR_LAYER, ...starter, motions: [] }]
+        ...starter
       });
       // Nothing to crop: this is what makes the canvas stop being a tab stop
       // and the drag inert (see draggableLayer above).
@@ -641,6 +660,8 @@ async function boot() {
   const gallery = mountGallery(regions.preview, {
     t: (k) => i18n.t(k),
     onStart: startEffect,
+    // What each tile draws on itself: the very document pressing it produces.
+    starterDocument,
     // A dialog can only offer what the importer accepts, but `accept` is a
     // hint the operating system is free to ignore ("all files" is one click
     // away in every file dialog there is), so the same judgement the drop

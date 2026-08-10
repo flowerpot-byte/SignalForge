@@ -20,6 +20,25 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  * as decoration. Nothing here decides what a tile MEANS: the picture tile
  * hands over a `File` and the other three hand over their own key, and
  * app/renderer/main.js turns that into a document.
+ *
+ * WHAT A TILE SHOWS, AND WHY IT CANNOT LIE
+ *
+ * Each of the three tiles that start something draws its own output on itself:
+ * a real 320 x 200 canvas, the engine's own renderer, frame zero of the very
+ * document pressing the tile produces. The document is not described here — it
+ * is asked for (`starterDocument(kind)`, defined once in main.js and used by
+ * startEffect there), so a tile and the effect it starts are the SAME data
+ * passing through the SAME normalizeDocument and the SAME layer renderer.
+ * There is no second description of a starting colour anywhere for the picture
+ * to drift away from, which is the only reliable way to keep it honest: a hand-
+ * drawn swatch, or a CSS gradient built from the same stops, would be a second
+ * implementation, and this project has been bitten by exactly that before.
+ * Change DEFAULT_SOLID_COLOR in src/engine/document.js and the tile changes
+ * with it, without a line here being touched.
+ *
+ * Frame zero, once, at mount: these documents carry no motions, so they are
+ * still pictures — there is nothing for a loop to animate, and three extra
+ * render loops under the stage would cost frames the stage needs.
  */
 
 /** What the file dialog offers, derived from the one list that decides it. */
@@ -36,11 +55,35 @@ const ACCEPT = SUPPORTED_IMAGE_EXTENSIONS.join(',');
  * not spelled out here, so this file never has to know the document's shape.
  */
 export const TILES = Object.freeze([
-  Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'imagePlus', starts: null }),
-  Object.freeze({ key: 'solid', labelKey: 'gallery.solid', glyph: 'solid', starts: 'solid' }),
-  Object.freeze({ key: 'linear', labelKey: 'gallery.linear', glyph: 'gradient', starts: 'linear' }),
-  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: 'radial', starts: 'radial' })
+  Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'drop', starts: null }),
+  Object.freeze({ key: 'solid', labelKey: 'gallery.solid', glyph: null, starts: 'solid' }),
+  Object.freeze({ key: 'linear', labelKey: 'gallery.linear', glyph: null, starts: 'linear' }),
+  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: null, starts: 'radial' })
 ]);
+
+/**
+ * Draw one tile's own output onto one tile's own canvas.
+ *
+ * The backing store is the engine's 320 x 200 — the same numbers the stage
+ * uses and for the same reason: this IS the effect, at the only size the
+ * effect exists at, and how large it happens to be shown is the stylesheet's
+ * business. Scaling it down in CSS is what a preview is.
+ *
+ * A renderer of its own per tile, rather than one shared between them: the
+ * renderer keeps scratch state per layer id, and all three starting documents
+ * name their layer the same thing, so a shared one would hand a gradient the
+ * buffers it built for the solid.
+ */
+function paintTile(canvas, SF, document_) {
+  canvas.width = SF.CANVAS_WIDTH;
+  canvas.height = SF.CANVAS_HEIGHT;
+  const ctx = canvas.getContext('2d');
+  const renderer = SF.createRenderer();
+  // No assets: a solid and a gradient own no picture (see normalizeLayer in
+  // src/engine/document.js), so there is nothing to load and nothing to await.
+  renderer.render(ctx, SF.normalizeDocument(document_).doc, new Map(), 0);
+  renderer.dispose();
+}
 
 /**
  * Put the starting gallery on screen.
@@ -53,8 +96,13 @@ export const TILES = Object.freeze([
  * and it keeps the security shape of this app exactly as it was.
  *
  * `onStart(kind)` receives 'solid', 'linear' or 'radial'.
+ *
+ * `starterDocument(kind)` hands back the document that kind produces, or null
+ * — see the note at the top of this file. Optional only so that a caller who
+ * has no engine to hand (the stand-in DOM of a unit test) still gets a working
+ * strip; the real window always passes it.
  */
-export function mountGallery(container, { t, onPicture, onStart }) {
+export function mountGallery(container, { t, onPicture, onStart, starterDocument = () => null }) {
   const strip = document.createElement('section');
   strip.className = 'gallery';
   strip.id = 'gallery';
@@ -94,7 +142,35 @@ export function mountGallery(container, { t, onPicture, onStart }) {
 
     const art = document.createElement('span');
     art.className = `tile-art tile-art-${tile.key}`;
-    art.append(icon(tile.glyph));
+
+    const starter = tile.starts ? starterDocument(tile.starts) : null;
+    if (starter) {
+      const canvas = document.createElement('canvas');
+      canvas.className = 'tile-canvas';
+      canvas.id = `gallery-${tile.key}-preview`;
+      // Decoration beside its own name: the label under it already says what
+      // this is, and "a picture of a pink rectangle" is not something a screen
+      // reader user needs read out.
+      canvas.setAttribute('aria-hidden', 'true');
+      paintTile(canvas, window.SignalForgeEngine, starter);
+      art.append(canvas);
+    } else {
+      // The picture tile, which has nothing to preview until a file exists.
+      // It shows the empty stage instead — the same sign, the same sunk
+      // surface, the same dashed edge the frame above wears while it is
+      // waiting. Deliberately NOT a stand-in photograph and not a pale
+      // version of the other three: it is a picture of the place the file
+      // goes, in the window's own vocabulary for exactly that.
+      const blank = document.createElement('span');
+      blank.className = 'tile-blank';
+      // The three starting tiles carry no glyph at all (their picture is the
+      // effect), so this only draws one where there genuinely is one. Without
+      // the guard, a caller that hands over no documents to draw — a stand-in
+      // DOM in a test — would fall in here for all four tiles and ask the icon
+      // set for a glyph called null.
+      if (tile.glyph) blank.append(icon(tile.glyph));
+      art.append(blank);
+    }
 
     const label = document.createElement('span');
     label.className = 'tile-label';
