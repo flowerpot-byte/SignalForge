@@ -8,16 +8,22 @@ durchgespielt, bevor Max gefragt wird** — am echten laufenden Fenster, mit ech
 Tastatureingaben, und zu jedem Punkt gibt es ein Bild, das angeschaut wurde. Max' eigener
 Prüfpunkt (die vier Fragen) steht unten und ist **noch unbeantwortet**.
 
+**Nachtrag vom 10.08.2026:** Die einzige Lücke, die dieser Durchlauf offengelassen hatte — der
+Bildausschnitt ließ sich nicht mit der Tastatur verschieben — **ist geschlossen.** Punkt 11
+unten ist entsprechend erweitert, und der Durchlauf wurde danach in beiden Durchgängen noch
+einmal komplett gefahren.
+
 ---
 
 ## Testsatz
 
 ```
-npm test  ->  254 Tests, 254 bestanden, 0 Fehler
+npm test  ->  295 Tests, 295 bestanden, 0 Fehler   (Stand 10.08.2026, dreimal hintereinander)
 ```
 
-Vorher waren es 247. Die sieben neuen gehören zu dem, was für diese Abnahme gebaut wurde
-(Sprachwahl beim ersten Start, Erststart-Fläche, Sprachumschalter im Fenster).
+Zur Abnahme selbst waren es 254 (vorher 247; die sieben neuen gehörten zu Sprachwahl beim
+ersten Start, Erststart-Fläche und Sprachumschalter). Bis zum Nachtrag oben sind daraus 280
+geworden, und die fünfzehn Tests für die Tastaturbedienung des Ausschnitts machen 295 daraus.
 
 ---
 
@@ -67,7 +73,8 @@ auch im Quelltext an der Stelle, an der es passiert:
 - **Echte Eingaben:** das Hineinziehen des Bildes (ein echtes Ziehen mit einem echten
   Dateipfad), das Ziehen des Ausschnitts (Drücken, viele Bewegungen, Loslassen), jeder
   Knopfdruck an seinen eigenen Koordinaten, die Mausbewegung, die die Greifhand erscheinen
-  lässt, sowie Tabulator und Pfeiltasten.
+  lässt, sowie Tabulator und Pfeiltasten — und seit dem Nachtrag auch das Tabben auf die
+  Vorschau-Leinwand und das Verschieben des Ausschnitts mit Pfeil- und Umschalt-Pfeiltasten.
 - **Am Element gesetzt, mit demselben Ereignis, das eine Handbewegung auslöst:** die
   Auswahlfelder (deren aufklappende Liste zeichnet das Betriebssystem, sie ist von der Seite
   aus nicht erreichbar) und die Schieberegler (dort geht es um genaue Werte — 0, 30, 100 —,
@@ -93,8 +100,9 @@ reinen Verlauf gibt es nichts Wiedererkennbares, das man wandern sehen könnte.
 
 **Bilder und Messwerte:** `work/shots-task12/` (Selbsttest) und
 `work/shots-task12/walkthrough/` (die elf Punkte, dazu `report-1.json` und `report-2.json` mit
-jeder einzelnen Zahl). Die Bilder liegen bewusst nicht im Git — sie sind mit den beiden
-Werkzeugen oben jederzeit neu erzeugbar.
+jeder einzelnen Zahl). Der Nachtrag vom 10.08.2026 wurde noch einmal komplett gefahren, beide
+Durchgänge, nach `work/shots-crop-keyboard/`. Die Bilder liegen bewusst nicht im Git — sie sind
+mit den beiden Werkzeugen oben jederzeit neu erzeugbar.
 
 ---
 
@@ -112,7 +120,7 @@ Werkzeugen oben jederzeit neu erzeugbar.
 | 8 | Projekt speichern, App neu starten, öffnen | **bestanden** |
 | 9 | Exportieren und das Ergebnis nachsehen | **bestanden** |
 | 10 | Eine `.mp4` hineinziehen | **bestanden** |
-| 11 | Nur mit der Tastatur bedienen | **bestanden** |
+| 11 | Nur mit der Tastatur bedienen (samt Ausschnitt verschieben) | **bestanden** |
 
 ### 1. Frisch starten, Sprache umschalten
 
@@ -257,6 +265,40 @@ Und ein Regler wurde wirklich bedient, nicht nur angesprungen: fünfmal Pfeil-li
 Helligkeit macht aus 100 eine 95. Bilder: `walkthrough/p11-a-focus-ring.png`,
 `p11-b-keyboard-changed-a-slider.png`.
 
+**Der Ausschnitt, nur mit der Tastatur** (nachgetragen am 10.08.2026). Die Vorschau-Leinwand ist
+jetzt selbst eine Station in der Tabulator-Reihenfolge — **fünfmal Tabulator vom Namensfeld aus,
+und die Markierung steht auf ihr**, mit sichtbarem Fokusring
+(`walkthrough/p11-c-canvas-focused.png`). Sie trägt dabei einen Namen für Vorleseprogramme
+(„Bildausschnitt - mit den Pfeiltasten verschieben, mit Umschalt in groesseren Schritten") und
+sagt über ihre Rolle, dass sie die Tasten selbst verarbeitet.
+
+Bewegt wird mit echten Tastendrücken über das DevTools-Protokoll, gemessen wird am selben
+weißen Balken wie beim Ziehen mit der Maus in Punkt 3 — deshalb sind die beiden Zahlenreihen
+direkt vergleichbar:
+
+| | Balken vorher | Balken danach | Richtung |
+|---|---|---|---|
+| Maus 200 Punkte nach rechts (Punkt 3) | 160 | 262 | nach rechts |
+| Fünfmal Pfeil-rechts | 160 | 180 | nach rechts |
+| Zehnmal Pfeil-links | 180 | 140 | nach links |
+
+**Die Pfeiltasten laufen also genauso herum wie die Maus.** Ein Druck sind vier Bildpunkte der
+Leinwand (5 × 4 = 20 gemessene Spalten, 10 × 4 = 40 zurück — auf die Spalte genau); mit
+Umschalt sind es vierzig, damit man nicht 120-mal drücken muss, um quer über ein breites Bild
+zu kommen, sondern zwölfmal. Am Ende hört es auf: zweimal weit über den Rand hinaus gedrückt
+ergibt zweimal exakt dasselbe Bild (`p11-d-crop-at-the-edge.png`). Die Spalte verschiebt sich
+dabei nicht — Rollstand vorher wie nachher 0. Bilder:
+`p11-e-crop-moved-right-by-arrows.png`, `p11-f-crop-moved-left-by-arrows.png`.
+
+**Die Station gibt es nur, wenn es etwas zu verschieben gibt.** Auf „Einpassen" umgestellt —
+da wird nichts weggeschnitten — verschwindet die Leinwand wieder aus der Tabulator-Reihenfolge
+und ist nur noch ein Bild; zurück auf „Füllen" ist sie wieder da. Eine Station, an der keine
+Taste etwas tut, wäre schlimmer als keine.
+
+Und die Pfeiltasten sind anderswo unangetastet geblieben: der Regler oben reagiert weiter, und
+im Namensfeld wandert die Schreibmarke wie immer (von Stelle 18 auf 15 nach dreimal
+Pfeil-links).
+
 ---
 
 ## Was beim Durchspielen aufgefallen ist und behoben wurde
@@ -291,10 +333,11 @@ Helligkeit macht aus 100 eine 95. Bilder: `walkthrough/p11-a-focus-ring.png`,
 
 ## Was offen bleibt
 
-- **Der Ausschnitt lässt sich nicht mit der Tastatur verschieben.** Die Vorschau-Leinwand ist
-  nicht in der Tabulator-Reihenfolge; Ziehen geht nur mit der Maus. Alles andere in der App ist
-  vollständig mit der Tastatur bedienbar. Das ist die einzige Lücke, die Punkt 11 offengelassen
-  hat.
+- ~~**Der Ausschnitt lässt sich nicht mit der Tastatur verschieben.**~~ **Erledigt am
+  10.08.2026.** Die Vorschau-Leinwand ist eine Station in der Tabulator-Reihenfolge, sobald es
+  etwas zu verschieben gibt, und die Pfeiltasten verschieben den Ausschnitt in derselben
+  Richtung wie die Maus. Belege stehen oben bei Punkt 11. **Damit ist die App vollständig mit
+  der Tastatur bedienbar** — das war die einzige Lücke.
 - **Der Fokusring und der Rahmen des Hauptknopfes haben dieselbe Farbe.** „In SignalRGB
   speichern" trägt von sich aus einen Rahmen in der Akzentfarbe; der Fokusring ist derselbe Ton,
   nur kräftiger und mit Abstand. Unterscheidbar, aber im ersten Moment ähnlich.
