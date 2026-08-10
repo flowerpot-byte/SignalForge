@@ -5,7 +5,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runJobs } from '../harness/render.js';
 import { pixelAt, isColour, meanBrightness, maxDifference } from '../harness/pixels.js';
-import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../../src/engine/document.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, DEFAULT_GRADIENT_STOPS, colorAtPosition } from '../../src/engine/document.js';
+import { nextStopPosition } from '../../app/renderer/components/field.js';
 
 /**
  * Every job in this file goes through one Electron launch, because starting
@@ -25,6 +26,17 @@ const gradient = (extra = {}) => ({
     ...extra
   }]
 });
+
+// The exact gesture createStops (app/renderer/components/field.js) performs
+// when its "add" button is pressed on the untouched default gradient: find
+// where the new stop lands, then ask the document what colour it already
+// shows there. Computed here, once, with the real functions the button
+// calls -- not re-typed out by hand -- so this file and the component can
+// never quietly drift apart.
+const DEFAULT_STOPS = DEFAULT_GRADIENT_STOPS.map((stop) => ({ ...stop }));
+const ADDED_STOP_AT = nextStopPosition(DEFAULT_STOPS.map((stop) => stop.at));
+const ADDED_STOP_COLOR = colorAtPosition(DEFAULT_STOPS, ADDED_STOP_AT);
+const DEFAULT_STOPS_PLUS_ONE = [...DEFAULT_STOPS, { at: ADDED_STOP_AT, color: ADDED_STOP_COLOR }];
 
 let frames;
 
@@ -58,7 +70,13 @@ test('render every colour-layer frame in one launch', async () => {
     { name: 'warp-none', kind: 'engine', doc: gradient({ stops: [{ at: 45, color: '#ff0000' }, { at: 55, color: '#0000ff' }] }), timeSec: 0 },
     { name: 'breathe-0', kind: 'engine', doc: gradient({ motions: [{ kind: 'breathe', speed: 100, amount: 100 }] }), timeSec: 0 },
     { name: 'breathe-later', kind: 'engine', doc: gradient({ motions: [{ kind: 'breathe', speed: 100, amount: 100 }] }), timeSec: 5.2 },
-    { name: 'radial-drift-later', kind: 'engine', doc: gradient({ shape: 'radial', motions: [{ kind: 'drift', speed: 60, amount: 100 }] }), timeSec: 3.7 }
+    { name: 'radial-drift-later', kind: 'engine', doc: gradient({ shape: 'radial', motions: [{ kind: 'drift', speed: 60, amount: 100 }] }), timeSec: 3.7 },
+
+    // See "adding a stop..." tests below: the default two-stop gradient,
+    // rendered once as-is and once with a third stop added the way the
+    // settings column's add button actually adds one.
+    { name: 'stop-add-before', kind: 'engine', doc: { layers: [{ id: 'a1', type: 'gradient', stops: DEFAULT_STOPS }] }, timeSec: 0 },
+    { name: 'stop-add-after', kind: 'engine', doc: { layers: [{ id: 'a1', type: 'gradient', stops: DEFAULT_STOPS_PLUS_ONE }] }, timeSec: 0 }
   ];
 
   const rendered = await runJobs(jobs);
@@ -165,4 +183,42 @@ test('warp keeps the gradient on screen instead of dragging blackness in', () =>
   // sampled pixel can be the black the canvas was cleared with.
   const bright = meanBrightness(frames.get('warp-later').pixels);
   assert.ok(bright > 60, `a warped red-to-blue ramp should stay lit, was ${bright}`);
+});
+
+// --------------------------------------------------- adding a stop, non-destructively
+
+// The report's own open finding: adding a third stop to the default two-stop
+// gradient used to hand it the second default colour outright (#00b3ff),
+// flattening the right half of the ramp visibly. Pinned here so a colour
+// pulled from anywhere other than colorAtPosition(document.js) -- the second
+// default, a hardcoded midpoint literal, anything -- fails this exact number.
+test('a stop added to the untouched default gradient lands on a real interpolated colour, not a default', () => {
+  assert.equal(ADDED_STOP_AT, 50, 'the widest (only) gap in a two-stop gradient is the whole ramp');
+  // #ff0066 (255,0,102) and #00b3ff (0,179,255) at their exact midpoint,
+  // per-channel: (255+0)/2=127.5->128, (0+179)/2=89.5->90, (102+255)/2=178.5->179.
+  assert.equal(ADDED_STOP_COLOR, '#805ab3');
+  assert.notEqual(
+    ADDED_STOP_COLOR, DEFAULT_GRADIENT_STOPS[1].color,
+    'the added stop must not be the second default colour -- that is the bug being fixed'
+  );
+});
+
+// The falsifiable claim itself, and the real one: not "the stop's hex value
+// looks plausible" but "the picture on screen has not moved". DITHER (above)
+// is the tolerance this whole file already established for exactly this
+// situation -- Chromium redithers a ramp slightly differently depending on
+// how many stops it was given, even where the underlying colours are
+// mathematically identical, so a strict 0 would fail on dithering noise
+// rather than on anything this change is responsible for. Verified by
+// temporarily reverting field.js's add handler to `{ at }` alone (the old,
+// colourless behaviour normalizeStops then fills with the second default) --
+// this test then goes red with maxDifference well past 100, because the
+// right half of the ramp goes flat at #00b3ff exactly as the report
+// describes, which DITHER could never absorb.
+test('adding a stop at the colour the gradient already shows there changes no more than dithering noise', () => {
+  const difference = maxDifference(frames.get('stop-add-before').pixels, frames.get('stop-add-after').pixels);
+  assert.ok(
+    difference <= DITHER,
+    `a non-destructive add must leave the ramp looking as it did before the stop was added, was ${difference}`
+  );
 });

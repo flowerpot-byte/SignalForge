@@ -2,6 +2,14 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { icon } from './icons.js';
+// Frozen metadata and pure document arithmetic only, the same import
+// inspector.js already makes and for the same reason (see its own comment):
+// this is not the render path, which still reaches the window solely through
+// window.SignalForgeEngine. colorAtPosition is arithmetic on the document's
+// own stop colours -- it never invents one of its own -- so reading it from
+// here keeps every colour this file can ever write traceable back to the
+// document (test/app/color-literals.test.js).
+import { colorAtPosition } from '../../../src/engine/document.js';
 
 /**
  * A control's id, derived from the field's path so it is the same before and
@@ -336,11 +344,14 @@ export function createStops(field, { t, value, onChange }) {
   const add = iconButton(`${base}-stop-add`, 'plus', t('inspector.addStop'));
   add.disabled = stops.length >= field.max;
   add.addEventListener('click', () => {
-    // Only the position is chosen here; the colour a new stop starts out in is
-    // normalizeDocument's business, not a second copy of that value kept in
-    // the window (which is also what keeps every colour in this app out of
-    // app/renderer — see test/app/color-literals.test.js).
-    onChange(listPath, [...stops, { at: nextStopPosition(stops.map((stop) => stop.at)) }]);
+    // The new stop starts out as the colour the gradient already shows at its
+    // chosen position, not a fresh default -- so adding a stop changes what
+    // can be edited, not how the ramp currently looks. That colour is read
+    // off the existing stops with colorAtPosition (src/engine/document.js),
+    // never written here as a literal (see the import above and
+    // test/app/color-literals.test.js).
+    const at = nextStopPosition(stops.map((stop) => stop.at));
+    onChange(listPath, [...stops, { at, color: colorAtPosition(stops, at) }]);
   });
 
   return { rows, add };

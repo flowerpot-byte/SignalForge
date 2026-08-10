@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  normalizeDocument, normalizeColor, motionKindsFor,
+  normalizeDocument, normalizeColor, motionKindsFor, colorAtPosition,
   DEFAULT_SOLID_COLOR, DEFAULT_GRADIENT_STOPS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, MOTION_KINDS, SOLID_MOTION_KINDS
 } from '../../src/engine/document.js';
@@ -153,6 +153,71 @@ test('stops keep the order they were given, so a control never changes stop', ()
     stops: [{ at: 90, color: '#111111' }, { at: 10, color: '#222222' }]
   });
   assert.deepEqual(layer.stops.map((stop) => stop.at), [90, 10]);
+});
+
+// ------------------------------------------- colorAtPosition (the add gesture)
+
+test('colorAtPosition returns the interpolated colour between the two stops the position falls between', () => {
+  const stops = [{ at: 0, color: '#000000' }, { at: 100, color: '#ffffff' }];
+  assert.equal(colorAtPosition(stops, 50), '#808080');
+  assert.equal(colorAtPosition(stops, 0), '#000000');
+  assert.equal(colorAtPosition(stops, 100), '#ffffff');
+});
+
+test('colorAtPosition matches the real default gradient at its midpoint, per-channel and unrounded-to-taste', () => {
+  // #ff0066 = (255, 0, 102), #00b3ff = (0, 179, 255). Straight per-channel
+  // averages, the same blend CanvasGradient.addColorStop performs between
+  // two fully-opaque stops: (255+0)/2=127.5->128=0x80, (0+179)/2=89.5->90=0x5a,
+  // (102+255)/2=178.5->179=0xb3.
+  assert.equal(colorAtPosition(DEFAULT_GRADIENT_STOPS, 50), '#805ab3');
+});
+
+test('colorAtPosition finds the pair a position falls between out of more than two stops', () => {
+  const stops = [{ at: 0, color: '#000000' }, { at: 50, color: '#ff0000' }, { at: 100, color: '#0000ff' }];
+  assert.equal(colorAtPosition(stops, 25), '#800000');
+  assert.equal(colorAtPosition(stops, 75), '#800080');
+  // Unsorted input is handled the same way -- document order is not ramp order.
+  const reversed = [...stops].reverse();
+  assert.equal(colorAtPosition(reversed, 25), '#800000');
+});
+
+// Edge case: a position at or beyond either end. Not reachable through
+// nextStopPosition (field.js), which only ever returns the midpoint of two
+// real neighbouring stops, but colorAtPosition must still answer sensibly if
+// ever asked -- the same clamping addColorStop applies to an offset outside
+// 0..1.
+test('colorAtPosition clamps a position before the first or after the last stop to that stop\'s own colour', () => {
+  const stops = [{ at: 20, color: '#111111' }, { at: 80, color: '#eeeeee' }];
+  assert.equal(colorAtPosition(stops, 0), '#111111');
+  assert.equal(colorAtPosition(stops, 20), '#111111');
+  assert.equal(colorAtPosition(stops, 80), '#eeeeee');
+  assert.equal(colorAtPosition(stops, 100), '#eeeeee');
+});
+
+// Edge case: two stops at the same position make a hard step with nothing to
+// interpolate. The exact position of the step has no single right answer
+// (it depends which side you approach from); colorAtPosition must still
+// return something real and deterministic rather than NaN or a crash.
+test('colorAtPosition treats two stops at the same position as a hard step, not a division by zero', () => {
+  const stops = [{ at: 50, color: '#111111' }, { at: 50, color: '#eeeeee' }];
+  assert.equal(colorAtPosition(stops, 50), '#111111');
+  assert.equal(colorAtPosition(stops, 0), '#111111');
+  assert.equal(colorAtPosition(stops, 100), '#eeeeee');
+});
+
+// Edge case: fewer than two usable stops -- nothing to interpolate between.
+test('colorAtPosition with one stop, or none, answers without interpolating', () => {
+  assert.equal(colorAtPosition([{ at: 40, color: '#123456' }], 0), '#123456');
+  assert.equal(colorAtPosition([{ at: 40, color: '#123456' }], 100), '#123456');
+  assert.equal(colorAtPosition([], 50), DEFAULT_SOLID_COLOR);
+});
+
+// An unusable colour on one side is normalizeColor's job to catch, and
+// colorAtPosition is built on the same guarantee normalizeStops relies on:
+// every stop it is handed has already been normalized. Confirms it does not
+// silently propagate garbage if it were ever handed a raw, unnormalized stop.
+test('colorAtPosition normalizes a stop colour it is handed before interpolating', () => {
+  assert.equal(colorAtPosition([{ at: 0, color: 'not a colour' }, { at: 100, color: '#ffffff' }], 0), DEFAULT_SOLID_COLOR);
 });
 
 test('a gradient carries motions exactly as an image layer does', () => {

@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountInspector } from '../../app/renderer/components/inspector.js';
 import { fillPercent } from '../../app/renderer/components/field.js';
-import { normalizeDocument } from '../../src/engine/document.js';
+import { normalizeDocument, colorAtPosition } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 
 // mountInspector and field.js read `document` and `window.SignalForgeEngine`
@@ -313,6 +313,41 @@ test('the fill custom property tracks the value, driven by an arrow-key-style in
     slider.style.properties['--sf-fill'],
     `${fillPercent({ min: 5, max: 100 }, 62)}%`,
     '--sf-fill must move to match the value an arrow key just set'
+  );
+});
+
+// The real gesture, through the real button, in the real settings column --
+// not just the standalone function. Presses the gradient's own "add stop"
+// button and checks what onChange actually receives.
+test('pressing the stop add button gives the new stop the colour the gradient already showed there, not a default', () => {
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  const doc = normalizeDocument({ layers: [{ id: 'a1', type: 'gradient' }] }).doc;
+  const changes = [];
+
+  mountInspector(container, {
+    t,
+    getDocument: () => doc,
+    onChange: (path, value) => { changes.push([path, value]); },
+    onError: () => {}
+  });
+
+  const add = byId(container, 'sf-layers-0-stop-add');
+  assert.ok(add, 'the stop add button must be on screen for a gradient layer');
+  add.fire('click');
+
+  assert.equal(changes.length, 1);
+  const [path, stops] = changes[0];
+  assert.equal(path, 'layers.0.stops');
+  assert.equal(stops.length, 3, 'the default two stops plus the new one');
+  assert.deepEqual(stops[0], doc.layers[0].stops[0], 'the existing stops must be untouched');
+  assert.deepEqual(stops[1], doc.layers[0].stops[1], 'the existing stops must be untouched');
+  assert.equal(stops[2].at, 50, 'the widest (only) gap in the default two-stop gradient is the whole ramp');
+  assert.equal(
+    stops[2].color,
+    colorAtPosition(doc.layers[0].stops, 50),
+    'the new stop\'s colour must be what the gradient already showed at position 50, not a fresh default'
   );
 });
 

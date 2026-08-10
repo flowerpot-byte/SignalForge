@@ -293,6 +293,91 @@ function normalizeStops(raw, layerId, problems) {
   return stops;
 }
 
+/**
+ * The colour a gradient already shows at a given position along it.
+ *
+ * Built for exactly one gesture: adding a new stop should not change how the
+ * gradient looks, so the new stop needs to start out as the colour that was
+ * already there rather than a fresh default (see createStops in
+ * app/renderer/components/field.js, the only caller). It lives here and not
+ * in the renderer for the same reason normalizeColor and normalizeStops do:
+ * blending two stop colours is arithmetic on the document's own gradient
+ * maths, and the renderer is not allowed to know a colour of its own — every
+ * colour a stop can start out as has to come from the document
+ * (test/app/color-literals.test.js), which this function reads instead of
+ * restating.
+ *
+ * It is deliberately NOT folded into normalizeStops. normalizeStops answers a
+ * different question -- "what should a stop with no usable colour become",
+ * for a document that arrived that way (an old file, a hand-edited one) --
+ * and its answer, the neighbouring DEFAULT_GRADIENT_STOPS colour, must stay
+ * exactly what it always was; see the "document from before" compatibility
+ * test in colour-layers-document.test.js. This function answers a narrower
+ * question for a caller that already knows exactly which two real,
+ * already-normalized stops the new position falls between.
+ *
+ * MATCHES CANVASGRADIENT, ON PURPOSE. `addColorStop` blends between two
+ * fully-opaque stops with a plain per-channel interpolation of the sRGB
+ * bytes -- no gamma correction, no other colour space -- because that is
+ * what every stop here already is: an opaque "#rrggbb". Reaching for a
+ * "nicer" perceptual blend (e.g. interpolating in linear light or in
+ * Lab/OkLab) would produce a midpoint the canvas itself would never paint,
+ * which is the opposite of "unchanged": the new stop would sit on the ramp
+ * showing a colour neither neighbour drew before it was added. Matching is
+ * confirmed by rendering, not assumed -- see 'adding a stop changes no
+ * pixel' in test/engine/colour-layers-render.test.js, which renders the
+ * default two-stop gradient, adds a third stop with this function's colour,
+ * renders again, and requires the two frames to be identical.
+ *
+ * `at` at or beyond either end returns that end's own colour, the same
+ * clamping `addColorStop` applies to an offset outside 0..1 -- relevant only
+ * if a future caller ever asks for a position outside the existing stops;
+ * nextStopPosition (field.js) never does, since it only ever returns the
+ * midpoint of two real neighbouring stops. Two stops at the same position
+ * make a hard step with nothing to interpolate; asking for the colour
+ * exactly there returns the earlier one in sorted order -- an arbitrary but
+ * deterministic choice, not a wrong one, since the true answer depends on
+ * which side of the step you approach from.
+ */
+export function colorAtPosition(stops, at) {
+  const usable = (Array.isArray(stops) ? stops : [])
+    .filter((stop) => stop && Number.isFinite(Number(stop.at)))
+    .map((stop) => ({ at: Number(stop.at), color: normalizeColor(stop.color) }))
+    .sort((a, b) => a.at - b.at);
+
+  if (usable.length === 0) return DEFAULT_SOLID_COLOR;
+  if (usable.length === 1 || at <= usable[0].at) return usable[0].color;
+  const last = usable[usable.length - 1];
+  if (at >= last.at) return last.color;
+
+  let lower = usable[0];
+  let upper = last;
+  for (let index = 1; index < usable.length; index += 1) {
+    if (usable[index].at >= at) {
+      lower = usable[index - 1];
+      upper = usable[index];
+      break;
+    }
+  }
+
+  if (upper.at === lower.at) return lower.color;
+  const fraction = (at - lower.at) / (upper.at - lower.at);
+  const from = hexToRgb(lower.color);
+  const to = hexToRgb(upper.color);
+  return `#${hex2(from.r + (to.r - from.r) * fraction)}`
+    + `${hex2(from.g + (to.g - from.g) * fraction)}`
+    + `${hex2(from.b + (to.b - from.b) * fraction)}`;
+}
+
+/** Split an already-normalized "#rrggbb" back into its three byte values. */
+function hexToRgb(color) {
+  return {
+    r: parseInt(color.slice(1, 3), 16),
+    g: parseInt(color.slice(3, 5), 16),
+    b: parseInt(color.slice(5, 7), 16)
+  };
+}
+
 function normalizeLayer(raw, index, usedIds, problems) {
   const input = raw && typeof raw === 'object' ? raw : {};
   let id = str(input.id, '').trim() || `layer-${index}`;
