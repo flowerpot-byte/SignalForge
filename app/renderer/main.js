@@ -9,6 +9,7 @@ import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
 import { mountFooter } from './components/footer.js';
 import { mountFirstRun } from './components/firstrun.js';
+import { samplePalette } from './components/palette.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -56,10 +57,10 @@ async function boot() {
   // like all follow this attribute.
   document.documentElement.lang = language;
 
-  // These three seed colours are only the starting tint shown before any
-  // effect has been loaded — a later task will pass the effect's own
-  // colours into mountBackdrop instead. Read from tokens.css rather than
-  // hard-coded here so every colour in the project still lives in one place.
+  // The tint shown while there is no picture to take colours from. Read from
+  // tokens.css rather than hard-coded here so every colour that somebody
+  // CHOSE still lives in one place; the ones a picture supplies are computed
+  // (see components/palette.js) and could not live there.
   const style = getComputedStyle(document.documentElement);
   const seedColours = [
     style.getPropertyValue('--backdrop-seed-1').trim(),
@@ -68,6 +69,35 @@ async function boot() {
   ];
 
   mountBackdrop(seedColours);
+
+  /**
+   * Give the backdrop the colours of the picture now on screen.
+   *
+   * This is the reason the window is made of glass rather than merely
+   * decorated with it, and until now it was never wired up: mountBackdrop was
+   * called once, with the seeds, and never again.
+   *
+   * Deliberately cheap and deliberately rare. It samples a 48 x 30 copy of the
+   * picture once, at the moment it is imported or opened — never per frame,
+   * never off the preview canvas. A picture with no readable colour in it (an
+   * entirely transparent PNG) leaves the seeds in place rather than washing
+   * the window out to nothing.
+   */
+  function retintBackdrop(image) {
+    const colours = image ? samplePalette(image) : [];
+    mountBackdrop(colours.length > 0 ? colours : seedColours);
+  }
+
+  /**
+   * Whether there is a picture in the frame, said out loud to the stylesheet.
+   *
+   * Empty, the frame draws its edge dashed: it is the drop target, and an
+   * opaque rectangle the size of the window with nothing in it read as a hole
+   * rather than as a screen waiting for something.
+   */
+  function showPicture(has) {
+    regions.preview.classList.toggle('has-picture', has);
+  }
   const regions = mountShell(document.getElementById('app'), (k) => i18n.t(k));
 
   const preview = createPreview(regions.preview, (k) => i18n.t(k));
@@ -144,13 +174,18 @@ async function boot() {
    * preview, so a project whose picture is damaged leaves the one on screen
    * alone instead of replacing it with an empty canvas.
    */
-  function measureAsset(asset) {
+  function decodeAsset(asset) {
     return new Promise((resolve, reject) => {
       const image = new Image();
-      image.onload = () => resolve({ width: image.naturalWidth, height: image.naturalHeight });
+      image.onload = () => resolve(image);
       image.onerror = () => reject(new Error('a picture in this project could not be decoded'));
       image.src = `data:${asset.mime};base64,${asset.data}`;
     });
+  }
+
+  async function measureAsset(asset) {
+    const image = await decodeAsset(asset);
+    return { width: image.naturalWidth, height: image.naturalHeight, image };
   }
 
   async function measureEmbeddedAssets(doc) {
@@ -162,6 +197,21 @@ async function boot() {
       sizes.set(id, await measureAsset(asset));
     }
     return sizes;
+  }
+
+  /**
+   * The picture's colours, on a best-effort basis.
+   *
+   * Never fatal: the backdrop is decoration that means something, not part of
+   * the import. A picture that arrived, decoded and is on screen must not be
+   * rejected because a second decode for the sake of a tint went wrong.
+   */
+  async function retintFromAsset(asset) {
+    try {
+      retintBackdrop(await decodeAsset(asset));
+    } catch (err) {
+      console.error('could not take the backdrop from the picture:', err);
+    }
   }
 
   function draggableLayer() {
@@ -269,6 +319,11 @@ async function boot() {
           assets: { image: result.asset }
         });
         sourceSize = { width: result.asset.width, height: result.asset.height };
+        // The window takes the new picture's colours. Not awaited: the
+        // picture is already on screen and the tint is allowed to arrive a
+        // frame later.
+        retintFromAsset(result.asset);
+        showPicture(true);
         // There is something to move now, so the canvas becomes a tab stop.
         crop.refresh();
         // The column had nothing but the document-wide sliders until now.
@@ -325,7 +380,14 @@ async function boot() {
 
     await preview.setDocument(doc);
     const layer = doc.layers.find((entry) => entry.id === IMAGE_LAYER);
-    sourceSize = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
+    const measured = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
+    sourceSize = measured ? { width: measured.width, height: measured.height } : null;
+    // The pictures were decoded a few lines up to be measured, so the colours
+    // for the backdrop cost nothing more than reading one of them. A project
+    // with no picture in it puts the seed colours back rather than leaving
+    // the previous project's tint behind.
+    retintBackdrop(measured ? measured.image : null);
+    showPicture(Boolean(measured));
     // A project brings its own picture and its own fit mode, so whether the
     // canvas is a tab stop is decided fresh here too.
     crop.refresh();
