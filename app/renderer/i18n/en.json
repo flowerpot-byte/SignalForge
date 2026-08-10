@@ -73,6 +73,7 @@
   "project.unsaved.save": "Save first",
   "project.unsaved.discard": "Discard",
   "project.unsaved.cancel": "Cancel",
+  "project.unsaved.marker": "Not saved",
   "export.sourceDetected": "detected",
   "export.sourceConfigured": "chosen",
   "export.noFolder": "No SignalRGB folder found",

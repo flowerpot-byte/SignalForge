@@ -295,6 +295,34 @@ app.whenReady().then(async () => {
     /** The flag, read where the window says it out loud. */
     const unsaved = () => d.js(`document.documentElement.classList.contains('has-unsaved-changes')`);
 
+    /**
+     * What the window SHOWS about that flag, as opposed to what it remembers.
+     *
+     * The flag was correct and tested for weeks while being completely
+     * invisible — there was no styling on `has-unsaved-changes` anywhere. So
+     * this reads the marker the way a person meets it: is it painted, what
+     * character is it, what does a screen reader get, and — the part a class
+     * check can never answer — does the row around it stay exactly where it
+     * was when the dot comes and goes.
+     */
+    const marker = () => d.js(`(() => {
+      const dot = document.getElementById('footer-unsaved');
+      if (!dot) return null;
+      const style = getComputedStyle(dot);
+      const box = dot.getBoundingClientRect();
+      const field = document.getElementById('footer-name').getBoundingClientRect();
+      const round = (value) => Math.round(value * 100) / 100;
+      return {
+        visibility: style.visibility,
+        display: style.display,
+        glyph: dot.textContent.trim(),
+        label: dot.getAttribute('aria-label'),
+        width: round(box.width),
+        fieldLeft: round(field.x),
+        fieldWidth: round(field.width)
+      };
+    })()`);
+
     /** Every control a change could show up in, plus the name. */
     const controls = () => d.js(`({
       fit: document.getElementById('sf-layers-0-fit')?.value ?? null,
@@ -407,7 +435,13 @@ app.whenReady().then(async () => {
     }
 
     report.afterImport = await unsaved();
+    // The marker, in both states, read around the one save that is already
+    // happening here: the change has been made, so the dot must be on; the
+    // save clears the flag, so it must be off again — and the name field must
+    // not have moved a pixel between the two readings.
+    report.markerWhileUnsaved = await marker();
     report.afterImportSaved = await save();
+    report.markerWhileSaved = await marker();
     await shot('01-picture-imported-and-saved');
 
     // --- the crop, dragged with a real mouse --------------------------------

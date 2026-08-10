@@ -73,6 +73,7 @@
   "project.unsaved.save": "Erst speichern",
   "project.unsaved.discard": "Verwerfen",
   "project.unsaved.cancel": "Abbrechen",
+  "project.unsaved.marker": "Nicht gespeichert",
   "export.sourceDetected": "erkannt",
   "export.sourceConfigured": "gewählt",
   "export.noFolder": "Kein SignalRGB-Ordner gefunden",

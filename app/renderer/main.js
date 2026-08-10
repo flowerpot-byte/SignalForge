@@ -293,10 +293,14 @@ async function boot() {
   /**
    * Say it out loud to the window as well as remembering it.
    *
-   * The class carries no styling yet — the window's visuals are being rebuilt
-   * — but it is the one place a marker for "not saved" would hang off, and it
-   * is what lets a test at the real window see the flag at all without the
-   * renderer having to hand its internals out over the bridge.
+   * The class is what the marker beside the name field hangs off — the dot in
+   * the transport bar (.transport-unsaved in styles/app.css, built in
+   * components/footer.js). That is deliberately the only thing this line does:
+   * the flag says WHETHER, the stylesheet says what it looks like, and nothing
+   * in here has to know about either.
+   *
+   * It is also what lets a test at the real window see the flag at all without
+   * the renderer having to hand its internals out over the bridge.
    */
   function setUnsavedChanges(next) {
     unsavedChanges = next;

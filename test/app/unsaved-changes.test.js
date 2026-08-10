@@ -127,6 +127,54 @@ test('unsaved work is known about, and asked about before it is thrown away', as
     });
   }
 
+  /**
+   * The flag has to be VISIBLE, not merely correct.
+   *
+   * It was neither styled nor shown for as long as it has existed — the class
+   * was set on <html> and no stylesheet mentioned it — so a user's only sign
+   * that work was in no file yet was the question itself, and only if they
+   * happened to press something that asks. There is still no window-close
+   * guard (that is its own task), which makes this the one warning there is.
+   *
+   * Read off the real window, in both states, around a real save. Every
+   * assertion here is one a wrong implementation fails: no rule at all leaves
+   * both readings hidden, a rule keyed on the wrong class leaves both visible,
+   * `display: none` instead of `visibility` moves the name field, and a marker
+   * made of colour alone has no glyph to report.
+   */
+  await t.test('the window shows that work is unsaved, and shows it without moving', () => {
+    const on = report.markerWhileUnsaved;
+    const off = report.markerWhileSaved;
+    assert.ok(on && off, 'the marker beside the name field must exist in both states');
+
+    assert.equal(on.visibility, 'visible', 'unsaved work must be marked in the window');
+    // Hidden, and still in the layout. The two belong in one assertion because
+    // `display: none` satisfies "not marked" while quietly resizing the row —
+    // it is the obvious way to write this rule and the wrong one.
+    assert.deepEqual(
+      { visibility: off.visibility, display: off.display },
+      { visibility: 'hidden', display: on.display },
+      'a saved document must not be marked, and the marker must hold its place while invisible'
+    );
+
+    // Not a hue and nothing else: somebody who cannot separate the accent from
+    // the page still has to see something appear.
+    assert.ok(on.glyph.length > 0, 'the marker must be a character, not only a colour');
+    assert.equal(
+      on.label,
+      dictionary('en')['project.unsaved.marker'],
+      'and it must carry its meaning in words, from the language files'
+    );
+
+    // The half a class check cannot make: appearing must cost the row nothing.
+    assert.deepEqual(
+      { left: off.fieldLeft, width: off.fieldWidth, dot: off.width },
+      { left: on.fieldLeft, width: on.fieldWidth, dot: on.width },
+      'the name field must be in exactly the same place and be exactly as wide either way — ' +
+        'a marker that reflows the transport bar is a second change nobody asked for'
+    );
+  });
+
   // The drag itself, as a check of its own. The subtest above says "importing
   // a picture marks the document unsaved" whichever door the picture came
   // through; this one says the door was Chromium's own drag pipeline, carrying

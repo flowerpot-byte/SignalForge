@@ -707,6 +707,26 @@ html, body {
 .transport-name-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .transport-name-label { flex: 0 0 auto; color: var(--text-muted); font-size: 12px; }
 .transport-name { flex: 1 1 0; min-width: 0; }
+/* The mark for work that is in no file yet.
+   `visibility` and not `display`, and never `content` on an empty element: the
+   dot is in the layout at all times, so the name field beside it is exactly as
+   wide whether the document is saved or not. A marker that resized the row it
+   sits in would be a second, unasked-for change every time the first character
+   is typed.
+   It is a CHARACTER as well as a colour — the accent alone would be a rule
+   somebody who cannot separate those two hues could not read, and this is the
+   only warning the window gives before the close guard lands.
+   `visibility: hidden` also takes it out of the accessibility tree, which is
+   what makes its aria-label ("Nicht gespeichert") announced exactly while it
+   is true (see components/footer.js). */
+.transport-unsaved {
+  flex: 0 0 auto;
+  visibility: hidden;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1;
+}
+.has-unsaved-changes .transport-unsaved { visibility: visible; }
 /* The longest thing in the row and the least urgent, so it is the one that
    gives way. The full path is never only here — it is in the message after
    every export, in the overwrite question, and in the settings column. */

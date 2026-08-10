@@ -62,7 +62,35 @@ export function mountFooter(container, {
   name.id = 'footer-name';
   name.className = 'transport-name';
   name.addEventListener('input', () => onNameChange(name.value));
-  nameRow.append(nameLabel, name);
+
+  /**
+   * The one place in the window that says work is in no file yet.
+   *
+   * A dot beside the name of the thing that is unsaved, which is where every
+   * editor puts it. It is driven entirely by the `has-unsaved-changes` class
+   * app/renderer/main.js already sets on <html> — this file learns nothing new
+   * and decides nothing; the flag was correct and merely invisible.
+   *
+   * Three properties it has to have, and how each is got (see .transport-unsaved
+   * in styles/app.css):
+   *
+   *  - It is a CHARACTER, not a colour. Somebody who cannot tell the accent
+   *    from the page still sees a dot appear where there was none.
+   *  - It never moves the row. The dot is in the layout at all times and only
+   *    its `visibility` changes, so the name field is never resized by it.
+   *  - It is announced, and only while it is true. `visibility: hidden` takes
+   *    an element out of the accessibility tree as well as off the screen, so
+   *    the label below is read exactly when the dot is showing.
+   */
+  const unsaved = document.createElement('span');
+  unsaved.className = 'transport-unsaved';
+  unsaved.id = 'footer-unsaved';
+  // Not a translated string, and deliberately not one: it is a mark, like the
+  // "320 x 200" chip on the stage. What it MEANS is the label, and that is.
+  unsaved.textContent = '•';
+  unsaved.setAttribute('role', 'img');
+
+  nameRow.append(nameLabel, name, unsaved);
 
   // Where it is going. The second line of the identity block, exactly where
   // the reference puts the author of the effect it is showing.
@@ -117,6 +145,7 @@ export function mountFooter(container, {
    */
   function relabel() {
     nameLabel.textContent = t('footer.name');
+    unsaved.setAttribute('aria-label', t('project.unsaved.marker'));
     exportButton.word.textContent = t('footer.export');
     overwrite.word.textContent = t('export.overwrite');
     save.word.textContent = t('footer.save');
