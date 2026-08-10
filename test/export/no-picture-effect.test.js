@@ -238,6 +238,37 @@ test('the command line refuses two sources at once rather than quietly picking o
   }
 });
 
+test('the command line refuses a motion a flat colour cannot perform', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-nopicture-'));
+  try {
+    // The one entrance that could still bake a control the window forbids: a
+    // Motion dropdown in somebody's SignalRGB panel offering an option that
+    // provably cannot change a pixel.
+    for (const kind of ['drift', 'warp']) {
+      assert.throws(
+        () => execFileSync(process.execPath,
+          [cli, '--solid', '#ff0066', '--motion', kind, '--name', 'X', '--out', dir],
+          { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+        (error) => new RegExp(`--motion ${kind} does nothing on a flat colour`).test(String(error.stderr)),
+        `--solid --motion ${kind} must be refused`
+      );
+    }
+    // And the two it CAN perform still go through, so this is a narrowing and
+    // not a wall.
+    for (const kind of SOLID_MOTION_KINDS) {
+      execFileSync(process.execPath,
+        [cli, '--solid', '#ff0066', '--motion', kind, '--name', `Ok ${kind}`, '--out', dir],
+        { encoding: 'utf8', cwd: root });
+    }
+    // A gradient is not narrowed: it can genuinely perform all four.
+    execFileSync(process.execPath,
+      [cli, '--gradient', '#ff0000,#0000ff', '--motion', 'drift', '--name', 'Ramp Drift', '--out', dir],
+      { encoding: 'utf8', cwd: root });
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('a gradient of one colour is refused, because a ramp needs somewhere to go', () => {
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-nopicture-'));
   try {

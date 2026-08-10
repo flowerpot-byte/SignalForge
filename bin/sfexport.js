@@ -12,7 +12,7 @@ import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS,
-  normalizeColor, normalizeDocument
+  motionKindsFor, normalizeColor, normalizeDocument
 } from '../src/engine/document.js';
 
 /** The id the one layer gets, and what the controls bind through. */
@@ -28,7 +28,8 @@ const USAGE = `Usage:
 
 Options:
   --name <text>      Effect name (default: the image file name; required without --image)
-  --motion <kind>    none | warp | drift | breathe   (default: warp; none for --solid)
+  --motion <kind>    none | warp | drift | breathe   (default: warp)
+                     --solid takes none | breathe only, and defaults to none
   --fit <kind>       cover | stretch | contain       (default: cover, --image only)
   --shape <kind>     linear | radial                 (default: linear, --gradient only)
   --angle <degrees>  0..360                          (default: 0, --gradient only)
@@ -75,8 +76,18 @@ function parseArguments(argv) {
   options.motionGiven = options.motion !== undefined;
   if (!options.motionGiven) options.motion = options.solid !== undefined ? 'none' : 'warp';
 
-  if (!MOTION_KINDS.includes(options.motion)) {
-    throw new Error(`unknown --motion value: "${options.motion}" (expected ${MOTION_KINDS.join('|')})`);
+  // Judged against what THIS layer type can perform, not against the four
+  // kinds flat. `--solid --motion drift` used to build an effect whose
+  // SignalRGB panel offered a Motion option that provably does nothing (see
+  // SOLID_MOTION_KINDS in src/engine/document.js) — the one entrance where
+  // that could still be asked for. `--project` brings its own layers and its
+  // own motions and takes no --motion at all, so the wide list stands there.
+  const layerType = options.solid !== undefined ? 'solid' : 'image';
+  const kinds = motionKindsFor(layerType);
+  if (!kinds.includes(options.motion)) {
+    throw new Error(MOTION_KINDS.includes(options.motion)
+      ? `--motion ${options.motion} does nothing on a flat colour (expected ${kinds.join('|')})`
+      : `unknown --motion value: "${options.motion}" (expected ${kinds.join('|')})`);
   }
   if (!FIT_MODES.includes(options.fit)) {
     throw new Error(`unknown --fit value: "${options.fit}" (expected ${FIT_MODES.join('|')})`);
