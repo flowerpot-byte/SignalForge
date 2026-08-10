@@ -459,6 +459,13 @@ async function selfTestFirstRun(win, effectsFolder) {
   await waitFor(read, `document.getElementById('first-run') !== null`, 'the window is built');
 
   out.firstRunShown = await read(`document.getElementById('first-run').hidden === false`);
+  // `hidden` is a property; whether anybody can SEE it is a computed style, and
+  // the two came apart for real: giving .first-run a `display` of its own in
+  // the stylesheet silently outranked the browser's `[hidden] { display: none }`
+  // and left the question on screen for ever, with every check here still green.
+  out.firstRunReallyVisible = await read(
+    `getComputedStyle(document.getElementById('first-run')).display !== 'none'`
+  );
   out.firstRunAsks = await read(`document.querySelector('#first-run button').textContent`);
   // The rest of the window must stay usable while the question is on screen —
   // that is the whole difference between a panel and a modal assistant.
@@ -522,6 +529,9 @@ async function selfTestFirstRun(win, effectsFolder) {
   folderDialog.open = async () => ({ canceled: false, filePaths: [effectsFolder] });
   await click('first-run-choose');
   await waitFor(read, `document.getElementById('first-run').hidden === true`, 'the question is answered');
+  out.firstRunReallyGone = await read(
+    `getComputedStyle(document.getElementById('first-run')).display === 'none'`
+  );
   out.targetAfterChoosing = await read(`document.getElementById('footer-target').textContent`);
   await shoot('00d-folder-chosen');
 

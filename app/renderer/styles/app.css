@@ -84,16 +84,23 @@ html, body {
 
 /* The drop zone fills the whole preview panel so a drag can land anywhere
    over it, not just on the canvas — see mountDrop() in components/drop.js. */
+/* Three rows, each named out loud rather than left to auto-placement: the
+   first-start notice, the stage, the status strip. The notice is absent most
+   of the time (it is `hidden`, i.e. display:none, whenever an effects folder
+   is known), and a track with nothing in it has to collapse to nothing — which
+   is also why the rows are spaced by margins rather than by `gap`: a gap is
+   drawn around an empty track too. */
 #preview-body {
-  /* The frame the first-start question centres itself in — see .first-run. */
   position: relative;
   display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  gap: 10px;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   min-height: 0;
   border-radius: var(--radius);
   border: 1px dashed transparent;
 }
+.first-run { grid-row: 1; }
+.stage { grid-row: 2; }
+.drop-message { grid-row: 3; }
 #preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
 /* One gesture, not two competing rectangles: while a file is over the panel,
    the frame's own edge joins in rather than sitting inside a second dashed
@@ -255,33 +262,40 @@ html, body {
    once main.js adds this class for a rejection or a failed import. */
 .drop-message.drop-warn { color: var(--warn); }
 
-/* The first-start question. A panel, not a curtain: it sits in the middle of
-   the preview column and leaves the rest of the window usable, because
-   somebody who wants to drop a picture in and play first should not have to
-   answer a filing question to get there.
+/* The first-start question. A notice at the top of the working column, not a
+   curtain: the rest of the window stays usable, because somebody who wants to
+   drop a picture in and play first should not have to answer a filing question
+   to get there.
 
-   Taken out of the flow on purpose. In the flow it stacked on top of the
-   preview canvas and pushed "drop an image here" off the bottom, so the first
-   thing a first-time user saw was the one line that tells them what to do
-   gone missing. */
+   It used to float in the middle of the preview column, and that stopped
+   working the moment the empty frame got its invitation: the two were centred
+   on the same point and the question sat on top of "Bild hierher ziehen", with
+   the accepted formats showing through it. Back in the flow it cannot overlap
+   anything at any window size — and the reason it was taken out of the flow in
+   the first place is gone, because what it used to push off the bottom was
+   that same invitation, which no longer lives down there.
+
+   Question and answer on one line: text left, the one button that settles it
+   right, vertically centred against both. */
 .first-run {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 2;
-  max-width: 46ch;
-  margin: 0;
-  padding: 18px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: 16px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
   border: 1px solid var(--glass-stroke);
-  border-radius: var(--radius);
-  background: var(--panel-fill);
-  backdrop-filter: blur(var(--glass-blur));
-  box-shadow: var(--stage-shadow);
-  text-align: left;
+  border-radius: var(--radius-sm);
+  background: var(--glass-fill);
 }
-.first-run h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
-.first-run p { margin: 0 0 14px; color: var(--text-muted); font-size: 13px; }
+/* An author `display` outranks the browser's own `[hidden] { display: none }`,
+   so the attribute the component sets has to be honoured here by hand — without
+   this line the first-start question is on screen permanently, folder or no
+   folder, and it was. */
+.first-run[hidden] { display: none; }
+.first-run h2 { grid-area: 1 / 1; margin: 0 0 3px; font-size: 14px; font-weight: 600; }
+.first-run p { grid-area: 2 / 1; margin: 0; color: var(--text-muted); font-size: 13px; }
+.first-run button { grid-area: 1 / 2 / 3 / 3; }
 
 /* ---------------------------------------------------------------------------
    The settings column.

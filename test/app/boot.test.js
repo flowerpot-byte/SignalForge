@@ -75,6 +75,15 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     true,
     'with no effects folder found, the window must ask for one'
   );
+  // And the question has to be visible, not merely un-hidden: an author
+  // `display` in the stylesheet outranks the browser's own
+  // `[hidden] { display: none }`, which is how this panel once stayed on
+  // screen permanently with the property check above still passing.
+  assert.equal(
+    report.firstRunReallyVisible,
+    true,
+    'the question must actually be rendered, not only lack the hidden property'
+  );
   assert.equal(
     report.firstRunLeavesTheAppUsable,
     true,
@@ -176,6 +185,11 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     report.targetAfterChoosing,
     /gewählt|chosen/,
     'once the folder has been chosen the footer must show it as the chosen one'
+  );
+  assert.equal(
+    report.firstRunReallyGone,
+    true,
+    'and the question must actually leave the screen, not just lose the hidden property'
   );
 
   // The renderer never constructs or supplies a filesystem path — the rule

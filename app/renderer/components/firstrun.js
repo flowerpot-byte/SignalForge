@@ -6,10 +6,13 @@
  * The one question a first start has to ask: where SignalRGB keeps its
  * effects, when the app could not find that folder by itself.
  *
- * Deliberately not a modal assistant. It is a quiet panel in the middle
- * column that says what is missing and offers the single button that fixes
- * it; everything else in the window stays reachable, so somebody who wants to
- * drop a picture in and play first can do exactly that and answer this later.
+ * Deliberately not a modal assistant. It is a quiet notice at the top of the
+ * middle column that says what is missing and offers the single button that
+ * fixes it; everything else in the window stays reachable, so somebody who
+ * wants to drop a picture in and play first can do exactly that and answer
+ * this later. It sits in the flow rather than floating over the column, so it
+ * cannot land on top of the empty frame's own invitation (see .first-run in
+ * styles/app.css).
  * There is nothing to dismiss and nothing to step through — answering it is
  * what makes it go away, and it comes back on its own if the folder it was
  * given ever disappears (resolveEffectsTarget reports `source: 'none'` again).
