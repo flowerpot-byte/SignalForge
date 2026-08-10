@@ -98,6 +98,15 @@ export async function prepareImageAsset(dataUrl, { maxHeight = CANVAS_HEIGHT, bl
   // invisible the day an image layer sits on top of ANOTHER layer: the outer
   // ~2px would then show black instead of what is underneath. Worth
   // remembering when stacked layers arrive.
+  //
+  // Not fixed now, on purpose: the app only ever builds one image layer today
+  // (app/renderer/main.js), so there is nothing to see yet, and any fix
+  // changes the look of every imported picture's edges before Max has looked
+  // at the JPEG change itself. The fix, when it is needed, is two lines: set
+  // `ctx.globalCompositeOperation = 'destination-over'` and redraw the
+  // (unblurred) picture underneath before reading the canvas, so the halo is
+  // filled with the picture's own edge colours instead of whatever was
+  // cleared to transparent above.
   const out = transparent
     ? canvas.toDataURL('image/png')
     : canvas.toDataURL('image/jpeg', JPEG_QUALITY);
