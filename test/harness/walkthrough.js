@@ -60,6 +60,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { projectDialogs, folderDialog } from '../../app/main.js';
+import { driver, wait } from './driver.js';
 
 const OUT = process.env.SF_WALK_OUT;
 const PHASE = process.env.SF_WALK_PHASE === '2' ? 2 : 1;
@@ -194,160 +195,13 @@ function writeTestImage(file) {
 // Working the window
 // ---------------------------------------------------------------------------
 
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
 /**
- * What the preview canvas currently shows, as numbers.
- *
- * `hash` answers "is this the very same picture"; the channel means answer
- * "did it get darker / did the colour tip"; `saturation` answers "is it grey";
- * `brightestColumn` finds the white marker bar and is what the crop drag is
- * judged by.
- *
- * `bars` is where that same marker sits in three individual rows, and it is
- * what tells warp and breathe apart while both are running: breathe scales the
- * whole frame's opacity, so the level moves and the marker does not budge;
- * warp displaces each row separately, so the marker wanders and the level
- * stays put. A column profile averaged over all rows will not do it — warp's
- * per-row displacement largely cancels out in that average, which is how the
- * first run of this walkthrough came to report warp as invisible when it was
- * plainly moving on screen.
+ * How this walkthrough drives the window: see test/harness/driver.js, which
+ * test/harness/selftest.js uses too. The screenshots land in SF_WALK_OUT/shots
+ * and are named relative to SF_WALK_OUT in the report, so a reader of
+ * report-<phase>.json can follow them from where the report itself is.
  */
-const STATS_SOURCE = `(() => {
-  const c = document.getElementById('preview-canvas');
-  const g = c.getContext('2d', { willReadFrequently: true });
-  const d = g.getImageData(0, 0, c.width, c.height).data;
-  const n = c.width * c.height;
-  let sr = 0, sg = 0, sb = 0, sat = 0, hash = 0;
-  const cols = new Float64Array(c.width);
-  for (let i = 0, p = 0; i < d.length; i += 4, p += 1) {
-    const r = d[i], gg = d[i + 1], b = d[i + 2];
-    sr += r; sg += gg; sb += b;
-    const mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
-    sat += mx === 0 ? 0 : (mx - mn) / mx;
-    cols[p % c.width] += (r + gg + b) / 3;
-    hash = (hash * 31 + r + gg * 3 + b * 7) | 0;
-  }
-  let best = -1, bestValue = -1;
-  for (let x = 0; x < c.width; x += 1) { if (cols[x] > bestValue) { bestValue = cols[x]; best = x; } }
-  const bars = [20, 100, 180].map((y) => {
-    let bx = -1, bv = -1;
-    for (let x = 0; x < c.width; x += 1) {
-      const i = (y * c.width + x) * 4;
-      const v = d[i] + d[i + 1] + d[i + 2];
-      if (v > bv) { bv = v; bx = x; }
-    }
-    return bx;
-  });
-  return {
-    width: c.width, height: c.height, hash, bars,
-    r: sr / n, g: sg / n, b: sb / n, mean: (sr + sg + sb) / (3 * n),
-    saturation: sat / n, brightestColumn: best,
-    columns: Array.from(cols, (v) => v / c.height)
-  };
-})()`;
-
-function driver(win) {
-  const dbg = win.webContents.debugger;
-  const js = (expression) => win.webContents.executeJavaScript(expression);
-  const send = (method, params) => dbg.sendCommand(method, params);
-
-  /**
-   * Two frames, so the compositor has actually painted what we are shooting.
-   *
-   * With a deadline on it, because there is one way this can never finish: a
-   * window Chromium has decided is not worth animating hands out no frames at
-   * all, and a run that waits forever for one looks exactly like a run that is
-   * still working. The switches set at the top of this file are what stops
-   * that happening; this is what makes it say so if it happens anyway.
-   */
-  const settle = () => {
-    let timer;
-    // The timeout is a watchdog, not part of the result: once the race is
-    // decided (either way) it must not go on holding the Electron main
-    // process alive for up to 15s past the end of a run — which would read
-    // as a hang of its own, indistinguishable from the thing this is meant
-    // to detect.
-    return Promise.race([
-      js(`new Promise((d) => requestAnimationFrame(() => requestAnimationFrame(d)))`),
-      new Promise((_, reject) => { timer = setTimeout(
-        () => reject(new Error('the window stopped producing animation frames')), 15_000
-      ); })
-    ]).finally(() => clearTimeout(timer));
-  };
-
-  return {
-    js,
-    send,
-    settle,
-    async shot(name) {
-      await settle();
-      writeFileSync(join(shotsDir, `${name}.png`), (await win.capturePage()).toPNG());
-      return `shots/${name}.png`;
-    },
-    stats: () => js(STATS_SOURCE),
-    /** The middle of an element, in the coordinates CDP input events use. */
-    box: (selector) => js(`(() => {
-      const b = document.querySelector(${JSON.stringify(selector)}).getBoundingClientRect();
-      return { x: b.x, y: b.y, width: b.width, height: b.height,
-               cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
-    })()`),
-    /**
-     * A real mouse drag: press, a run of moves, release. The moves are sent one
-     * at a time on purpose — the crop follows pointermove, and a single jump
-     * would not prove that it tracks rather than snaps.
-     */
-    async drag(fromX, fromY, toX, toY, steps = 12) {
-      const common = { button: 'left', buttons: 1, clickCount: 1 };
-      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: fromX, y: fromY, ...common });
-      for (let i = 1; i <= steps; i += 1) {
-        await send('Input.dispatchMouseEvent', {
-          type: 'mouseMoved',
-          x: fromX + ((toX - fromX) * i) / steps,
-          y: fromY + ((toY - fromY) * i) / steps,
-          ...common
-        });
-        await wait(8);
-      }
-      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: toX, y: toY, ...common });
-      await wait(60);
-    },
-    async click(x, y) {
-      const common = { button: 'left', clickCount: 1 };
-      await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 0 });
-      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x, y, buttons: 1, ...common });
-      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x, y, buttons: 0, ...common });
-      await wait(60);
-    },
-    /**
-     * A real key press. `modifiers` is the protocol's own bitmask —
-     * Alt 1, Ctrl 2, Meta 4, Shift 8 — which is what turns an arrow into the
-     * crop's coarse step.
-     */
-    async key(key, code, virtualKey, modifiers = 0) {
-      const base = {
-        key, code, modifiers,
-        windowsVirtualKeyCode: virtualKey,
-        nativeVirtualKeyCode: virtualKey
-      };
-      await send('Input.dispatchKeyEvent', { type: 'rawKeyDown', ...base });
-      await send('Input.dispatchKeyEvent', { type: 'keyUp', ...base });
-      await wait(40);
-    },
-    /** Poll the window until `expression` is true. */
-    async until(expression, what, tries = 200) {
-      for (let i = 0; i < tries; i += 1) {
-        if (await js(expression)) return;
-        await wait(50);
-      }
-      throw new Error(`the window never reached: ${what}`);
-    },
-    message: () => js(`document.querySelector('.drop-message').textContent`),
-    // The cost readout is a chip attached to the preview frame and has an id
-    // of its own now; it used to be a loose paragraph found by elimination.
-    cost: () => js(`document.getElementById('preview-cost').textContent`)
-  };
-}
+const DRIVING = { shotsDir, shotLabel: (name) => `shots/${name}.png` };
 
 /** How far apart two brightness profiles are, after taking the level out. */
 function shapeDistance(a, b) {
@@ -364,7 +218,7 @@ function shapeDistance(a, b) {
 // ---------------------------------------------------------------------------
 
 async function phaseOne(win, state) {
-  const d = driver(win);
+  const d = driver(win, DRIVING);
   const p = report.points;
 
   await d.until(`document.getElementById('footer-export') !== null`, 'the window is built');
@@ -402,11 +256,7 @@ async function phaseOne(win, state) {
   // element and the change event fired — the same event the user's click
   // produces, arriving at the same listener.
   const setLanguage = async (code) => {
-    await d.js(`(() => {
-      const s = document.getElementById('footer-language');
-      s.value = ${JSON.stringify(code)};
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-    })()`);
+    await d.setSelect('footer-language', code);
     await wait(80);
   };
   await setLanguage('en');
@@ -511,11 +361,7 @@ async function phaseOne(win, state) {
   // --- 4. fit mode --------------------------------------------------------
   p['4'] = { name: 'change the fit mode - does the view change?', shots: [] };
   const setSelect = async (id, value) => {
-    await d.js(`(() => {
-      const s = document.getElementById(${JSON.stringify(id)});
-      s.value = ${JSON.stringify(value)};
-      s.dispatchEvent(new Event('change', { bubbles: true }));
-    })()`);
+    await d.setSelect(id, value);
     await wait(200);
   };
   const cover = await d.stats();
@@ -538,11 +384,7 @@ async function phaseOne(win, state) {
   //        measurements are taken on a picture at full strength) ------------
   p['6'] = { name: 'saturation to 0 - grey? colour axes - does the tint shift?', shots: [] };
   const slider = async (id, value) => {
-    await d.js(`(() => {
-      const s = document.getElementById(${JSON.stringify(id)});
-      s.value = ${JSON.stringify(String(value))};
-      s.dispatchEvent(new Event('input', { bubbles: true }));
-    })()`);
+    await d.setInput(id, value);
     await wait(150);
   };
   const colourful = await d.stats();
@@ -612,11 +454,7 @@ async function phaseOne(win, state) {
   // --- 9a. export, and the same picture read back out of the exported file --
   p['9'] = { name: 'export, and confirm the result', shots: [] };
   const stillPreview = await d.stats();
-  await d.js(`(() => {
-    const f = document.getElementById('footer-name');
-    f.value = 'Walkthrough Still';
-    f.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
+  await d.setInput('footer-name', 'Walkthrough Still');
   const exportBox = await d.box('#footer-export');
   await d.click(exportBox.cx, exportBox.cy);
   await d.until(
@@ -699,11 +537,7 @@ async function phaseOne(win, state) {
     && p['7'].shareWithMotion < 15 && p['7'].shareWorstCase < 15 ? 'pass' : 'fail';
 
   // --- 9b. the moving effect, exported ------------------------------------
-  await d.js(`(() => {
-    const f = document.getElementById('footer-name');
-    f.value = 'Walkthrough Moving';
-    f.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
+  await d.setInput('footer-name', 'Walkthrough Moving');
   const exportAgain = await d.box('#footer-export');
   await d.click(exportAgain.cx, exportAgain.cy);
   await d.until(
@@ -917,11 +751,7 @@ async function phaseOne(win, state) {
 
   // --- 8a. save the project, then let the app really stop -----------------
   p['8'] = { name: 'save a project, restart the app, open it - is everything still there?', shots: [] };
-  await d.js(`(() => {
-    const f = document.getElementById('footer-name');
-    f.value = 'Walkthrough';
-    f.dispatchEvent(new Event('input', { bubbles: true }));
-  })()`);
+  await d.setInput('footer-name', 'Walkthrough');
   projectDialogs.save = async () => ({ canceled: false, filePath: state.projectFile });
   const saveBox = await d.box('#footer-save');
   await d.click(saveBox.cx, saveBox.cy);
@@ -960,7 +790,7 @@ function readControls(d) {
  * one before it wrote.
  */
 async function phaseTwo(win, state) {
-  const d = driver(win);
+  const d = driver(win, DRIVING);
   const p = report.points;
   await d.until(`document.getElementById('footer-open') !== null`, 'the window is built');
 
