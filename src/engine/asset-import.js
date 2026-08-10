@@ -97,10 +97,14 @@ export async function prepareImageAsset(dataUrl, { maxHeight = CANVAS_HEIGHT, bl
   // invisible the day an image layer sits on top of ANOTHER layer: the outer
   // ~2px would then show black instead of what is underneath. Worth
   // remembering when stacked layers arrive.
-  const mime = transparent ? 'image/png' : 'image/jpeg';
   const out = transparent
     ? canvas.toDataURL('image/png')
     : canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  // toDataURL is specified to fall back to image/png silently if it cannot
+  // honour the requested type — it does not throw. Reading the mime back out
+  // of what the canvas actually produced (rather than repeating the ternary
+  // above) means `mime` can never claim JPEG bytes that are secretly PNG.
+  const mime = out.slice(5, out.indexOf(';'));
 
   return {
     kind: 'image',

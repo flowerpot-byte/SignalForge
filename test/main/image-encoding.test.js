@@ -52,10 +52,21 @@ test('the importer picks JPEG for opaque pictures and PNG only for real transpar
       prepareImageFile(paths.holed)
     ]);
 
-    assert.equal(opaque.mime, 'image/jpeg', 'a picture without an alpha channel must become JPEG');
-    assert.equal(opaqueAlpha.mime, 'image/jpeg',
-      'an alpha channel that is opaque everywhere is not transparency and must still become JPEG');
-    assert.equal(holed.mime, 'image/png', 'a genuinely see-through picture must stay PNG');
+    // Assert the actual bytes, not the mime label the code attached to them —
+    // `mime` is read back from what toDataURL produced (see asset-import.js),
+    // but a test that only re-checks that same label would never notice the
+    // encoder silently falling back to PNG. '/9j/' is the base64 encoding of
+    // JPEG's FF D8 FF magic; 'iVBORw0KGgo' is PNG's.
+    assert.ok(opaque.data.startsWith('/9j/'),
+      `a picture without an alpha channel must become real JPEG bytes, got ${opaque.data.slice(0, 12)}`);
+    assert.ok(opaqueAlpha.data.startsWith('/9j/'),
+      `an alpha channel that is opaque everywhere is not transparency and must still become real JPEG bytes, got ${opaqueAlpha.data.slice(0, 12)}`);
+    assert.ok(holed.data.startsWith('iVBORw0KGgo'),
+      `a genuinely see-through picture must stay real PNG bytes, got ${holed.data.slice(0, 12)}`);
+
+    assert.equal(opaque.mime, 'image/jpeg');
+    assert.equal(opaqueAlpha.mime, 'image/jpeg');
+    assert.equal(holed.mime, 'image/png');
 
     // The picture itself is unchanged, only how it is stored.
     for (const asset of [opaque, opaqueAlpha, holed]) {
@@ -86,7 +97,9 @@ test('both encodings still render — and the transparent one is still see-throu
     ]);
 
     // Stated here too, so this test provably exercises both encodings rather
-    // than quietly rendering two PNGs.
+    // than quietly rendering two PNGs — checked on the bytes, not the label.
+    assert.ok(opaque.data.startsWith('/9j/'));
+    assert.ok(holed.data.startsWith('iVBORw0KGgo'));
     assert.equal(opaque.mime, 'image/jpeg');
     assert.equal(holed.mime, 'image/png');
 
