@@ -80,6 +80,17 @@ export const MAX_GRADIENT_STOPS = 4;
  * gradient layer by naming the type alone and lets normalizeDocument fill
  * these in, then shows and edits whatever the document says. That is why the
  * colour guard still passes honestly rather than by an exemption.
+ *
+ * ONE COINCIDENCE, WRITTEN DOWN
+ *
+ * DEFAULT_SOLID_COLOR is the same value as `--accent` in
+ * app/renderer/styles/tokens.css. That is not an accident and it is load
+ * bearing: the "Farbfläche" tile in the starting gallery draws its preview
+ * swatch from the accent, so the tile is an honest picture of what pressing it
+ * produces only for as long as the two agree. Nothing enforces it — they are
+ * deliberately different kinds of thing and must not import each other — so if
+ * the accent is ever retuned, retune this with it or the tile starts lying.
+ * The same note stands beside --accent over there.
  */
 export const DEFAULT_SOLID_COLOR = '#ff0066';
 export const DEFAULT_GRADIENT_STOPS = Object.freeze([

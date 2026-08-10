@@ -78,7 +78,15 @@
   /* The accent. Measured off two slider fills in the reference's Color card
      (1450,245 and 1400,279): #ff0066 at both, exactly. SignalRGB's own pink.
      --bg-base on it measures 5.12:1, which is what makes the one filled button
-     legible; white on it would be 3.75:1 and is never used. */
+     legible; white on it would be 3.75:1 and is never used.
+
+     It is also, on purpose, the same value as DEFAULT_SOLID_COLOR in
+     src/engine/document.js — the colour a solid layer starts out as. That is
+     what makes the "Farbflaeche" tile's preview swatch an honest picture of
+     what pressing the tile produces. The two cannot import each other (one is
+     the window's palette, the other is a field in the user's document), so
+     nothing catches a drift: retuning the accent means retuning that constant
+     as well, or the tile quietly stops showing what it makes. */
   --accent:         #ff0066;
   /* One step brighter, for the hover of that same button. --bg-base on it
      measures 4.62:1, still past the body-text floor. */
