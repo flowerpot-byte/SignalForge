@@ -9,6 +9,7 @@
   "preview.cropLabel": "Image section - move it with the arrow keys, hold Shift for bigger steps",
   "preview.cropPosition": "Crop {x}% from left, {y}% from top",
   "preview.cropEdge": "Edge reached",
+  "inspector.awaitingImage": "Fit and motions appear here once an image is loaded.",
   "inspector.section.image": "Image",
   "inspector.fit": "Fit",
   "inspector.fit.cover": "Cover",

@@ -9,6 +9,7 @@
   "preview.cropLabel": "Bildvorschau - Ausschnitt mit den Pfeiltasten verschieben, mit Umschalt in größeren Schritten",
   "preview.cropPosition": "Ausschnitt {x} % von links, {y} % von oben",
   "preview.cropEdge": "Rand erreicht",
+  "inspector.awaitingImage": "Bildausschnitt und Bewegungen erscheinen hier, sobald ein Bild geladen ist.",
   "inspector.section.image": "Bild",
   "inspector.fit": "Bildausschnitt",
   "inspector.fit.cover": "Füllen",

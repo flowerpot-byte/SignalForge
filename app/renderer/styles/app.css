@@ -260,6 +260,17 @@ html, body {
   padding: 14px var(--panel-pad) 18px;
 }
 
+/* One line where two sections will be. It sits above "Farbe" — exactly where
+   "Bild" and "Bewegungen" appear once there is a picture — so the column
+   explains its own length instead of looking cut off. No box, no icon, no
+   disabled stand-in controls: the shortest honest thing that answers "where is
+   the rest". */
+.section-note {
+  margin: 0 0 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
 /* A section of the column. The weight is carried by the heading and the rule
    under it, not by a box: a box here would be a card inside a card. */
 .field-group {

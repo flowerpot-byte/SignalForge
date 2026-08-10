@@ -227,6 +227,21 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
 
     container.replaceChildren();
 
+    const fields = describeInspector(doc, layerId);
+
+    // With no picture the column holds nothing but the four colour sliders,
+    // and stops. That read as truncated rather than as short: two thirds of
+    // the settings were missing with no sign that they exist or that anything
+    // brings them back. One sentence, in the place the missing sections will
+    // take, naming them — not two greyed-out stand-in sections, which would be
+    // a picture of an interface rather than the interface.
+    if (!fields.some((field) => field.section === 'image')) {
+      const note = document.createElement('p');
+      note.className = 'section-note';
+      note.textContent = t('inspector.awaitingImage');
+      container.append(note);
+    }
+
     let sectionName = null;
     let section = null;
     // The motion rows, and the button that adds another, taken from
@@ -246,7 +261,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
       motionCard = null;
     };
 
-    for (const field of describeInspector(doc, layerId)) {
+    for (const field of fields) {
       if (field.section !== sectionName) {
         closeMotions();
         sectionName = field.section;
