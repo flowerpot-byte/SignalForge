@@ -11,14 +11,14 @@ import { fileURLToPath } from 'node:url';
 import { runJobs } from '../harness/render.js';
 import { pixelAt, isColour, meanBrightness, maxDifference } from '../harness/pixels.js';
 import { effectControls, withLiveMotion, CONTROL_RANGES } from '../../src/export/effect-controls.js';
-import { normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS } from '../../src/engine/document.js';
+import {
+  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS, CANVAS_WIDTH
+} from '../../src/engine/document.js';
 import { resolveBindingPath } from '../../src/engine/bind.js';
 import { exportEffect } from '../../src/main/export-effect.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cli = join(root, 'bin', 'sfexport.js');
-
-const CANVAS_WIDTH = 320;
 
 const docWith = (layer) => normalizeDocument({ name: 'Controls', layers: [{ id: 'a1', ...layer }] }).doc;
 
