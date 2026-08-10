@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { describeInspector, widenToInclude } from '../../app/renderer/components/inspector.js';
+import { describeInspector, widenToInclude, SECTION_TITLES } from '../../app/renderer/components/inspector.js';
 import { normalizeDocument, FIT_MODES, MOTION_KINDS } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 import { CONTROL_RANGES } from '../../src/export/effect-controls.js';
@@ -130,6 +130,37 @@ test('a layer that is not an image contributes nothing of its own', () => {
   const fields = describeInspector(doc, 'a1');
   assert.equal(fields.filter((f) => f.path.startsWith('layers.')).length, 0);
   assert.ok(fields.length > 0);
+});
+
+// The column is read in three headed sections rather than as one flat list of
+// fifteen controls. Which section a field belongs to is arithmetic over the
+// document like everything else here, so it is checked here and not in the
+// browser.
+test('every field says which section it belongs to, and every section has a heading', () => {
+  const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1');
+  for (const field of fields) {
+    assert.ok(
+      Object.hasOwn(SECTION_TITLES, field.section),
+      `${field.path} is in the unknown section "${field.section}"`
+    );
+  }
+  assert.equal(fields.find((f) => f.path === 'layers.0.fit').section, 'image');
+  assert.equal(fields.find((f) => f.type === 'motions').section, 'motions');
+  assert.equal(fields.find((f) => f.path === 'layers.0.motions.0.speed').section, 'motions');
+  assert.equal(fields.find((f) => f.path === 'brightness').section, 'colour');
+});
+
+// The sections are drawn by walking the list once and starting a new one
+// whenever the name changes (see mountInspector), so a field that came back
+// to a section already left behind would silently open a second heading with
+// the same words on it.
+test('a section is never left and returned to', () => {
+  const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }, { kind: 'drift' }] }), 'a1');
+  const runs = [];
+  for (const field of fields) {
+    if (runs[runs.length - 1] !== field.section) runs.push(field.section);
+  }
+  assert.deepEqual(runs, [...new Set(runs)], `a section is opened twice: ${runs.join(', ')}`);
 });
 
 // A saved project may legitimately carry a value the sliders do not offer:

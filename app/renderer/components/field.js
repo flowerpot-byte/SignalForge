@@ -37,6 +37,25 @@ function button(id, text, ariaLabel) {
 }
 
 /**
+ * How far along its range a slider is standing, as a percentage.
+ *
+ * The stylesheet paints the track from this (see --sf-fill in styles/app.css)
+ * so the filled part is visible without reading the number. It is computed
+ * here rather than left to the browser's own accent-color because a range
+ * with `appearance: none` — which is what gives the track its size and its
+ * colours — is no longer painted by the browser at all.
+ *
+ * A zero-width range (min === max, which widenToInclude can never produce but
+ * a future field could) would divide by zero; it reads as full instead.
+ */
+export function fillPercent({ min, max }, value) {
+  const span = Number(max) - Number(min);
+  if (!(span > 0)) return 100;
+  const along = ((Number(value) - Number(min)) / span) * 100;
+  return Math.max(0, Math.min(100, along));
+}
+
+/**
  * A slider with the number beside it.
  *
  * `input` fires while the slider is being dragged AND on every arrow-key
@@ -58,8 +77,12 @@ function numberField(field, { t, value, onChange }) {
   readout.setAttribute('for', id);
   readout.textContent = String(value);
 
+  const paint = (at) => input.style.setProperty('--sf-fill', `${fillPercent(field, at)}%`);
+  paint(value);
+
   input.addEventListener('input', () => {
     readout.textContent = input.value;
+    paint(input.value);
     onChange(field.path, Number(input.value));
   });
 
@@ -87,7 +110,18 @@ function selectField(field, { t, value, onChange }) {
 }
 
 /**
- * The motion list: one row per motion, plus the button that adds another.
+ * The motion list, as pieces rather than as a finished block: one row per
+ * motion, and the button that adds another.
+ *
+ * Handed back separately on purpose. A motion's kind and that motion's two
+ * sliders belong in one place, and the sliders are separate fields that
+ * mountInspector receives one at a time — so mountInspector is the only thing
+ * that can put a motion together, and it can only do that if it is given the
+ * rows loose. What this used to return instead was a fieldset of its own
+ * holding every row, which left the column saying "Bewegungen" over a list of
+ * dropdowns and then "Bewegung 1", "Bewegung 2" over a stack of sliders
+ * further down: the same structure stated twice, with each motion's name a
+ * long way from its own controls.
  *
  * `value` is the layer the motions belong to (the field's path addresses the
  * layer, see describeInspector), so the paths reported back get ".motions"
@@ -106,30 +140,24 @@ function selectField(field, { t, value, onChange }) {
  * with are normalizeDocument's business, not a second copy of those numbers
  * kept here.
  */
-function motionsField(field, { t, value, onChange }) {
+export function createMotions(field, { t, value, onChange }) {
   const motions = value && Array.isArray(value.motions) ? value.motions : [];
   const base = fieldId(field.path);
   const listPath = `${field.path}.motions`;
 
-  const group = document.createElement('fieldset');
-  group.className = 'motion-list';
-  const legend = document.createElement('legend');
-  legend.textContent = t(field.labelKey);
-  group.append(legend);
-
   const used = new Set(motions.map((motion) => motion.kind));
 
-  motions.forEach((motion, index) => {
+  const rows = motions.map((motion, index) => {
     const line = row('motion-row');
     const id = `${base}-kind-${index}`;
 
     const select = document.createElement('select');
     select.id = id;
-    // Named for a screen reader, not on screen: the fieldset that wraps this
-    // motion's sliders already prints "Bewegung 1" as its legend a few pixels
-    // below (see mountInspector), and a visible label here printed the very
-    // same words a second time. An aria-label keeps the dropdown announced as
-    // the motion it belongs to without saying it twice to the eye.
+    // Named for a screen reader, not on screen: the fieldset this row is put
+    // into already prints "Bewegung 1" as its legend a few pixels above (see
+    // mountInspector), and a visible label here would print the very same
+    // words a second time. An aria-label keeps the dropdown announced as the
+    // motion it belongs to without saying it twice to the eye.
     select.setAttribute('aria-label', `${t('inspector.motion')} ${index + 1}`);
     for (const kind of field.values) {
       if (kind !== motion.kind && used.has(kind)) continue;
@@ -151,7 +179,7 @@ function motionsField(field, { t, value, onChange }) {
     });
 
     line.append(select, remove);
-    group.append(line);
+    return line;
   });
 
   const addable = field.values.filter((kind) => kind !== 'none' && !used.has(kind));
@@ -159,22 +187,21 @@ function motionsField(field, { t, value, onChange }) {
   add.className = 'add-motion';
   add.disabled = addable.length === 0;
   add.addEventListener('click', () => onChange(listPath, [...motions, { kind: addable[0] }]));
-  group.append(add);
 
-  return group;
+  return { rows, add };
 }
 
 /**
  * Turn one field description into something you can actually operate.
  *
  * `onChange(path, value)` reports the dot path that changed and its new
- * value; the field never writes into the document itself. An unknown type
+ * value; the field never writes into the document itself. A 'motions' field
+ * is not one element and is built by createMotions above; an unknown type
  * yields null rather than throwing, so a field description from a newer
  * version of the document simply does not appear.
  */
 export function createField(field, options) {
   if (field.type === 'number') return numberField(field, options);
   if (field.type === 'select') return selectField(field, options);
-  if (field.type === 'motions') return motionsField(field, options);
   return null;
 }

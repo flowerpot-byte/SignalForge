@@ -12,7 +12,7 @@
 // file is imported with no DOM whatsoever.
 import { FIT_MODES, MOTION_KINDS } from '../../../src/engine/document.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
-import { createField } from './field.js';
+import { createField, createMotions } from './field.js';
 
 /** A range plus the one thing a slider needs that a baked control does not. */
 const withStep = (range) => Object.freeze({ ...range, step: 1 });
@@ -53,6 +53,22 @@ const RANGES = Object.freeze({
 /** The fields that belong to the document itself, in the order they appear. */
 const DOCUMENT_FIELDS = Object.freeze(['saturation', 'greenMagenta', 'blueYellow', 'brightness']);
 
+/**
+ * The three headed sections the column is read in, and the heading each one
+ * carries. A flat list of fifteen controls has no rhythm and nothing to steer
+ * by; these are the three questions somebody actually asks in order — which
+ * part of the picture, how it moves, what colour it is.
+ *
+ * Named here and not in field.js because which section a field belongs to is
+ * arithmetic over the document, like everything else in this file, and is
+ * checked in plain node (test/app/inspector.test.js).
+ */
+export const SECTION_TITLES = Object.freeze({
+  image: 'inspector.section.image',
+  motions: 'inspector.motions',
+  colour: 'inspector.section.colour'
+});
+
 /** "layers.0.motions.1.speed" -> 1, or null for anything that is not a motion field. */
 function motionIndexOf(path) {
   const match = /^layers\.\d+\.motions\.(\d+)\./.exec(path);
@@ -91,16 +107,31 @@ export function describeInspector(doc, layerId) {
 
   if (layer && layer.type === 'image') {
     const at = `layers.${index}`;
-    fields.push({ path: `${at}.fit`, type: 'select', labelKey: 'inspector.fit', values: [...FIT_MODES] });
-    fields.push({ path: at, type: 'motions', labelKey: 'inspector.motions', values: [...MOTION_KINDS] });
+    fields.push({
+      path: `${at}.fit`, type: 'select', section: 'image',
+      labelKey: 'inspector.fit', values: [...FIT_MODES]
+    });
+    fields.push({
+      path: at, type: 'motions', section: 'motions',
+      labelKey: 'inspector.motions', values: [...MOTION_KINDS]
+    });
     layer.motions.forEach((_, i) => {
-      fields.push({ path: `${at}.motions.${i}.speed`, type: 'number', labelKey: 'inspector.speed', ...RANGES.speed });
-      fields.push({ path: `${at}.motions.${i}.amount`, type: 'number', labelKey: 'inspector.amount', ...RANGES.amount });
+      fields.push({
+        path: `${at}.motions.${i}.speed`, type: 'number', section: 'motions',
+        labelKey: 'inspector.speed', ...RANGES.speed
+      });
+      fields.push({
+        path: `${at}.motions.${i}.amount`, type: 'number', section: 'motions',
+        labelKey: 'inspector.amount', ...RANGES.amount
+      });
     });
   }
 
   for (const name of DOCUMENT_FIELDS) {
-    fields.push({ path: name, type: 'number', labelKey: `inspector.${name}`, ...RANGES[name] });
+    fields.push({
+      path: name, type: 'number', section: 'colour',
+      labelKey: `inspector.${name}`, ...RANGES[name]
+    });
   }
   return fields;
 }
@@ -178,59 +209,100 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
     if (remove) document.getElementById(`${remove[1]}-add`)?.focus();
   }
 
+  /** A headed section of the column, appended and handed back to fill. */
+  function openSection(name) {
+    const group = document.createElement('section');
+    group.className = 'field-group';
+    const heading = document.createElement('h3');
+    heading.textContent = t(SECTION_TITLES[name]);
+    group.append(heading);
+    container.append(group);
+    return group;
+  }
+
   function render() {
     const focused = rememberFocus();
     const doc = getDocument();
     const layerId = doc.layers.length > 0 ? doc.layers[0].id : null;
 
     container.replaceChildren();
-    let groupIndex = null;
-    let group = null;
+
+    let sectionName = null;
+    let section = null;
+    // The motion rows, and the button that adds another, taken from
+    // createMotions when the motion list itself comes past and put in their
+    // places as the sliders that belong to them arrive.
+    let motionRows = [];
+    let addMotion = null;
+    let motionIndex = null;
+    let motionCard = null;
+
+    /** The add button always goes last, under the motions it can add to. */
+    const closeMotions = () => {
+      if (addMotion && section) section.append(addMotion);
+      addMotion = null;
+      motionRows = [];
+      motionIndex = null;
+      motionCard = null;
+    };
 
     for (const field of describeInspector(doc, layerId)) {
-      const value = SF.getByPath(doc, field.path);
-      const element = createField(widenToInclude(field, value), {
-        t,
-        value,
-        onChange: (path, value) => {
-          const result = onChange(path, value);
-          // A slider must never pull the ground out from under the drag it
-          // is in the middle of; everything else may.
-          if (field.type === 'number') return;
-          Promise.resolve(result).then(render, (err) => {
-            console.error('inspector change failed:', err);
-            // Deliberately no redraw: the change did not take, so the column
-            // is already showing what the document actually holds (see
-            // setDocument in components/preview.js, which commits the new
-            // document and its assets together or neither).
-            onError?.(err);
-          });
-        }
-      });
-      if (!element) continue;
+      if (field.section !== sectionName) {
+        closeMotions();
+        sectionName = field.section;
+        section = openSection(sectionName);
+      }
 
-      // Every motion's sliders are wrapped in their own fieldset so the
-      // repeated "Speed"/"Strength" labels are told apart by something a
-      // screen reader announces, not just by where they sit on screen.
-      const motion = motionIndexOf(field.path);
-      if (motion === null) {
-        groupIndex = null;
-        group = null;
-        container.append(element);
+      const value = SF.getByPath(doc, field.path);
+      const report = (path, next) => {
+        const result = onChange(path, next);
+        // A slider must never pull the ground out from under the drag it
+        // is in the middle of; everything else may.
+        if (field.type === 'number') return;
+        Promise.resolve(result).then(render, (err) => {
+          console.error('inspector change failed:', err);
+          // Deliberately no redraw: the change did not take, so the column
+          // is already showing what the document actually holds (see
+          // setDocument in components/preview.js, which commits the new
+          // document and its assets together or neither).
+          onError?.(err);
+        });
+      };
+
+      if (field.type === 'motions') {
+        const motions = createMotions(field, { t, value, onChange: report });
+        motionRows = motions.rows;
+        addMotion = motions.add;
         continue;
       }
-      if (motion !== groupIndex) {
-        groupIndex = motion;
-        group = document.createElement('fieldset');
-        group.className = 'motion-group';
+
+      const element = createField(widenToInclude(field, value), { t, value, onChange: report });
+      if (!element) continue;
+
+      // A motion is one card: the dropdown that says what kind it is, and the
+      // two sliders that steer it. The card is a fieldset with the motion's
+      // name as its legend, so the repeated "Tempo"/"Staerke" labels are told
+      // apart by something a screen reader announces and not only by where
+      // they sit on screen.
+      const motion = motionIndexOf(field.path);
+      if (motion === null) {
+        section.append(element);
+        continue;
+      }
+      if (motion !== motionIndex) {
+        motionIndex = motion;
+        motionCard = document.createElement('fieldset');
+        motionCard.className = 'motion';
         const legend = document.createElement('legend');
         legend.textContent = `${t('inspector.motion')} ${motion + 1}`;
-        group.append(legend);
-        container.append(group);
+        motionCard.append(legend);
+        if (motionRows[motion]) motionCard.append(motionRows[motion]);
+        section.append(motionCard);
       }
-      group.append(element);
+      motionCard.append(element);
     }
 
+    closeMotions();
     restoreFocus(focused);
   }
 

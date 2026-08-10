@@ -15,7 +15,9 @@ function makeElement(tag) {
   const node = {
     tagName: tag,
     children: [],
-    style: {},
+    // field.js paints a slider's filled track by setting a custom property on
+    // it, which a bare object literal has no method for.
+    style: { properties: {}, setProperty(name, value) { this.properties[name] = value; } },
     attributes: {},
     listeners: {},
     id: '',
@@ -164,6 +166,70 @@ test('a motion is named once in the column, and its dropdown is still named for 
     select.attributes['aria-label'],
     name,
     'the row\'s dropdown must still say which motion it belongs to, even without a visible label'
+  );
+});
+
+// A motion's kind and that motion's two sliders are one thing and now live in
+// one card. They used to be in two separate fieldsets several rows apart — a
+// list of dropdowns under "Bewegungen" and a stack of slider groups under
+// "Bewegung 1", "Bewegung 2" below it — which is what made the column say its
+// own structure twice.
+test('a motion\'s kind and its sliders sit inside one card', () => {
+  const container = makeElement('div');
+  installFakeDom(container);
+
+  mountInspector(container, {
+    t,
+    getDocument: () => normalizeDocument({
+      assets: { q: { kind: 'image', mime: 'image/png', data: 'AAAA' } },
+      layers: [{
+        id: 'image', type: 'image', asset: 'q',
+        motions: [{ kind: 'drift' }, { kind: 'warp' }]
+      }]
+    }).doc,
+    onChange: () => {},
+    onError: () => {}
+  });
+
+  /** The nearest enclosing element with this class name. */
+  const cardHolding = (id) => {
+    let found = null;
+    const walk = (node, card) => {
+      const inside = node.className === 'motion' ? node : card;
+      if (node.id === id) found = inside;
+      (node.children || []).forEach((kid) => walk(kid, inside));
+    };
+    walk(container, null);
+    return found;
+  };
+
+  for (const index of [0, 1]) {
+    const card = cardHolding(`sf-layers-0-kind-${index}`);
+    assert.ok(card, `motion ${index}'s dropdown must be inside a motion card`);
+    assert.equal(
+      cardHolding(`sf-layers-0-motions-${index}-speed`),
+      card,
+      `motion ${index}'s speed slider must be in the same card as its dropdown`
+    );
+    assert.equal(
+      cardHolding(`sf-layers-0-motions-${index}-amount`),
+      card,
+      `motion ${index}'s strength slider must be in the same card as its dropdown`
+    );
+  }
+
+  // And the two motions are two cards, not one holding everything.
+  assert.notEqual(
+    cardHolding('sf-layers-0-kind-0'),
+    cardHolding('sf-layers-0-kind-1'),
+    'each motion must have a card of its own'
+  );
+
+  // The button that adds another comes after them, outside every card.
+  assert.equal(
+    cardHolding('sf-layers-0-add'),
+    null,
+    'the add button belongs to the section, not to the last motion'
   );
 });
 
