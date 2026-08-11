@@ -42,7 +42,7 @@
  * magnified with smoothing off, so each one can be judged for what it is. It is
  * a check, not an artefact — nothing in the build reads it.
  */
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, nativeImage } from 'electron';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -120,9 +120,18 @@ function markSvg({ bgBase, bgNav, accent, accentHover }) {
 </svg>`;
 }
 
-/** The page the icon is rendered in: the mark, filling the window exactly. */
+/**
+ * The page the icon is rendered in: the mark, filling the window exactly.
+ *
+ * `background:transparent` on both the page and the body, spelled out rather
+ * than left to the default. A transparent window (see capture()) is only half
+ * the story — the document still paints its own canvas underneath the SVG, and
+ * on a page that says nothing that canvas is opaque white, which would put the
+ * white corners straight back.
+ */
 function iconPage(svg) {
   return `<!doctype html><meta charset="utf-8" />
+<style>html,body{background:transparent}</style>
 <body style="margin:0;padding:0;width:${SIZE}px;height:${SIZE}px;overflow:hidden">${svg}</body>`;
 }
 
@@ -166,18 +175,89 @@ function previewPage(pngBase64, background) {
 const wait = (ms) => new Promise((done) => { setTimeout(done, ms); });
 
 /**
+ * Refuse to write an icon whose corners are not see-through.
+ *
+ * This is the check the icon shipped without, and the reason nobody noticed:
+ * the mark is dark, every preview of it in this project sits on a dark
+ * background, and an opaque white corner against dark is invisible in a
+ * thumbnail while being glaring in SignalRGB's own light effect list. Looking
+ * at a picture cannot answer this question; the alpha byte can.
+ *
+ * The bitmap is read straight out of the PNG that is about to be written, so
+ * what is checked is the file, not the intention behind it.
+ */
+function assertCornersTransparent(png) {
+  const image = nativeImage.createFromBuffer(png);
+  const { width, height } = image.getSize();
+  // BGRA, one row after another, no padding.
+  const bitmap = image.toBitmap();
+  const alphaAt = (x, y) => bitmap[(y * width + x) * 4 + 3];
+
+  // The corner pixel itself, and one a few pixels in along each edge: a radius
+  // that had collapsed to nearly nothing would still leave the very corner
+  // clear while the rest of the curve was filled.
+  const probes = [];
+  for (const [x, y] of [[0, 0], [width - 1, 0], [0, height - 1], [width - 1, height - 1]]) {
+    const inX = x === 0 ? 4 : width - 5;
+    const inY = y === 0 ? 4 : height - 5;
+    probes.push([x, y], [inX, y], [x, inY]);
+  }
+
+  const opaque = probes.filter(([x, y]) => alphaAt(x, y) !== 0);
+  if (opaque.length > 0) {
+    throw new Error(
+      `the icon's corners are not transparent: ${opaque
+        .map(([x, y]) => `${x},${y} alpha ${alphaAt(x, y)}`).join('; ')}`
+    );
+  }
+
+  // And the mark itself must still be there — a fully transparent square would
+  // pass every check above and be no icon at all.
+  const middle = alphaAt(width >> 1, height >> 1);
+  if (middle !== 255) throw new Error(`the middle of the icon is not opaque (alpha ${middle})`);
+
+  process.stdout.write(`corners transparent (alpha 0 at ${probes.length} probe points), middle opaque\n`);
+}
+
+/**
  * A window nobody ever sees, photographed twice.
  *
  * The page arrives as a FILE rather than as a `data:` URL: Electron refuses a
  * top-level navigation to `data:` and hands back a bare ERR_FAILED, which is
  * measured here and not assumed. The file goes to a throwaway directory and is
  * removed again with it.
+ *
+ * WHY THE WINDOW IS TRANSPARENT
+ *
+ * capturePage() photographs the window, not the page — it hands back whatever
+ * the compositor put on screen, which is the page drawn ON TOP OF the window's
+ * own background. A BrowserWindow's default background is opaque white. The
+ * mark is a rounded square, so the four corners outside its radius are the one
+ * part of the icon the SVG deliberately does not paint, and every one of them
+ * came back as 255,255,255,255 — a white notch in each corner of the app icon,
+ * which is exactly what SignalRGB's effect list showed.
+ *
+ * `transparent` plus a fully transparent `backgroundColor` is what makes the
+ * unpainted area stay unpainted all the way through the capture. It is opt-in
+ * rather than always on because the preview sheet paints its own opaque
+ * background and gains nothing from it.
  */
-async function capture(html, width, height) {
+async function capture(html, width, height, { transparent = false } = {}) {
   const page = join(mkdtempSync(join(tmpdir(), 'signalforge-icon-')), 'page.html');
   writeFileSync(page, html, 'utf8');
   const win = new BrowserWindow({
     width, height, useContentSize: true, show: false,
+    transparent,
+    // A transparent window on Windows keeps its frame unless told otherwise,
+    // and `useContentSize` stops being honoured for it: the first attempt at
+    // this came back as a 512 x 538 capture, the extra 26 rows being the title
+    // bar. Frameless makes the window exactly its content, which is what the
+    // size check below then confirms rather than assumes.
+    frame: !transparent,
+    // Both, not just one: `transparent` allows the window to be see-through,
+    // and the background colour is what it is see-through TO. Left at its
+    // default the window still composites opaque white underneath.
+    backgroundColor: transparent ? '#00000000' : undefined,
     webPreferences: { backgroundThrottling: false }
   });
   try {
@@ -229,7 +309,8 @@ app.whenReady().then(async () => {
       accent: token('accent'),
       accentHover: token('accent-hover')
     };
-    const png = await capture(iconPage(markSvg(colours)), SIZE, SIZE);
+    const png = await capture(iconPage(markSvg(colours)), SIZE, SIZE, { transparent: true });
+    assertCornersTransparent(png);
     mkdirSync(dirname(OUT), { recursive: true });
     writeFileSync(OUT, png);
     process.stdout.write(`icon ${OUT} (${png.length} bytes)\n`);
