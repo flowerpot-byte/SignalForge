@@ -239,6 +239,77 @@ test('a long run settles instead of drifting: frame 999 and frame 1000 are the s
   );
 });
 
+// -------------------------------------------- the wake life, remeasured
+//
+// The frame counts in the table beside TRAIL_STRONGEST_VEIL were measured for
+// the veil over black. The wake over a background fades by different arithmetic
+// (attenuateWake in src/engine/engine.js eats an ALPHA away, because the
+// compositor provably cannot: work/wake-probe.cjs), so the counts have to be
+// asked for again rather than assumed to carry over.
+//
+// The instrument is deliberately the SAME one the old counts were taken with —
+// a full-brightness white field, traced frame by frame until it reaches zero —
+// and the background is BLACK, so the only thing that differs between this
+// measurement and the one above it is which path the renderer takes. A black
+// background is a real background as far as this engine is concerned
+// (backgroundKindOf says `solid`), and it makes the pixel value read out as the
+// wake's own alpha: white at coverage a over black is exactly a.
+
+/** A background, so the renderer takes the wake path rather than the veil. */
+const BLACK_BEHIND = { id: 'background', type: 'solid', color: '#000000', motions: [] };
+/** The foreground that lights one frame and is then switched off. */
+const WHITE_FRONT = { id: 'front', type: 'solid', color: '#ffffff', motions: [] };
+// Opacity 0 rather than a shorter layer list: dropping the layer would leave a
+// ONE-layer document, which has no background, which is the other path.
+const FRONT_OFF = { ...WHITE_FRONT, opacity: 0 };
+
+/** One lit frame over a background, then `count` frames of nothing but the wake. */
+async function wakeLife(name, trail, count) {
+  const frames = [{ timeSec: 0 }];
+  for (let i = 1; i < count; i += 1) {
+    frames.push(i === 1
+      ? { doc: { trail, layers: [BLACK_BEHIND, FRONT_OFF] }, timeSec: i / 30 }
+      : { timeSec: i / 30 });
+  }
+  const [run] = await runJobs([{
+    name, kind: 'engine', doc: { trail, layers: [BLACK_BEHIND, WHITE_FRONT] }, frames, trace: true
+  }]);
+  return run;
+}
+
+test('the wake over a background reaches exactly nothing, in the frames the table says', async () => {
+  // THE TWO ENDS OF THE SLIDER, WHICH ARE THE TWO ENDS OF THE TABLE.
+  //
+  // 8 frames at alpha 0.50 and 114 at alpha 0.02 are what attenuateWake's rule
+  // comes to, and the two ends are checked here against the real engine in a
+  // real Chromium so that the round trip through getImageData/putImageData —
+  // the one part of that rule that is not plain integer arithmetic — cannot
+  // quietly perturb an alpha on the way through.
+  //
+  // AND THE FLOOR, WHICH IS THE WHOLE REASON attenuateWake EXISTS. Every way of
+  // asking the compositor to do this multiply stalls: at trail 100 a
+  // `destination-out` wake stops at 25/255 and stays there for ever, which is a
+  // permanent haze over every pixel anything has ever crossed. `settled` being
+  // a number at all, rather than -1, is that failure not happening.
+  const [strong, weak] = await Promise.all([
+    wakeLife('strongest', 1, 40),
+    wakeLife('weakest', MAX_TRAIL, 260)
+  ]);
+
+  for (const [label, run, expected] of [['trail 1', strong, 8], ['trail 100', weak, 114]]) {
+    const brightest = run.trace.map((entry) => entry.max);
+    assert.equal(brightest[0], 255, `${label}: the lit frame must actually be lit`);
+    for (let i = 1; i < brightest.length; i += 1) {
+      assert.ok(brightest[i] <= brightest[i - 1],
+        `${label}: frame ${i} got brighter (${brightest[i - 1]} -> ${brightest[i]})`);
+    }
+    assert.equal(brightest.indexOf(0), expected,
+      `${label}: the table says the wake is gone after ${expected} frames`);
+    assert.equal(meanBrightness(run.pixels), 0,
+      `${label}: the frame must end exactly black, with no residue floor at all`);
+  }
+});
+
 test('with no trail a sequence lands exactly where a single frame does', async () => {
   // The promise that the old path is untouched. A document with no trail is
   // still a pure function of its time: ten frames of history must leave the

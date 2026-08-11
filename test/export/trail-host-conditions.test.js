@@ -33,6 +33,23 @@ import { buildEffectHtml } from '../../src/export/build-effect.js';
  *     property the other file exists to defend: it still has to move.
  */
 
+/**
+ * TWO DOCUMENTS, BECAUSE THERE ARE TWO WAKES.
+ *
+ * Since 12.08.2026 a document with a background fades its wake by a different
+ * route entirely (renderOverBackground in src/engine/engine.js): a second,
+ * transparent canvas whose alpha the engine eats away itself with getImageData
+ * and putImageData, once per frame, instead of a veil the compositor lays over
+ * an opaque buffer. Every hazard this file exists for is a hazard for that path
+ * too, and two of them are WORSE there:
+ *
+ *   a host that repeats a timestamp for ever drives four hundred read-modify-
+ *   write passes over 64000 pixels that the veil path never performs, and a
+ *   stalled effect leaves a transparent buffer standing rather than an opaque
+ *   one — so "keeps its picture" has to be proved again and not inferred.
+ *
+ * So every check below is run against both, by name, and a failure says which.
+ */
 const DOC = {
   name: 'Wake',
   description: 'a trailing effect under a difficult host',
@@ -53,11 +70,35 @@ const DOC = {
   controls: []
 };
 
-function writeEffect() {
+/** The same wake, over a background that turns under it. */
+const BACKGROUND_DOC = {
+  name: 'Wake over a background',
+  description: 'a trailing effect with a background under it, under a difficult host',
+  publisher: 'SignalForge',
+  trail: 80,
+  layers: [
+    {
+      id: 'background', type: 'gradient', shape: 'conic', bands: 3, angle: 113,
+      stops: [{ at: 0, color: '#20106a' }, { at: 100, color: '#0aa3c2' }],
+      motions: [{ kind: 'spin', speed: 48, amount: 70 }]
+    },
+    {
+      id: 'fill', type: 'particles', pattern: 'rain', count: 90, size: 4,
+      tilt: 10, seed: 7, speed: 55,
+      stops: [{ at: 0, color: '#aaddff' }, { at: 100, color: '#ffffff' }],
+      motions: [{ kind: 'breathe', speed: 30, amount: 40 }]
+    }
+  ],
+  controls: []
+};
+
+const CASES = [['no background', DOC], ['over a background', BACKGROUND_DOC]];
+
+function writeEffect(doc) {
   const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-trail-host-'));
   const file = join(dir, 'effect.html');
-  writeFileSync(file, buildEffectHtml({ doc: DOC, engineSource, lang: 'en' }), 'utf8');
+  writeFileSync(file, buildEffectHtml({ doc, engineSource, lang: 'en' }), 'utf8');
   return { dir, file };
 }
 
@@ -68,8 +109,9 @@ function assertSane(frame, what) {
   assert.ok(mean < 250, `${what}: the frame ran away towards white (mean ${mean})`);
 }
 
-test('a trailing effect survives a host that repeats the same timestamp for ever', async () => {
-  const { dir, file } = writeEffect();
+for (const [label, document_] of CASES) {
+test(`a trailing effect (${label}) survives a host that repeats the same timestamp for ever`, async () => {
+  const { dir, file } = writeEffect(document_);
   try {
     const [first, later, muchLater] = await runJobs([
       { name: 'stuck-1', kind: 'html', file, stamps: [1000], restart: true, settleMs: 0 },
@@ -99,8 +141,8 @@ test('a trailing effect survives a host that repeats the same timestamp for ever
   }
 });
 
-test('a trailing effect survives a host that passes no timestamp at all', async () => {
-  const { dir, file } = writeEffect();
+test(`a trailing effect (${label}) survives a host that passes no timestamp at all`, async () => {
+  const { dir, file } = writeEffect(document_);
   try {
     const [first, later] = await runJobs([
       { name: 'nostamp-1', kind: 'html', file, stamps: [null], restart: true, settleMs: 0 },
@@ -117,13 +159,13 @@ test('a trailing effect survives a host that passes no timestamp at all', async 
   }
 });
 
-test('a trailing effect left to its own two ways in neither goes black nor runs away', async () => {
+test(`a trailing effect (${label}) left to its own two ways in neither goes black nor runs away`, async () => {
   // No restart and no stamps here, deliberately: this is the effect running
   // ITSELF, with its animation-frame loop and its interval fallback both
   // alive, exactly as they are in the host — a full second of whatever
   // Chromium chooses to give a hidden window, which is the closest this
   // project can get to "leave it alone and come back later".
-  const { dir, file } = writeEffect();
+  const { dir, file } = writeEffect(document_);
   try {
     const [early, late] = await runJobs([
       { name: 'itself-early', kind: 'html', file, settleMs: 120 },
@@ -136,14 +178,14 @@ test('a trailing effect left to its own two ways in neither goes black nor runs 
   }
 });
 
-test('a stalled trailing effect keeps its picture instead of fading to black', async () => {
+test(`a stalled trailing effect (${label}) keeps its picture instead of fading to black`, async () => {
   // The one that would be a real fault rather than an inconvenience. If a host
   // stops delivering frames, the veil must stop too — a wake that went on
   // being laid down without anything drawing over it would dim the picture to
   // nothing while the user watched. It cannot happen, because the veil is part
   // of the render and the render is what stopped; this is the check that says
   // so out loud.
-  const { dir, file } = writeEffect();
+  const { dir, file } = writeEffect(document_);
   try {
     const [stalled] = await runJobs([
       {
@@ -161,3 +203,4 @@ test('a stalled trailing effect keeps its picture instead of fading to black', a
     rmSync(dir, { recursive: true, force: true });
   }
 });
+}

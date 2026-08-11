@@ -5,6 +5,7 @@ import { BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT, MAX_TRAIL, clamp } from './do
 import { LAYER_RENDERERS } from './layers/index.js';
 import { adjustColor, isNeutral } from './color.js';
 import { hueDegrees } from './motion/hue.js';
+import { backgroundKindOf } from './slots.js';
 
 // Per-asset watchdog: if an <img> never fires onload or onerror (a stalled
 // data: URI, a browser quirk), don't let it hang the whole document forever.
@@ -148,24 +149,45 @@ function applyFinish(ctx, doc, timeSec) {
  * count read out at a clean 30 fps -- a host that draws faster or slower
  * runs the same number of frames in a different amount of real time.
  *
- *   alpha  frames until a full-brightness pixel reaches exactly 0   at 30 fps
- *   0.50     8                                                       0.27 s
- *   0.12    31                                                       1.03 s
- *   0.06    55                                                       1.83 s
- *   0.02   116   <- trail 100, a long ghost                          3.87 s
+ * There are TWO wakes in this engine and the table has a column for each,
+ * because a document with a background fades its wake by a different route
+ * (see createRenderer below): over black the RGB channels are dimmed by
+ * Chromium's compositor, over a background an ALPHA is eaten away by
+ * attenuateWake's own arithmetic. The two columns being within a frame or two
+ * of each other everywhere is not a coincidence and it is not a target that was
+ * dialled in — see attenuateWake for why the honest rule lands there by itself
+ * — but it is the reason the slider means the same thing on both paths.
+ *
+ *   alpha  frames until a full-brightness pixel is gone     over black   over a background
+ *   0.50                                                        8            8
+ *   0.12                                                       31           32
+ *   0.06                                                       55           54
+ *   0.02   <- trail 100, a long ghost                         116          114
  *
  * (trail 1, the shortest wake worth having, is alpha 0.50.)
  *
- * THE ONE THING THAT HAD TO BE MEASURED. A veil is a multiply, and a multiply
- * in 8 bits can stall: if `value * (1 - alpha)` rounds back to `value`, the
- * pixel never fades again and the effect keeps a permanent smear of everything
- * it has ever drawn. The arithmetic says that happens below 0.5/alpha, i.e. at
- * alpha 0.02 everything under 25 would be stuck. It does NOT happen: Chromium's
- * compositor took every one of the alphas above to exactly 0, in the frame
- * counts listed, with no floor at all (work/veil-probe.cjs, and the same claim
- * is made falsifiable in test/engine/trail.test.js, which renders it). So the
- * bottom of this range is set by how long a ghost is worth having and not by
- * where the arithmetic gives out.
+ * THE ONE THING THAT HAD TO BE MEASURED, AND IT ANSWERED DIFFERENTLY ON THE TWO
+ * PATHS. A veil is a multiply, and a multiply in 8 bits can stall: if
+ * `value * (1 - alpha)` rounds back to `value`, the pixel never fades again and
+ * the effect keeps a permanent smear of everything it has ever drawn. The
+ * arithmetic says that happens below 0.5/alpha, i.e. at alpha 0.02 everything
+ * under 25 would be stuck.
+ *
+ *   OVER BLACK IT DOES NOT HAPPEN. Chromium's compositor took every one of the
+ *   alphas above to exactly 0, in the frame counts listed, with no floor at all
+ *   (work/veil-probe.cjs) — its source-over multiply truncates, so every step
+ *   really does go down.
+ *
+ *   OVER A BACKGROUND IT HAPPENS, AND IT WAS MEASURED HAPPENING. Asking the
+ *   same compositor to multiply an ALPHA instead stalls at exactly the
+ *   predicted floor, by all four routes there are: `destination-out` and
+ *   `destination-in` stop at 25/255 at alpha 0.02, and redrawing the canvas
+ *   through globalAlpha (onto itself or through a scratch canvas) stops at
+ *   42/255 (work/wake-probe.cjs). A wake that stops at a tenth of full
+ *   coverage is a permanent milky film over everything that has ever moved, so
+ *   the compositor is NOT allowed to be the thing that fades this wake.
+ *   attenuateWake does the multiply itself instead, and that is the whole
+ *   reason it exists.
  */
 export const TRAIL_STRONGEST_VEIL = 0.5;
 export const TRAIL_WEAKEST_VEIL = 0.02;
@@ -214,6 +236,56 @@ export function trailAlpha(trail) {
 export function createRenderer() {
   const states = new Map();
 
+  // ==========================================================================
+  // THE TWO WAKES, AND WHY THERE ARE TWO OF THEM
+  // ==========================================================================
+  //
+  // A wake is "the previous picture is still faintly there", and what "faintly"
+  // has to mean depends on what is UNDERNEATH the picture.
+  //
+  // WITHOUT A BACKGROUND there is nothing underneath, so a fading picture fades
+  // to black, and the cheapest true way to say that is to keep the composite on
+  // a canvas and lay translucent black over it once a frame. That is `veil`
+  // below, it is what this engine has always done, and NOT ONE BYTE OF IT
+  // CHANGES — a document with no background renders exactly the pixels it
+  // rendered before this was written, which is what the sequence half of
+  // test/export/parity.test.js pins.
+  //
+  // WITH A BACKGROUND that is false, and it was false in a way that made the
+  // trail slider do literally nothing (measured and pinned for a day in
+  // test/engine/background-render.test.js). The veil held the whole composite,
+  // and a background is part of the composite: a solid or a gradient repaints
+  // all 64000 pixels every frame, so whatever the veil had preserved was gone
+  // before the foreground was drawn on it.
+  //
+  // What a wake over a background has to be instead — and what the corpus is
+  // doing, translated honestly rather than copied:
+  //
+  //   THE CORPUS veils in the BACKGROUND'S COLOUR (`ctx.fillStyle = bgColor +
+  //   "22"`, docs/effekt-inventur.md section A2) rather than in black. That
+  //   works there because their background is one flat colour that does not
+  //   move. Ours moves — that is the entire point of it — and veiling a moving
+  //   background with itself would low-pass its own motion: at trail 100 each
+  //   frame would contribute 2 % of the picture, so a turning conic would
+  //   arrive on screen as the average of the last hundred frames of itself.
+  //   Mud. So the background is EXEMPT from the wake it carries.
+  //
+  //   THIS ENGINE therefore keeps a second canvas, `wake`, which is TRANSPARENT
+  //   and holds the FOREGROUND ONLY. Each frame its alpha is eaten away a
+  //   little, the background is drawn fresh on the visible canvas underneath,
+  //   and the wake is composited over it. A ghost at coverage t is then exactly
+  //   the figure over the background at t, so as t falls the pixel walks to the
+  //   background's CURRENT colour — not to black, and not to a smeared average.
+  //   Where nothing has moved the wake is empty and the background reaches the
+  //   screen untouched, byte for byte.
+  //
+  // Two paths and not one, deliberately. Merging them would mean rendering a
+  // document with no background through the transparent wake as well, over an
+  // opaque black fill — mathematically the same picture, but not the same
+  // BYTES, because the two roundings differ in the last step. The old path is
+  // therefore kept exactly as it was for exactly the documents it already
+  // served.
+
   // Where the layers are composited while a trail is running, so the veil has
   // something of its own to accumulate on. It cannot be the visible canvas:
   // applyFinish writes the graded frame BACK to it, and the next frame's veil
@@ -231,6 +303,16 @@ export function createRenderer() {
   let veil = null;
   let veilCtx = null;
   let primed = false;
+
+  // The other one: transparent, foreground only, composited over a background
+  // that is redrawn underneath it every frame. `wakeLive` is to this what
+  // `primed` is to the veil — whether it holds a picture at all — so dragging
+  // the trail back to 0 and up again, or taking the background off and putting
+  // it back, starts from nothing rather than from a frame that is now seconds
+  // old.
+  let wake = null;
+  let wakeCtx = null;
+  let wakeLive = false;
 
   /** The canvas the layers go onto this frame, plus how to clear it. */
   function veilContext() {
@@ -252,12 +334,195 @@ export function createRenderer() {
     return veilCtx;
   }
 
+  /** The transparent one, built on first use and kept. */
+  function wakeContext() {
+    if (wakeCtx === null) {
+      wake = document.createElement('canvas');
+      wake.width = CANVAS_WIDTH;
+      wake.height = CANVAS_HEIGHT;
+      // willReadFrequently for the same parity reason the veil asks for it —
+      // and here it is not a precaution but a statement of fact, because
+      // attenuateWake reads every pixel of this canvas back on every frame.
+      wakeCtx = wake.getContext('2d', { willReadFrequently: true });
+    }
+    return wakeCtx;
+  }
+
+  /**
+   * Take `alpha` off the wake — the one piece of arithmetic in this engine that
+   * is deliberately NOT left to the browser.
+   *
+   * Everything else in this file asks the compositor to do its multiplying,
+   * because the compositor is faster and, over black, provably correct: the
+   * veil reaches exactly 0 at every alpha (work/veil-probe.cjs). Asking it to
+   * multiply an ALPHA instead does not: every route there is (`destination-out`,
+   * `destination-in`, redrawing through globalAlpha onto itself or through a
+   * scratch canvas) rounds to nearest and therefore STALLS, at 25/255 or
+   * 42/255 at the weakest veil (work/wake-probe.cjs). A wake that stops at a
+   * tenth of full coverage never goes away: every pixel anything has ever
+   * crossed keeps a permanent haze, and after a minute of rain the whole canvas
+   * has one.
+   *
+   * So the multiply is done here, on the alpha byte alone, with the rule that
+   * makes stalling impossible:
+   *
+   *   next = trunc(a * (1 - alpha)), and if that did not go down, a - 1.
+   *
+   * TRUNCATE, NOT ROUND, is the whole fix — and it is also, as it turns out,
+   * what Chromium's own source-over does over black, which is why the frame
+   * counts in the table above come out within a frame or two of the ones that
+   * were measured for the veil rather than needing a range of their own. The
+   * `a - 1` is the belt to that braces: it is what actually runs for the last
+   * forty-odd steps at a weak veil, where the multiply alone would move the
+   * value by less than one whole eighth of a bit.
+   *
+   * RGB IS LEFT ALONE ON PURPOSE. getImageData hands back UNPREMULTIPLIED
+   * pixels, so the colour of a ghost is the colour of the thing that made it,
+   * whatever its coverage; only how much of it there is changes. That is what
+   * makes a ghost a mixture of the figure and the background rather than a
+   * darkened figure.
+   *
+   * Costs 0.115 ms per frame on the 320 x 200 canvas with hardware acceleration
+   * off (work/wake-cost-probe.cjs) — a third of what the colour finish costs,
+   * and it only runs at all for a document that has both a trail and a
+   * background.
+   */
+  function attenuateWake(alpha) {
+    const keep = 1 - alpha;
+    const frame = wakeCtx.getImageData(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    const data = frame.data;
+    for (let i = 3; i < data.length; i += 4) {
+      const a = data[i];
+      if (a === 0) continue;
+      const next = (a * keep) | 0;
+      data[i] = next < a ? next : a - 1;
+    }
+    wakeCtx.putImageData(frame, 0, 0);
+  }
+
   function stateFor(layer, renderer) {
     const existing = states.get(layer.id);
     if (existing && existing.type === layer.type) return existing.value;
     const value = renderer.createState();
     states.set(layer.id, { type: layer.type, value });
     return value;
+  }
+
+  /**
+   * Draw a run of layers onto a context, exactly as this engine always has.
+   *
+   * Lifted out of render() unchanged so that the two paths, and the two passes
+   * of the second one, cannot drift apart into two slightly different ideas of
+   * what drawing a layer means.
+   */
+  function drawLayers(target, layers, assets, timeSec) {
+    for (const layer of layers) {
+      if (!layer.visible || layer.opacity === 0) continue;
+      const renderer = LAYER_RENDERERS.get(layer.type);
+      if (!renderer) continue;
+
+      target.globalAlpha = layer.opacity;
+      target.globalCompositeOperation = BLEND_MODES[layer.blend] ?? 'source-over';
+      const asset = (layer.asset ? assets.get(layer.asset) : null) ?? null;
+
+      // A layer renderer may translate/scale/clip/set filters or shadows
+      // without restoring them; save/restore keeps that contained to this
+      // layer instead of corrupting every layer (and frame) after it.
+      target.save();
+      renderer.render(target, layer, asset, timeSec, stateFor(layer, renderer));
+      target.restore();
+    }
+    target.globalAlpha = 1;
+    target.globalCompositeOperation = 'source-over';
+  }
+
+  /**
+   * Drop scratch state for layers that no longer exist, so (a) the map doesn't
+   * grow unbounded across an editing session, and (b) a reused layer id never
+   * inherits a deleted layer's warmed-up buffers.
+   */
+  function forgetDeadLayers(doc) {
+    const liveIds = new Set(doc.layers.map((layer) => layer.id));
+    for (const id of states.keys()) {
+      if (!liveIds.has(id)) states.delete(id);
+    }
+  }
+
+  /**
+   * One frame of the wake-over-a-background path.
+   *
+   * THE ORDER, AND WHY IT IS THIS ORDER
+   *
+   *   1. the wake is attenuated — the FOREGROUND's past, one step fainter;
+   *   2. the visible canvas is cleared and the background drawn on it, FRESH,
+   *      with no memory of any earlier frame at all;
+   *   3. the wake goes over it, so every surviving ghost is composited against
+   *      the colour the background has RIGHT NOW;
+   *   4. this frame's foreground is drawn;
+   *   5. and it is put into the wake as well, ready to be step 1 next time.
+   *
+   * Nothing is copied back and forth: the visible canvas is the composite, the
+   * wake is the only thing that persists, and neither is ever read by the other.
+   * That also means the finish (brightness, saturation, hue) is applied to the
+   * composite once, exactly as on the other path, and never compounds into the
+   * wake — the trap the veil canvas exists to avoid, avoided here for free.
+   *
+   * THE FOREGROUND IS DRAWN TWICE, AND ONLY WHEN IT HAS TO BE. Steps 4 and 5
+   * are the same layers onto two different canvases, which is a real cost — so
+   * it is skipped whenever it is provably redundant, which is nearly always.
+   * If every foreground layer composites source-over, then
+   *
+   *     (wake ⊕ foreground) over background  ==  foreground over (wake over background)
+   *
+   * because source-over is associative, and step 5 can simply happen BEFORE
+   * step 3 and stand in for step 4 as well. The only documents that need both
+   * passes are the ones with a foreground layer on a blend mode — screen,
+   * multiply, lighten, add — where the foreground genuinely has to see the
+   * background to blend with it. The window offers no blend control at all, so
+   * that is a hand-written document, and it pays for what it asked for.
+   */
+  function renderOverBackground(ctx, doc, assets, timeSec, trail) {
+    primed = false;                  // the other wake holds nothing now
+    const target = wakeContext();
+
+    target.globalAlpha = 1;
+    target.globalCompositeOperation = 'source-over';
+    if (wakeLive) {
+      attenuateWake(trailAlpha(trail));
+    } else {
+      // A canvas that has just been built is already transparent; this is for
+      // the OTHER way in — a trail that was dragged to 0 and back up, or a
+      // background that was taken off and put on again. Either way the picture
+      // in there is stale and must not be the first frame of the new wake.
+      target.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      wakeLive = true;
+    }
+
+    // layers[0] is the background and everything above it is the foreground —
+    // the convention src/engine/slots.js owns, read here and nowhere else in
+    // this file.
+    const background = doc.layers.slice(0, 1);
+    const foreground = doc.layers.slice(1);
+    const needsSecondPass = foreground.some((layer) => layer.visible !== false
+      && layer.opacity !== 0
+      && (BLEND_MODES[layer.blend] ?? 'source-over') !== 'source-over');
+
+    if (!needsSecondPass) drawLayers(target, foreground, assets, timeSec);
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#000';
+    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    drawLayers(ctx, background, assets, timeSec);
+
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(wake, 0, 0);
+
+    if (needsSecondPass) {
+      drawLayers(ctx, foreground, assets, timeSec);
+      drawLayers(target, foreground, assets, timeSec);
+    }
   }
 
   return {
@@ -269,11 +534,27 @@ export function createRenderer() {
       // Coerced the same way hueDegrees coerces hueShift (motion/hue.js): a
       // control panel can hand back a numeric string ("50"), and Number.isFinite
       // on the raw field would refuse that silently rather than reading it.
-      // Coerced the same way hueDegrees coerces hueShift (motion/hue.js): a
-      // control panel can hand back a numeric string ("50"), and Number.isFinite
-      // on the raw field would refuse that silently rather than reading it.
       const trailNumber = Number(doc.trail);
       const trail = Number.isFinite(trailNumber) ? clamp(trailNumber, 0, MAX_TRAIL) : 0;
+
+      // WHICH WAKE THIS DOCUMENT GETS. A background is a POSITION and not a
+      // flag (see src/engine/slots.js), and the only two layer types that can
+      // hold that position are the two that cover the canvas at every setting —
+      // which are exactly the two that used to swallow the wake whole. So the
+      // question "is there something under the foreground that repaints every
+      // pixel" and the question "does this document have a background" are the
+      // same question, and backgroundKindOf already answers it.
+      //
+      // Anything else — one layer, or a hand-written document whose first layer
+      // is a picture or a figure — takes the old path untouched.
+      if (trail > 0 && backgroundKindOf(doc.layers) !== 'none') {
+        renderOverBackground(ctx, doc, assets, timeSec, trail);
+        applyFinish(ctx, doc, timeSec);
+        forgetDeadLayers(doc);
+        return;
+      }
+      wakeLive = false;
+
       const target = trail > 0 ? veilContext() : ctx;
       if (trail <= 0) primed = false;
 
@@ -295,25 +576,7 @@ export function createRenderer() {
       }
       target.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      for (const layer of doc.layers) {
-        if (!layer.visible || layer.opacity === 0) continue;
-        const renderer = LAYER_RENDERERS.get(layer.type);
-        if (!renderer) continue;
-
-        target.globalAlpha = layer.opacity;
-        target.globalCompositeOperation = BLEND_MODES[layer.blend] ?? 'source-over';
-        const asset = (layer.asset ? assets.get(layer.asset) : null) ?? null;
-
-        // A layer renderer may translate/scale/clip/set filters or shadows
-        // without restoring them; save/restore keeps that contained to this
-        // layer instead of corrupting every layer (and frame) after it.
-        target.save();
-        renderer.render(target, layer, asset, timeSec, stateFor(layer, renderer));
-        target.restore();
-      }
-
-      target.globalAlpha = 1;
-      target.globalCompositeOperation = 'source-over';
+      drawLayers(target, doc.layers, assets, timeSec);
 
       // The wake stays where it accumulated and the visible canvas gets a copy
       // of it, which is then graded. drawImage rather than a pixel copy: the
@@ -327,24 +590,20 @@ export function createRenderer() {
       }
 
       applyFinish(ctx, doc, timeSec);
-
-      // Drop scratch state for layers that no longer exist, so (a) the map
-      // doesn't grow unbounded across an editing session, and (b) a reused
-      // layer id never inherits a deleted layer's warmed-up buffers.
-      const liveIds = new Set(doc.layers.map((layer) => layer.id));
-      for (const id of states.keys()) {
-        if (!liveIds.has(id)) states.delete(id);
-      }
+      forgetDeadLayers(doc);
     },
 
     dispose() {
       states.clear();
-      // The wake goes with the renderer. Leaving the canvas behind would only
-      // hold a quarter of a megabyte, but leaving `primed` behind would be a
-      // renderer that says it holds a picture it has thrown away.
+      // The wakes go with the renderer. Leaving the canvases behind would only
+      // hold half a megabyte, but leaving `primed` or `wakeLive` behind would be
+      // a renderer that says it holds a picture it has thrown away.
       veil = null;
       veilCtx = null;
       primed = false;
+      wake = null;
+      wakeCtx = null;
+      wakeLive = false;
     }
   };
 }

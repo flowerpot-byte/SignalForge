@@ -493,6 +493,63 @@ test('a still background under a still swarm renders the same on both paths', as
   }
 });
 
+/**
+ * The same pairing with the wake switched on — and this is the harshest
+ * comparison in this file, because it is the only one where BOTH kinds of state
+ * this engine keeps are running at once and feeding each other.
+ *
+ * The trailing document at the top of the file has no background, so it renders
+ * through the veil canvas: an opaque buffer dimmed by Chromium's own
+ * source-over. This one renders through the OTHER wake (renderOverBackground in
+ * src/engine/engine.js): a transparent buffer whose alpha is eaten away by
+ * arithmetic of the engine's own, read back with getImageData and written back
+ * with putImageData once per frame.
+ *
+ * That read-back is exactly why this test has to exist rather than being
+ * implied by the two above it. Everywhere else the two paths agree because they
+ * hand the same drawing commands to the same browser; here the engine takes
+ * 64000 pixels out of a canvas, changes them and puts them back, thirty times,
+ * with each frame's arithmetic standing on the previous frame's result. One bit
+ * different anywhere in that chain on either side and the last frame is visibly
+ * not the same picture.
+ */
+const RAINING_OVER_CONIC = { ...RAIN_OVER_CONIC, name: 'Regen mit Spur', trail: 70 };
+
+test('a wake over a turning background agrees frame for frame from frame zero', async () => {
+  const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-background-wake-'));
+  const file = join(dir, 'effect.html');
+  const doc = withRealControls(RAINING_OVER_CONIC);
+  writeFileSync(file, buildEffectHtml({ doc, engineSource, lang: 'en' }), 'utf8');
+
+  try {
+    const [viaEngine, viaExport, noTrail] = await runJobs([
+      { name: 'engine', kind: 'engine', doc, frames: secondsFrom(TRAIL_STAMPS) },
+      { name: 'export', kind: 'html', file, stamps: TRAIL_STAMPS, restart: true, settleMs: 0 },
+      // The control: the same thirty frames with the wake switched off. This is
+      // the assertion that used to be impossible to make — until 12.08.2026 a
+      // trail under a background changed nothing whatsoever, so this run and the
+      // one above it would have come back identical and the comparison would
+      // have proved nothing at all about the wake.
+      {
+        name: 'no-trail', kind: 'engine',
+        doc: withRealControls({ ...RAINING_OVER_CONIC, trail: 0 }),
+        frames: secondsFrom(TRAIL_STAMPS)
+      }
+    ]);
+
+    assert.ok(meanBrightness(viaEngine.pixels) > 5, 'engine frame is blank');
+    assert.ok(meanBrightness(viaExport.pixels) > 5, 'exported frame is blank');
+    assert.ok(maxDifference(viaEngine.pixels, noTrail.pixels) > 0,
+      'the wake must actually change the frame, or this test compares nothing');
+    assert.equal(maxDifference(viaEngine.pixels, viaExport.pixels), 0,
+      `after ${TRAIL_STAMPS.length} frames the two paths differ; mean difference `
+        + `${meanDifference(viaEngine.pixels, viaExport.pixels)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('rain over a turning background agrees frame for frame from frame zero', async () => {
   const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-background-seq-'));
