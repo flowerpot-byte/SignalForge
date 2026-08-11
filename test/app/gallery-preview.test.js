@@ -166,11 +166,18 @@ const STARTERS = {
   ...Object.fromEntries(FIGURE_STARTERS.map((figure) => [
     figure, { layers: [{ id: 'fill', type: 'shape', figure, motions: [] }] }
   ])),
-  // The swarm names only its type — no pattern — because there is ONE particle
-  // tile rather than one per pattern (gallery.js says why at length), so
-  // normalizeDocument's own default is what it starts on. Mirrored from
-  // main.js's STARTERS exactly as the eleven above it are.
-  particles: { layers: [{ id: 'fill', type: 'particles', motions: [] }] }
+  // The swarm still names no pattern — there is ONE particle tile rather than
+  // one per pattern (gallery.js says why at length), so normalizeDocument's own
+  // default is what it starts on — but it does name its geometry and its wake,
+  // and that is the one starter in this table that does. Why, in main.js:
+  // at the engine's defaults a drop outruns its own width between frames and
+  // the wake beads into separate discs, so the tile ships the corpus's geometry
+  // instead. Mirrored from main.js's STARTERS and STARTER_DOCUMENT_FIELDS
+  // exactly as the eleven above it are mirrored.
+  particles: {
+    trail: 45,
+    layers: [{ id: 'fill', type: 'particles', count: 50, size: 10, speed: 16, motions: [] }]
+  }
 };
 const defaults = (kind) => STARTERS[kind] ?? null;
 

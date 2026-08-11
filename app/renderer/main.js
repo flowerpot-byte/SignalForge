@@ -572,15 +572,56 @@ async function boot() {
     ring: { type: 'shape', figure: 'ring' },
     star: { type: 'shape', figure: 'star' },
     heart: { type: 'shape', figure: 'heart' },
-    // The swarm, and it names NOTHING AT ALL beyond its type — not even the
-    // pattern, where the four figures above each name theirs. That is not an
-    // omission: the pattern's own default is the first entry of
-    // PARTICLE_PATTERNS, so leaving it out is what makes normalizeDocument the
-    // single place that decides where an effect starts, exactly as leaving the
-    // colour out does for the solid and the band count for the stripes. There
-    // is one particle tile rather than four (see gallery.js for why at length),
-    // so there is no pattern for this table to have to distinguish.
-    particles: { type: 'particles' }
+    // The swarm, and the ONE entry in this table that names numbers. The
+    // pattern is still left out — its own default is the first entry of
+    // PARTICLE_PATTERNS, and there is one particle tile rather than four (see
+    // gallery.js for why at length), so there is no pattern here to
+    // distinguish. What is named is the GEOMETRY, and it is named because the
+    // engine's defaults are a different picture from the one this tile is for.
+    //
+    // At the engine's own numbers — 80 drops of size 3 travelling at 30 — a
+    // drop moves further between two frames than it is wide, so the wake the
+    // trail leaves arrives as a string of separate discs rather than a streak.
+    // Measured, photographed and written up: work/wake-shots/
+    // 05-the-money-shot-rain-with-a-wake-over-a-moving-gradient.png beside
+    // 05b-the-same-wake-at-the-corpus-geometry.png, and the "Wie es aussieht —
+    // ehrlich" section of .superpowers/sdd/background-layer-report.md.
+    //
+    // These four numbers are that second picture: the geometry read off the
+    // corpus of community rain effects (`Poison`, whose drops are up to 11 px
+    // wide, move a pixel or two a frame, number 30 rather than 150, and whose
+    // veil is alpha 0.13 — the SHORT end of our trail slider, about 45). Set
+    // this way the same engine draws continuous comet tails, which is what
+    // somebody pressing a tile called "Partikel" is picturing.
+    //
+    // Named HERE and not in normalizeDocument on purpose. The engine's
+    // defaults are pinned by the compatibility tests — every document ever
+    // written that says nothing about count, size or speed must keep rendering
+    // byte for byte as it did — so a starting point is a property of the TILE,
+    // not of the format. This is the same table making the same kind of choice
+    // it makes by staying silent everywhere else; it simply has something to
+    // say here.
+    particles: { type: 'particles', count: 50, size: 10, speed: 16 }
+  });
+
+  /**
+   * What a tile says about the WHOLE document rather than about its one layer.
+   *
+   * A second table because it holds a different kind of thing: STARTERS above
+   * is spread into the layer, and these fields sit beside `layers` at the top
+   * of the document. Keeping them apart is what lets the eleven silent entries
+   * above stay one line each instead of every one of them growing a wrapper
+   * for a field it has nothing to say about.
+   *
+   * One entry, and the wake is the whole reason it exists. The trail is a
+   * document-wide veil (see MAX_TRAIL in src/engine/document.js), so the
+   * particle tile cannot ask for it from inside its layer — and without it the
+   * geometry above is only half the picture: big slow drops with no wake are
+   * big slow drops, not comet tails. 45 is the short end of the slider, which
+   * is where the corpus's own alpha 0.13 lands.
+   */
+  const STARTER_DOCUMENT_FIELDS = Object.freeze({
+    particles: { trail: 45 }
   });
 
   /**
@@ -599,7 +640,13 @@ async function boot() {
   function starterDocument(kind) {
     const starter = STARTERS[kind];
     if (!starter) return null;
-    return { layers: [{ id: COLOUR_LAYER, ...starter, motions: [] }] };
+    return {
+      // Whatever this tile says about the document as a whole (the wake, for
+      // the swarm), then its one layer. Before `layers` rather than after so
+      // that a table entry can never overwrite it by accident.
+      ...STARTER_DOCUMENT_FIELDS[kind],
+      layers: [{ id: COLOUR_LAYER, ...starter, motions: [] }]
+    };
   }
 
   /**
