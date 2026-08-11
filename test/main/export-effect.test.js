@@ -74,8 +74,8 @@ test('the effect lands in the folder it was given, under the document\'s name', 
 test('the exported effect carries the shared control set', async () => {
   const { io, result } = await runExport('Controls');
   const html = io.files.get(result.path);
-  for (const property of ['motion', 'tempo', 'strength', 'fit', 'brightness',
-    'saturation', 'greenMagenta', 'blueYellow']) {
+  for (const property of ['motion', 'tempo', 'strength', 'fit', 'trail', 'hueShift', 'hueCycle',
+    'brightness', 'saturation', 'greenMagenta', 'blueYellow']) {
     assert.match(html, new RegExp(`<meta property="${property}"`), `the "${property}" control is missing`);
   }
 });

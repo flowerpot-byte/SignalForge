@@ -108,7 +108,14 @@ export async function runJobs(jobs, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
       name: entry.name,
       width: entry.width,
       height: entry.height,
-      pixels: decodePixels(entry.pixels)
+      pixels: decodePixels(entry.pixels),
+      // Only a `frames` job asking for `trace` has one — the per-frame
+      // brightness of a sequence, which is how a wake is watched fading
+      // without shipping a quarter of a gigabyte of pixels back (see __run in
+      // page.html). Undefined everywhere else, deliberately, so nothing reads
+      // it by accident and finds an empty array that means "nothing was
+      // measured" rather than "nothing was there".
+      trace: entry.trace
     }));
   } finally {
     rmSync(dir, { recursive: true, force: true });

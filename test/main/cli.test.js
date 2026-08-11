@@ -115,7 +115,7 @@ test('the cli emits the shared control list itself, not a copy of it', () => {
 
     // The three colour controls came with the shared list; before it existed
     // the CLI had no way to offer them at all.
-    for (const property of ['saturation', 'greenMagenta', 'blueYellow']) {
+    for (const property of ['saturation', 'greenMagenta', 'blueYellow', 'trail', 'hueShift', 'hueCycle']) {
       assert.match(html, new RegExp(`<meta property="${property}"`), `the "${property}" control is missing`);
       assert.ok(html.includes(`typeof ${property}`), `bootstrap must read the "${property}" global every frame`);
     }

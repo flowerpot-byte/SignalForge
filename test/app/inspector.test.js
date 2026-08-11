@@ -99,7 +99,10 @@ test('every slider offers exactly the range the matching exported control offers
     ['blueYellow', 'blueYellow'],
     ['layers.0.angle', 'angle'],
     ['layers.0.bands', 'bands'],
-    ['layers.0.stops.0.at', 'stop']
+    ['layers.0.stops.0.at', 'stop'],
+    ['hueShift', 'hueShift'],
+    ['hueCycle', 'hueCycle'],
+    ['trail', 'trail']
   ];
 
   for (const [path, property] of pairs) {

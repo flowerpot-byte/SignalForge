@@ -29,7 +29,8 @@ test('a solid effect offers its colour, the motions it can perform, and the docu
   const doc = withLiveMotion(docWith({ type: 'solid' }), 'a1');
   assert.deepEqual(
     effectControls(doc, 'a1').map((control) => control.property),
-    ['color', 'motion', 'tempo', 'strength', 'brightness', 'saturation', 'greenMagenta', 'blueYellow']
+    ['color', 'motion', 'tempo', 'strength',
+      'trail', 'hueShift', 'hueCycle', 'brightness', 'saturation', 'greenMagenta', 'blueYellow']
   );
 });
 
@@ -54,7 +55,7 @@ test('a gradient effect offers one colour per stop, the shape, the angle and the
   assert.deepEqual(
     effectControls(doc, 'a1').map((control) => control.property),
     ['color1', 'color2', 'color3', 'shape', 'angle', 'bands', 'motion', 'tempo', 'strength',
-      'brightness', 'saturation', 'greenMagenta', 'blueYellow']
+      'trail', 'hueShift', 'hueCycle', 'brightness', 'saturation', 'greenMagenta', 'blueYellow']
   );
 });
 

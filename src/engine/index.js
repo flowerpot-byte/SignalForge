@@ -26,6 +26,8 @@ export {
   DEFAULT_BANDS,
   MIN_GRADIENT_STOPS,
   MAX_GRADIENT_STOPS,
+  MAX_HUE_SHIFT,
+  MAX_TRAIL,
   colorAtPosition,
   DEFAULT_SOLID_COLOR,
   DEFAULT_GRADIENT_STOPS,
@@ -36,8 +38,11 @@ export {
   normalizeDocument
 } from './document.js';
 
-export { createRenderer, loadAssets } from './engine.js';
-export { adjustColor, isNeutral, NEUTRAL_COLOR } from './color.js';
+export {
+  createRenderer, loadAssets, trailAlpha, TRAIL_STRONGEST_VEIL, TRAIL_WEAKEST_VEIL
+} from './engine.js';
+export { adjustColor, isNeutral, NEUTRAL_COLOR, hueCoefficients } from './color.js';
+export { hueDegrees } from './motion/hue.js';
 export { LAYER_RENDERERS, registerLayer } from './layers/index.js';
 export { computeSourceRect } from './util/fit.js';
 export { createWarpField, WARP_PEAK_FACTOR } from './motion/warp.js';

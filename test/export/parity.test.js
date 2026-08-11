@@ -118,6 +118,123 @@ const DOC = {
 // test/export/moving-shapes.test.js, which drives the exported file's own
 // clock and requires it to animate.
 
+// ---------------------------------------------------------------------------
+// WHAT PARITY MEANS ONCE A DOCUMENT CAN CARRY A TRAIL
+// ---------------------------------------------------------------------------
+//
+// The test below compares ONE frame, and it can, because every document it
+// knows about is a pure function of (document, assets, time): render at t and
+// you get the same pixels whenever and however often you ask.
+//
+// A trail gives that up on purpose — frame N is composited over frame N-1, so
+// there is no such thing as "the frame at t = 0.8" without the frames that led
+// to it (docs/effekt-inventur.md, section C2, names this price in advance).
+// The guarantee that replaces it is the honest one, and it is what the second
+// test proves:
+//
+//   two renderers that both start from frame 0 and are given the SAME SEQUENCE
+//   of frames end on the same pixels.
+//
+// Both halves are needed. The single-frame test stays exactly as it was, and
+// stays the stronger claim, for every document without a trail — which is
+// still every document this app makes unless somebody moves that slider.
+//
+// The two clocks have to be made to agree, and that is the fiddly part rather
+// than an incidental. The exported effect accumulates its own seconds from the
+// timestamps its host hands it (see `advance` in src/export/build-effect.js);
+// the engine job is given seconds outright. So the stamps are handed to the
+// effect and the very same accumulation is done here, in the same order, on
+// the same doubles — not a tidier equivalent of it — and the resulting seconds
+// are what the engine renders at. A tidier equivalent (t = i / 25, say) would
+// differ in the last bits and turn an exact comparison into a fuzzy one.
+const TRAIL_STAMPS = Array.from({ length: 30 }, (unused, i) => 1000 + i * 40);
+
+/** The seconds the exported effect's own clock will arrive at, stamp by stamp. */
+function secondsFrom(stamps) {
+  const seconds = [];
+  let elapsed = 0;
+  let previous = null;
+  for (const stamp of stamps) {
+    // The first frame is always t = 0, whatever the host started counting
+    // from; after that it is the gap, in seconds, added on.
+    if (previous !== null) elapsed += (stamp - previous) / 1000;
+    previous = stamp;
+    seconds.push(elapsed);
+  }
+  return seconds;
+}
+
+const TRAIL_DOC = {
+  name: 'Parity with a wake',
+  description: 'preview and export must agree frame for frame',
+  publisher: 'SignalForge',
+  // Strong enough that several seconds of history are visibly still in the
+  // frame at the end, so a renderer that quietly cleared instead of veiling
+  // could not pass this by drawing the last frame correctly.
+  trail: 75,
+  // And a hue that is turning, so the second thing this change added is under
+  // the same comparison: it is time-dependent, it runs in the shared pixel
+  // pass, and it is applied to the composite AFTER the veil.
+  hueCycle: 45,
+  hueShift: 20,
+  // HALF TRANSPARENT, AND THAT IS NOT A DETAIL OF THIS TEST BUT OF THE FEATURE.
+  // The veil goes UNDER the frame being drawn, which is what the eight effects
+  // in docs/effekt-inventur.md section A2 do — so an opaque layer covering all
+  // 320 x 200 repaints every pixel and hides its own wake completely. Something
+  // has to let the past through: an opacity below 1 here, or an additive blend,
+  // or (once there are any) particles that only cover part of the canvas.
+  layers: [{
+    id: 'a1', type: 'gradient', shape: 'stripes', bands: 4, angle: 113,
+    opacity: 0.45,
+    stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#0b1020' }],
+    motions: [{ kind: 'drift', speed: 55, amount: 90 }]
+  }],
+  controls: []
+};
+
+test('a trailing effect and the engine agree frame for frame from frame zero', async () => {
+  const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-trail-'));
+  const file = join(dir, 'effect.html');
+  writeFileSync(file, buildEffectHtml({ doc: TRAIL_DOC, engineSource, lang: 'en' }), 'utf8');
+
+  try {
+    const [viaEngine, viaExport, noTrail] = await runJobs([
+      { name: 'engine', kind: 'engine', doc: TRAIL_DOC, frames: secondsFrom(TRAIL_STAMPS) },
+      // restart: the effect draws frames of its own from the moment it loads —
+      // its animation-frame loop, and the interval that keeps a stalled effect
+      // alive — and with a trail every one of those lands in the picture and
+      // stays. So it is put back to frame zero and both ways in are withheld,
+      // and this list becomes its entire history. See restartFromFrameZero in
+      // test/harness/electron-main.cjs.
+      { name: 'export', kind: 'html', file, stamps: TRAIL_STAMPS, restart: true, settleMs: 0 },
+      // The control: the same sequence with the trail switched off. If this
+      // came back identical to the trailing run, the comparison above would be
+      // proving nothing at all.
+      {
+        name: 'no-trail', kind: 'engine',
+        doc: { ...TRAIL_DOC, trail: 0 }, frames: secondsFrom(TRAIL_STAMPS)
+      }
+    ]);
+
+    assert.ok(meanBrightness(viaEngine.pixels) > 5, 'engine frame is blank');
+    assert.ok(meanBrightness(viaExport.pixels) > 5, 'exported frame is blank');
+    assert.equal(viaEngine.width, viaExport.width);
+    assert.equal(viaEngine.height, viaExport.height);
+
+    assert.ok(
+      maxDifference(viaEngine.pixels, noTrail.pixels) > 0,
+      'the trail must actually change the frame, or this test compares nothing'
+    );
+
+    assert.equal(maxDifference(viaEngine.pixels, viaExport.pixels), 0,
+      `after ${TRAIL_STAMPS.length} frames the two paths differ; mean difference `
+        + `${meanDifference(viaEngine.pixels, viaExport.pixels)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('the exported effect renders the same pixels as the engine does', async () => {
   const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-'));

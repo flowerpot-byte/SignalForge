@@ -282,6 +282,16 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // more than it did, not one thing less.
   assert.equal(report.inGerman.section, 'Farbe');
   assert.equal(report.inEnglish.section, 'Colour', 'the settings column\'s sections must follow the switch');
+  // The section the document-wide trail gave the column, and the three sliders
+  // that arrived with the trail and the hue. Every one of them is a word the
+  // window did not have before, so every one of them has to follow the switch
+  // too — that is the whole thing this check is for.
+  assert.equal(report.inGerman.motionsSection, 'Bewegungen');
+  assert.equal(report.inEnglish.motionsSection, 'Motions');
+  assert.equal(report.inGerman.trail, 'Nachziehen');
+  assert.equal(report.inEnglish.trail, 'Trail');
+  assert.equal(report.inGerman.hueShift, 'Farbdrehung');
+  assert.equal(report.inEnglish.hueShift, 'Hue Shift');
   assert.equal(report.inEnglish.settings, 'Settings', 'and the frame');
   assert.equal(report.inEnglish.exportButton, 'Save to SignalRGB', 'the footer must follow it too');
   assert.equal(report.inEnglish.brightness, 'Brightness', 'and the settings column');

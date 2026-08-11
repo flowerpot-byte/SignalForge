@@ -194,8 +194,40 @@ export const BINDABLE_DOCUMENT_FIELDS = Object.freeze([
   'brightness',
   'saturation',
   'greenMagenta',
-  'blueYellow'
+  'blueYellow',
+  'hueShift',
+  'hueCycle',
+  'trail'
 ]);
+
+/**
+ * How far round the colour wheel the whole document is turned, and how fast it
+ * keeps turning. See src/engine/motion/hue.js for why this is two fields.
+ *
+ * The angle is CLAMPED rather than wrapped, the same decision a gradient's
+ * `angle` already made and for the same reason: the control is a slider with
+ * two ends, and a document that says 400 is more likely to be a mistake than an
+ * intent to mean 40. (The renderer wraps whatever it is finally handed, because
+ * the cycle adds to it and would otherwise walk off the end of the slider's
+ * range within seconds.)
+ */
+export const MAX_HUE_SHIFT = 360;
+
+/**
+ * How much of the previous frame survives into this one, 0..100.
+ *
+ * 0 is the hard clear this engine has always done and is the default, so every
+ * document written before this field renders byte for byte as it did. Above 0
+ * the frame is veiled instead of cleared and the picture leaves a wake — which
+ * is what docs/effekt-inventur.md, section A2, found in at least eight of the
+ * 31 effects read, and what `Radar` alone among them puts on a control of its
+ * own (also called "trail").
+ *
+ * The ceiling is 100 because that is what a percentage is; what 100 MEANS in
+ * veil terms is the engine's business, and the two ends of it were measured
+ * rather than picked — see trailAlpha in src/engine/engine.js.
+ */
+export const MAX_TRAIL = 100;
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
@@ -643,6 +675,14 @@ export function normalizeDocument(raw) {
     saturation: clamp(num(input.saturation, 100), 0, 200),
     greenMagenta: clamp(num(input.greenMagenta, 0), -100, 100),
     blueYellow: clamp(num(input.blueYellow, 0), -100, 100),
+    // Where the colour wheel is parked and how fast it keeps turning. Both
+    // default to "not turned and not turning", which is what every document
+    // written before them says by saying nothing (see MAX_HUE_SHIFT above).
+    hueShift: clamp(num(input.hueShift, 0), 0, MAX_HUE_SHIFT),
+    hueCycle: clamp(num(input.hueCycle, 0), 0, 100),
+    // How much of the previous frame survives into this one. 0 is the hard
+    // clear this engine has always done — see MAX_TRAIL above.
+    trail: clamp(num(input.trail, 0), 0, MAX_TRAIL),
     layers,
     controls,
     assets

@@ -87,6 +87,74 @@ async function stopAnimationFrames(win) {
   );
 }
 
+/**
+ * Put a loaded effect back to frame zero, hand it one exact sequence of
+ * frames, and then make sure it can never draw another.
+ *
+ * All of it in ONE evaluation, on purpose: every await is a yield back to the
+ * page's own event loop, and the whole point here is that the page must not
+ * get a turn in the middle.
+ *
+ * Needed by exactly one kind of question, and only since documents can carry a
+ * trail. Without one, a frame is a pure function of its time, so it does not
+ * matter how many frames the page drew on its own between loading and being
+ * measured — the last one asked for is the one on the canvas. With a trail
+ * every frame is composited over the one before it, so a stray frame from the
+ * page's own loop, or from the setInterval fallback that keeps a stalled effect
+ * alive, lands in the picture and stays there. Measured: that is why a
+ * frame-for-frame comparison of a trailing effect against the engine came back
+ * with a mean difference of 78 before this existed.
+ *
+ * FOUR things have to go, and all four are things the effect really has:
+ *
+ *  - requestAnimationFrame, replaced with a stub, the same way
+ *    stopAnimationFrames above does it, so `update` stops re-queueing itself;
+ *  - the setInterval the bootstrap took out at load and did not keep the id of
+ *    — cleared by id over a generous range, which is blunt but is the only
+ *    handle there is on a timer somebody else started;
+ *  - the effect's own clock and renderer, so the sequence that follows starts
+ *    from t = 0 with an empty wake rather than from wherever it had got to;
+ *  - and, once the sequence is done, `step` itself.
+ *
+ * THE LAST ONE IS THE ONE THAT WAS NOT OBVIOUS. Stubbing requestAnimationFrame
+ * stops new callbacks being queued; it does nothing about the ones ALREADY
+ * queued, which hold the real `update` function object and are called by
+ * Chromium later with a real timestamp of its own — hundreds of milliseconds
+ * past the last stamp handed over here, so `advance` counts the gap and the
+ * effect quietly renders another frame after the sequence was supposed to have
+ * ended. Measured before this line existed: a trail-free effect, whose frames
+ * are a pure function of their time, came back matching the engine at 1, 2 and
+ * 10 frames and NOT at 3, 5 and 30 — the signature of a stray frame arriving
+ * or not arriving depending on scheduling.
+ *
+ * `update` cannot be taken away from those pending callbacks — they hold the
+ * function itself. `step` can: `update` looks it up in the global scope every
+ * time it runs, so replacing it makes every stray callback a no-op.
+ *
+ * waitForAssets must already have resolved before this is called: its poll is
+ * a setTimeout, and the sweep below would cancel it.
+ */
+async function runSequenceFromFrameZero(win, stamps, globals) {
+  await win.webContents.executeJavaScript(`(function (stamps, globals) {
+    window.requestAnimationFrame = function () { return 0; };
+    for (var id = 1; id < 10000; id += 1) clearInterval(id);
+    renderer.dispose();
+    seconds = 0;
+    previousStamp = null;
+    drawnStamp = null;
+    drawnAny = false;
+    if (globals) {
+      for (var key in globals) window[key] = globals[key];
+    }
+    for (var i = 0; i < stamps.length; i += 1) {
+      update(stamps[i] === null ? undefined : stamps[i]);
+    }
+    // Nothing may draw from here on: see the note above about callbacks that
+    // were queued before requestAnimationFrame was taken away.
+    step = function () {};
+  })(${JSON.stringify(stamps)}, ${JSON.stringify(globals ?? null)}); undefined;`);
+}
+
 async function main() {
   const { jobs } = JSON.parse(fs.readFileSync(jobFile, 'utf8'));
   const win = new BrowserWindow({
@@ -118,11 +186,20 @@ async function main() {
         // rather than after the last, so the control value is in place for
         // every frame of that history instead of only the final one.
         await waitForAssets(win);
-        if (job.setGlobals) await win.webContents.executeJavaScript(assignGlobals(job.setGlobals));
-        for (const stamp of job.stamps) {
-          await win.webContents.executeJavaScript(
-            `update(${stamp === null ? 'undefined' : JSON.stringify(stamp)}); undefined;`
-          );
+        if (job.restart) {
+          // restart: this list is the effect's WHOLE history, not just its
+          // last part, and nothing else may draw before, during or after it —
+          // see runSequenceFromFrameZero. Opt-in, because every question asked
+          // before documents could carry a trail was about a single frame, and
+          // a single frame is a pure function of its time whatever else drew.
+          await runSequenceFromFrameZero(win, job.stamps, job.setGlobals);
+        } else {
+          if (job.setGlobals) await win.webContents.executeJavaScript(assignGlobals(job.setGlobals));
+          for (const stamp of job.stamps) {
+            await win.webContents.executeJavaScript(
+              `update(${stamp === null ? 'undefined' : JSON.stringify(stamp)}); undefined;`
+            );
+          }
         }
       } else {
         // There is a frame on the canvas from here on -- see renderFirstFrame.

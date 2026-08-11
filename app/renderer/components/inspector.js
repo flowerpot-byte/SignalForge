@@ -54,6 +54,9 @@ const RANGES = Object.freeze({
   blueYellow: withStep(CONTROL_RANGES.blueYellow),
   angle: withStep(CONTROL_RANGES.angle),
   bands: withStep(CONTROL_RANGES.bands),
+  hueShift: withStep(CONTROL_RANGES.hueShift),
+  hueCycle: withStep(CONTROL_RANGES.hueCycle),
+  trail: withStep(CONTROL_RANGES.trail),
   // The one range in this table the exported effect does not also offer, and
   // src/export/effect-controls.js says why at length: a stop position needs a
   // gradient to be seen against, and SignalRGB's panel has none.
@@ -73,8 +76,32 @@ const REPEATING_SHAPES = Object.freeze(
   GRADIENT_SHAPES.filter((shape) => shape !== 'linear' && shape !== 'radial')
 );
 
-/** The fields that belong to the document itself, in the order they appear. */
-const DOCUMENT_FIELDS = Object.freeze(['saturation', 'greenMagenta', 'blueYellow', 'brightness']);
+/**
+ * The colour fields that belong to the document itself, in the order they
+ * appear.
+ *
+ * THE TWO HUE CONTROLS LEAD, AND THE OTHER FOUR DID NOT MOVE. Everything under
+ * this heading answers a question about colour, and there is an order to those
+ * questions: WHICH colour (the hue and the speed it turns at), then how much of
+ * it (saturation), then which way it leans (the two axes), then how bright.
+ * The hue is the only one of the six that changes what colour the effect IS
+ * rather than grading a colour already chosen, so it comes first — and it is
+ * also, by a distance, the most used control in the 31 effects read for
+ * docs/effekt-inventur.md (section A4), which is a good reason for it to be the
+ * first thing under the heading rather than the last.
+ *
+ * The existing four keep their exact relative order. Two controls arriving
+ * above a list is something somebody reads once; the same list re-sorted under
+ * them is something they have to learn again, and there was no reason to ask
+ * for that.
+ *
+ * The pair is adjacent and in this order — where it is parked, then how fast it
+ * moves — which is the shape every motion card in this column already has (what
+ * kind, then how fast, then how strongly).
+ */
+const DOCUMENT_FIELDS = Object.freeze([
+  'hueShift', 'hueCycle', 'saturation', 'greenMagenta', 'blueYellow', 'brightness'
+]);
 
 /**
  * The three headed sections the column is read in, and the heading each one
@@ -275,6 +302,26 @@ export function describeInspector(doc, layerId) {
       });
     });
   }
+
+  // The trail belongs to the DOCUMENT and it belongs under this heading, which
+  // is the one place in this column those two things pull apart.
+  //
+  // It is not a colour, so it cannot go with the six below; and it is not a
+  // property of a layer, so it cannot go in a motion card. What it actually
+  // describes is what happens BETWEEN two frames — whether the picture the
+  // motions just moved is wiped or left to fade — which is why it reads
+  // correctly at the end of "Bewegungen" and nowhere else. Somebody wondering
+  // why their drift does not smear looks under motion.
+  //
+  // Emitted whatever the layer is, exactly like the six colour fields, so the
+  // heading is there even for a document with no layers at all. The cost of
+  // that is one section holding one slider on an empty window; the cost of the
+  // alternative — a control that comes and goes with the layer type — is a
+  // setting somebody can store and then not find again.
+  fields.push({
+    path: 'trail', type: 'number', section: 'motions',
+    labelKey: 'inspector.trail', ...RANGES.trail
+  });
 
   for (const name of DOCUMENT_FIELDS) {
     fields.push({

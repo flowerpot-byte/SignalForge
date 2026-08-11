@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_BANDS, MAX_BANDS,
-  motionKindsFor, normalizeDocument
+  MAX_HUE_SHIFT, MAX_TRAIL, motionKindsFor, normalizeDocument
 } from '../engine/document.js';
 
 /**
@@ -50,6 +50,9 @@ import {
  *   angle        <- gradient angle   clamp 0..360   offered 0..360
  *   bands        <- gradient bands   clamp 1..24    offered 1..24
  *   stop         <- stops[].at       clamp 0..100   offered 0..100
+ *   hueShift     <- hueShift         clamp 0..360   offered 0..360
+ *   hueCycle     <- hueCycle         clamp 0..100   offered 0..100 (0 is off, not slow)
+ *   trail        <- trail            clamp 0..100   offered 0..100 (0 is off, not short)
  *
  * `stop` is the one entry here the exported effect does NOT offer, and it is
  * in this table anyway because it is a range and this is where ranges live —
@@ -90,7 +93,21 @@ export const CONTROL_RANGES = Object.freeze({
   // test/export/effect-controls.test.js reads both ends of this range out of
   // normalizeDocument rather than trusting these two numbers.
   bands: Object.freeze({ min: MIN_BANDS, max: MAX_BANDS }),
-  stop: Object.freeze({ min: 0, max: 100 })
+  stop: Object.freeze({ min: 0, max: 100 }),
+  // Where the colour wheel is parked, in degrees. The full circle is offered
+  // because the full circle is what there is — unlike `tempo`, whose floor is
+  // 1 because zero is not a speed, every number here is a real place to be.
+  hueShift: Object.freeze({ min: 0, max: MAX_HUE_SHIFT }),
+  // How fast it keeps turning, and 0 is deliberately IN the range where the
+  // tempo control's is not. The difference is what the zero means: a motion
+  // set to tempo 0 is a motion that was chosen and then stopped, which is a
+  // state worth having a different way of expressing (choose "none"). There is
+  // no such dropdown here — this slider IS the on switch, so it has to be able
+  // to reach off, and off is its default.
+  hueCycle: Object.freeze({ min: 0, max: 100 }),
+  // Same shape, same reason: 0 is not "a very short wake", it is the hard
+  // clear this engine has always done, and it is where the slider starts.
+  trail: Object.freeze({ min: 0, max: MAX_TRAIL })
 });
 
 /**
@@ -229,6 +246,19 @@ export function effectControls(doc, layerId) {
     );
     motionControls();
   }
+
+  // The three document-wide settings that are about the picture rather than
+  // about one layer, put ahead of the grade because that is the order somebody
+  // reads them in: how it smears, what colour it is, and only then how bright
+  // and how strong. `trail` leads because it is the one that changes what the
+  // effect IS rather than how it is tinted — see docs/effekt-inventur.md,
+  // section A2, where a veil is what makes a whole family of effects look the
+  // way they do.
+  controls.push(
+    slider('trail', 'Nachziehen', 'Trail', doc.trail, 'trail'),
+    slider('hueShift', 'Farbdrehung', 'Hue Shift', doc.hueShift, 'hueShift'),
+    slider('hueCycle', 'Farbwechsel', 'Colour Cycle', doc.hueCycle, 'hueCycle')
+  );
 
   controls.push(
     slider('brightness', 'Helligkeit', 'Brightness', doc.brightness, 'brightness'),

@@ -26,11 +26,69 @@
 
   const resolveUrl = (asset) => (asset.data ? `data:${asset.mime};base64,${asset.data}` : asset.file);
 
+  /**
+   * The frame as two numbers, for a run too long to hand back whole.
+   *
+   * A thousand frames of pixels is a quarter of a gigabyte of base64; a
+   * thousand frames of "how bright is the brightest thing left" is what the
+   * questions about a trail are actually made of — has the wake faded away, is
+   * it still fading, has it settled.
+   */
+  function measure() {
+    const d = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let max = 0;
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.max(d[i], d[i + 1], d[i + 2]);
+      if (v > max) max = v;
+      sum += d[i] + d[i + 1] + d[i + 2];
+    }
+    return { max, mean: sum / (3 * canvas.width * canvas.height) };
+  }
+
   window.__run = async function (job) {
     const { createRenderer, loadAssets, normalizeDocument } = window.SignalForgeEngine;
     const { doc } = normalizeDocument(job.doc);
     const assets = await loadAssets(doc, { resolveUrl });
     const renderer = createRenderer();
+
+    /**
+     * `frames`: a whole SEQUENCE on one renderer and one canvas, in order.
+     *
+     * This is the only way to ask a trailing document anything at all. Without
+     * a trail a frame is a function of (document, assets, time) and one render
+     * answers everything; with one, frame N is composited over frame N-1, so
+     * what a document looks like at a given second depends on every second
+     * before it (see createRenderer in src/engine/engine.js).
+     *
+     * An entry is either a plain number — the second to render at — or an
+     * object that may also carry a `doc` to switch to from that frame onwards.
+     * Switching is what makes "what is LEFT of the picture once it stops being
+     * drawn" a measurable thing rather than an argument.
+     *
+     * Rendered exactly ONCE per entry, unlike the single-frame path below
+     * which renders twice to warm up lazily built scratch buffers. Twice here
+     * would lay the veil down twice per frame and measure a sequence nothing
+     * ever runs. It is also the more faithful comparison: the exported effect
+     * draws each frame once from cold too.
+     */
+    if (Array.isArray(job.frames)) {
+      let current = doc;
+      let currentAssets = assets;
+      const trace = [];
+      for (const entry of job.frames) {
+        const step = typeof entry === 'number' ? { timeSec: entry } : entry;
+        if (step.doc) {
+          current = normalizeDocument(step.doc).doc;
+          currentAssets = await loadAssets(current, { resolveUrl });
+        }
+        renderer.render(ctx, current, currentAssets, step.timeSec);
+        if (job.trace) trace.push(measure());
+      }
+      const sequence = grab();
+      renderer.dispose();
+      return job.trace ? Object.assign(sequence, { trace }) : sequence;
+    }
 
     // `before`: documents drawn on THIS renderer first, so what is measured
     // afterwards is what a live app shows rather than what a cold start shows.

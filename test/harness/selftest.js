@@ -227,7 +227,21 @@ async function selfTestFirstRun(win, folder) {
       // panel it opens — one word, two places, so it is read off the control,
       // which is the half a person actually meets first.
       settings: document.getElementById('footer-settings').getAttribute('aria-label'),
-      section: document.querySelector('#inspector-body .field-group > h2').textContent,
+      // Named rather than taken as "the first section there is". It used to be
+      // the first, and then the document-wide trail gave the empty window a
+      // "Bewegungen" heading above it — which would have read as this check
+      // failing when nothing about the language switch had changed. A section
+      // is asked for by the name it carries in the DOM.
+      section: document.querySelector('#inspector-body .field-group[data-section="colour"] > h2').textContent,
+      // The heading the trail brought with it, checked for the same reason
+      // every other word here is: it is new, it is in the column, and it has
+      // to follow the switch.
+      // The word alone: a section heading also carries its glyph and, for a
+      // list, the button that adds to it, and textContent would hand back all
+      // three run together.
+      motionsSection: document.querySelector('#inspector-body .field-group[data-section="motions"] > h2 > span').textContent,
+      trail: document.querySelector('label[for="sf-trail"]').textContent,
+      hueShift: document.querySelector('label[for="sf-hueShift"]').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,
       // The invitation moved into the empty frame it is talking about (see

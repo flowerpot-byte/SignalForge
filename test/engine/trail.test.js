@@ -1,0 +1,197 @@
+// SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+// Copyright (C) 2026 Max
+// SPDX-License-Identifier: GPL-3.0-or-later
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  trailAlpha, TRAIL_STRONGEST_VEIL, TRAIL_WEAKEST_VEIL
+} from '../../src/engine/engine.js';
+import { normalizeDocument, MAX_TRAIL } from '../../src/engine/document.js';
+import { runJobs } from '../harness/render.js';
+import { maxDifference, pixelAt, meanBrightness } from '../harness/pixels.js';
+
+// ------------------------------------------------------------- the mapping
+
+test('no trail is a hard clear, whatever junk the field carries', () => {
+  assert.equal(trailAlpha(0), 1);
+  assert.equal(trailAlpha(-5), 1);
+  assert.equal(trailAlpha(NaN), 1);
+  assert.equal(trailAlpha(undefined), 1);
+  assert.equal(trailAlpha('a lot'), 1);
+});
+
+test('the two ends of the slider are the two measured veils', () => {
+  assert.equal(trailAlpha(1), TRAIL_STRONGEST_VEIL);
+  assert.equal(trailAlpha(MAX_TRAIL), TRAIL_WEAKEST_VEIL);
+  assert.equal(trailAlpha(1e6), TRAIL_WEAKEST_VEIL, 'past the top is the top');
+});
+
+test('every step of the slider makes the wake longer, never shorter', () => {
+  let previous = trailAlpha(1);
+  for (let trail = 2; trail <= MAX_TRAIL; trail += 1) {
+    const alpha = trailAlpha(trail);
+    assert.ok(alpha < previous, `trail ${trail} veils harder than ${trail - 1} does`);
+    previous = alpha;
+  }
+});
+
+test('the slider is geometric, so each step lengthens the wake by the same factor', () => {
+  // A straight line from 0.5 to 0.02 would put every long ghost in the last
+  // few steps; this is the claim that it does not. The ratio between two
+  // neighbouring steps is the same everywhere along the slider.
+  const ratio = (trail) => trailAlpha(trail + 1) / trailAlpha(trail);
+  const first = ratio(1);
+  for (const trail of [5, 25, 50, 75, 99]) {
+    assert.ok(Math.abs(ratio(trail) - first) < 1e-12, `the step at ${trail} is not the step at 1`);
+  }
+});
+
+test('a document says there is no trail until it is told otherwise, and clamps what it is told', () => {
+  assert.equal(normalizeDocument({}).doc.trail, 0);
+  assert.equal(normalizeDocument({ trail: 1e6 }).doc.trail, MAX_TRAIL);
+  assert.equal(normalizeDocument({ trail: -1e6 }).doc.trail, 0);
+  assert.equal(normalizeDocument({ trail: 'lots' }).doc.trail, 0);
+});
+
+// ------------------------------------------------------------- the rendering
+//
+// Everything below needs a real canvas, because what a translucent black
+// rectangle laid over an opaque one comes to is the browser's arithmetic and
+// not this project's. It runs in the same Electron the exported effect is
+// judged in.
+
+/** A full-canvas white field, so a wake is unmistakable against black. */
+const LIT = {
+  name: 'Lit',
+  layers: [{ id: 'a1', type: 'solid', color: '#ffffff', motions: [] }],
+  controls: []
+};
+/** The same document with nothing drawn at all: only the clear or the veil. */
+const DARK = { name: 'Dark', layers: [], controls: [] };
+
+const withTrail = (doc, trail) => ({ ...doc, trail });
+
+test('a trail keeps the previous frame, and no trail wipes it — measured, not assumed', async () => {
+  // One lit frame, then a document with nothing in it. Without a trail the
+  // second frame is the hard clear this engine has always done and comes back
+  // pure black; with one it comes back at very nearly the fraction the veil
+  // leaves standing. That is the whole feature in two frames.
+  const [off, on] = await runJobs([
+    {
+      name: 'off',
+      kind: 'engine',
+      doc: withTrail(LIT, 0),
+      frames: [{ timeSec: 0 }, { doc: withTrail(DARK, 0), timeSec: 1 / 30 }]
+    },
+    {
+      name: 'on',
+      kind: 'engine',
+      doc: withTrail(LIT, 60),
+      frames: [{ timeSec: 0 }, { doc: withTrail(DARK, 60), timeSec: 1 / 30 }]
+    }
+  ]);
+
+  const wiped = pixelAt(off.pixels, off.width, 160, 100);
+  assert.deepEqual([wiped.r, wiped.g, wiped.b], [0, 0, 0], 'no trail must leave nothing behind');
+
+  const ghost = pixelAt(on.pixels, on.width, 160, 100);
+  const expected = 255 * (1 - trailAlpha(60));
+  assert.ok(
+    Math.abs(ghost.r - expected) <= 2,
+    `frame N must hold frame N-1 attenuated: expected about ${expected.toFixed(1)}, got ${ghost.r}`
+  );
+  assert.equal(ghost.r, ghost.g, 'the veil is black, so it cannot tint what it dims');
+  assert.equal(ghost.g, ghost.b);
+});
+
+test('the wake goes on fading, frame after frame, and reaches nothing at all', async () => {
+  // The claim the whole trail rests on, and the one that could have gone the
+  // other way: an 8-bit multiply can STALL. If `value * (1 - alpha)` ever
+  // rounds back to `value`, the pixel is stuck and the effect keeps a
+  // permanent smear of everything it has ever drawn. Measured here at the
+  // weakest veil there is — the case where a stall would be worst — over more
+  // frames than the fade is supposed to need.
+  const frames = [{ timeSec: 0 }];
+  for (let i = 1; i < 400; i += 1) {
+    frames.push(i === 1 ? { doc: withTrail(DARK, MAX_TRAIL), timeSec: i / 30 } : { timeSec: i / 30 });
+  }
+
+  const [run] = await runJobs([{
+    name: 'fade', kind: 'engine', doc: withTrail(LIT, MAX_TRAIL), frames, trace: true
+  }]);
+
+  const brightest = run.trace.map((entry) => entry.max);
+  assert.equal(brightest[0], 255, 'the lit frame must actually be lit');
+  // Monotonic all the way down: never brighter than the frame before it.
+  for (let i = 2; i < brightest.length; i += 1) {
+    assert.ok(
+      brightest[i] <= brightest[i - 1],
+      `frame ${i} got brighter (${brightest[i - 1]} -> ${brightest[i]}) with nothing drawing`
+    );
+  }
+  const settled = brightest.indexOf(0);
+  assert.ok(settled > 30, `a wake that is gone in ${settled} frames is not a wake`);
+  assert.ok(settled < 200, `the wake had not gone after ${brightest.length} frames`);
+  // And it stays gone rather than sitting on a residue floor.
+  assert.equal(brightest[brightest.length - 1], 0);
+  assert.equal(meanBrightness(run.pixels), 0, 'the frame must end exactly black');
+});
+
+test('a long run settles instead of drifting: frame 999 and frame 1000 are the same bytes', async () => {
+  // The other way a feedback loop can go wrong. The document below draws a
+  // half-transparent field every frame over whatever the veil left, so the
+  // picture climbs towards a fixed point rather than towards black — and the
+  // question is whether it STOPS there or keeps creeping. A thousand frames,
+  // and then two frames compared byte for byte.
+  const climbing = {
+    name: 'Climbing',
+    trail: 80,
+    layers: [{ id: 'a1', type: 'solid', color: '#ffffff', opacity: 0.5, motions: [] }],
+    controls: []
+  };
+  const upTo = (count) => Array.from({ length: count }, (unused, i) => i / 30);
+
+  const [ninth, thousandth] = await runJobs([
+    { name: '999', kind: 'engine', doc: climbing, frames: upTo(999) },
+    { name: '1000', kind: 'engine', doc: climbing, frames: upTo(1000) }
+  ]);
+
+  // A single frame of a half-transparent white field over black is 127; the
+  // veil piles it on itself until it settles at 127.5 / (1 - 0.5 * (1 - alpha))
+  // = about 245. Requiring well over 200 is therefore also the proof that a
+  // thousand frames really were rendered one after another rather than one
+  // frame a thousand times.
+  const settled = meanBrightness(thousandth.pixels);
+  assert.ok(settled > 200, `the wake must actually pile up; the frame came back at ${settled}`);
+  assert.ok(settled <= 255, `and it must stay a possible picture; got ${settled}`);
+  assert.equal(
+    maxDifference(ninth.pixels, thousandth.pixels), 0,
+    'a thousand frames in, one more frame must change nothing: the wake has settled, not drifted'
+  );
+});
+
+test('with no trail a sequence lands exactly where a single frame does', async () => {
+  // The promise that the old path is untouched. A document with no trail is
+  // still a pure function of its time: ten frames of history must leave the
+  // renderer in exactly the state it would have been in with none.
+  const still = {
+    name: 'Still',
+    layers: [{
+      id: 'a1', type: 'gradient', shape: 'stripes', bands: 5, angle: 37,
+      stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#0b1020' }],
+      motions: [{ kind: 'drift', speed: 40, amount: 70 }]
+    }],
+    controls: []
+  };
+
+  const [alone, afterHistory] = await runJobs([
+    { name: 'alone', kind: 'engine', doc: still, frames: [0.3] },
+    { name: 'history', kind: 'engine', doc: still, frames: [0, 0.1, 0.2, 0.25, 0.28, 0.3] }
+  ]);
+
+  assert.ok(meanBrightness(alone.pixels) > 5, 'the frame must not be blank');
+  assert.equal(
+    maxDifference(alone.pixels, afterHistory.pixels), 0,
+    'without a trail, what came before must not reach the frame at all'
+  );
+});
