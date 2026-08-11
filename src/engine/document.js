@@ -537,7 +537,25 @@ export function normalizeDocument(raw) {
 
   const assets = {};
   const assetsInput = input.assets && typeof input.assets === 'object' ? input.assets : {};
-  for (const [id, value] of Object.entries(assetsInput)) assets[id] = normalizeAsset(value);
+  for (const [id, value] of Object.entries(assetsInput)) {
+    // defineProperty rather than assets[id] = ..., for exactly one id: an
+    // asset called "__proto__" hit Object.prototype's setter instead of
+    // becoming a key, so it vanished without a word and every layer pointing at
+    // it drew nothing. A document is data, and "__proto__" is a perfectly legal
+    // name for a picture in it — JSON.parse itself makes it an ordinary own
+    // property, so a document that round-trips through a file has one, and only
+    // this assignment lost it.
+    //
+    // Defined rather than switching the object to a null prototype, because
+    // this object is handed out to everything downstream (the renderer, the
+    // exported effect's bootstrap, the tests) and a null-prototype object is a
+    // different KIND of thing to be handed one of: no hasOwnProperty, no
+    // toString, and a debugger that shows it differently. A plain object with
+    // an own "__proto__" key behaves like every other assets object there is.
+    Object.defineProperty(assets, id, {
+      value: normalizeAsset(value), enumerable: true, writable: true, configurable: true
+    });
+  }
 
   const doc = {
     version: DOCUMENT_VERSION,

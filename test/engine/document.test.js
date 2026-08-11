@@ -173,6 +173,49 @@ test('normalizeAsset defaults and mutually excludes data vs file', () => {
   assert.equal(doc.assets.empty.data, undefined);
 });
 
+/**
+ * An asset whose id happens to be "__proto__".
+ *
+ * `assets[id] = ...` on a plain object does not make a key when the id is
+ * "__proto__" — it reaches Object.prototype's setter instead, and the asset
+ * disappeared without a word while every layer pointing at it drew nothing. A
+ * document is data, and that is a legal name for a picture in it: JSON.parse
+ * makes it an ordinary own property, so any document that has been through a
+ * file can carry one, and only this one assignment lost it.
+ *
+ * The prototype must be left alone at the same time — an id out of a foreign
+ * file writing into Object.prototype would be the other half of the same bug,
+ * and a worse half.
+ */
+test('an asset called "__proto__" survives as a key rather than vanishing', () => {
+  // Built with JSON.parse, and it has to be: in an object LITERAL, `__proto__:`
+  // sets the prototype instead of making a key, so a literal here would be
+  // testing something else entirely. JSON.parse makes an ordinary own property,
+  // which is exactly what a document read out of a file arrives as.
+  const input = JSON.parse('{"assets":{"__proto__":{"data":"base64stuff"},"ordinary":{"file":"image.png"}}}');
+  const { doc } = normalizeDocument({ ...input, layers: [{ type: 'image', asset: '__proto__' }] });
+
+  assert.ok(
+    Object.prototype.hasOwnProperty.call(doc.assets, '__proto__'),
+    'it has to be an own key, not a write into the prototype'
+  );
+  assert.equal(doc.assets.__proto__.data, 'base64stuff');
+  assert.deepEqual(Object.keys(doc.assets).sort(), ['__proto__', 'ordinary']);
+
+  // And nothing was poisoned on the way: the object is still an ordinary one.
+  assert.equal(Object.getPrototypeOf(doc.assets), Object.prototype);
+  assert.equal({}.data, undefined, 'Object.prototype must be exactly as it was');
+});
+
+test('an asset called "__proto__" survives being written to a file and read back', () => {
+  // The round trip is the reason this matters at all: JSON.parse produces an
+  // own "__proto__" property, so a document that has been through an .sfx or an
+  // exported effect arrives here with one.
+  const parsed = JSON.parse('{"assets":{"__proto__":{"data":"AAAA"}}}');
+  const { doc } = normalizeDocument(parsed);
+  assert.equal(doc.assets.__proto__.data, 'AAAA');
+});
+
 test('blend mode table maps onto canvas composite operations', () => {
   assert.equal(BLEND_MODES.normal, 'source-over');
   assert.equal(BLEND_MODES.add, 'lighter');
