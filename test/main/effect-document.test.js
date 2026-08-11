@@ -265,6 +265,85 @@ test('an effect from a newer SignalForge is turned down, not half-read', () => {
   });
 });
 
+// ----------------------------------------------------------- the decoy block
+
+/**
+ * The one way a text search can be aimed somewhere the DOM would not go.
+ *
+ * The running effect finds its own document with getElementById — an ELEMENT
+ * lookup. This reader finds it by searching the text. Those two agree on every
+ * file this app writes, and they can be made to disagree by a file somebody
+ * else writes: a block inside an HTML comment, or inside a <textarea>, is text
+ * to the browser and an element to nobody, so getElementById steps past it and
+ * finds the genuine one further down while a text search stops at the decoy.
+ *
+ * What that buys is precisely the worst thing an effect library can do: show,
+ * tile and edit one document while SignalRGB runs another, with the window
+ * cheerfully reporting the wrong one. Both shapes below were built to do
+ * exactly that, and both are refused now — not by parsing HTML (a second,
+ * weaker browser is how this kind of bug gets made) but by refusing a file that
+ * carries the opening tag more than once, which no export ever does.
+ */
+const DECOY_DOCUMENT = {
+  version: DOCUMENT_VERSION,
+  name: 'Harmless',
+  layers: [{ id: 'fill', type: 'solid', color: '#00ff00', motions: [] }]
+};
+
+/** The decoy's block, written exactly as a genuine one is. */
+const decoyBlock = () =>
+  `<script id="${DOCUMENT_SCRIPT_ID}" type="application/json">${JSON.stringify(DECOY_DOCUMENT)}</script>`;
+
+test('a decoy block hidden in an HTML comment is refused, not read', async () => {
+  const { html } = await exported(GRADIENT);
+  // In front of the genuine block, where a text search reaches it first and
+  // getElementById never sees it at all.
+  const attack = `<!-- ${decoyBlock()} -->\n${html}`;
+
+  assert.equal(looksLikeEffect(attack), false, 'a shelf must not offer a tile for it');
+  assert.throws(() => readEffectDocument(attack), (error) => {
+    assert.match(error.message, /more than one SignalForge document block/i);
+    // A sentence for a person, not a stack trace: this is what the window puts
+    // on its one line of feedback.
+    assert.ok(error.message.length > 40 && error.message.endsWith('.'));
+    return true;
+  });
+
+  // And falsifiably so: without the decoy the very same file opens, and what it
+  // opens is the genuine document rather than the decoy's.
+  const clean = readEffectDocument(html);
+  assert.equal(clean.doc.name, GRADIENT.name);
+  assert.notEqual(clean.doc.name, DECOY_DOCUMENT.name);
+});
+
+test('a decoy block hidden in a <textarea> is refused too', async () => {
+  const { html } = await exported(GRADIENT);
+  const attack = html.replace('</body>', `<textarea>${decoyBlock()}</textarea></body>`);
+  assert.notEqual(attack, html, 'the attack has to actually be in the file for this to prove anything');
+
+  assert.equal(looksLikeEffect(attack), false);
+  assert.throws(() => readEffectDocument(attack), /more than one SignalForge document block/i);
+});
+
+test('the reader is exactly as case-sensitive about the id as getElementById is', async () => {
+  const { html } = await exported(GRADIENT);
+  // getElementById('sf-document') does not match id="SF-DOCUMENT", so neither
+  // may this. A reader looser than the DOM is a reader that can be pointed at
+  // a block the effect itself never runs.
+  const shouty = html.replace(`id="${DOCUMENT_SCRIPT_ID}"`, `id="${DOCUMENT_SCRIPT_ID.toUpperCase()}"`);
+  assert.notEqual(shouty, html);
+  assert.equal(looksLikeEffect(shouty), false);
+  assert.throws(() => readEffectDocument(shouty), /not a SignalForge effect/i);
+});
+
+test('a genuine export still opens, which is what makes the refusals worth having', async () => {
+  const { html } = await exported(GRADIENT);
+  assert.equal(looksLikeEffect(html), true);
+  const { doc, problems } = readEffectDocument(html);
+  assert.deepEqual(problems, [], 'and without a single correction');
+  assert.equal(doc.name, GRADIENT.name);
+});
+
 test('an effect the reader refuses hands back nothing at all', () => {
   // The caller's guarantee, made explicit: every refusal is a throw, so there
   // is no half-read document for a caller to accidentally put on screen.

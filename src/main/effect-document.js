@@ -55,11 +55,23 @@ import { DOCUMENT_VERSION } from '../engine/document.js';
  * attributes and about their order being what build-effect.js writes, and
  * deliberately not tolerant about anything else: this is looking for a block
  * THIS app wrote, not for any JSON in any HTML.
+ *
+ * NOT CASE-INSENSITIVE, and that is a fix rather than an oversight. This reader
+ * is a stand-in for what the running effect's own bootstrap does, and that is
+ * `document.getElementById(DOCUMENT_SCRIPT_ID)` — a DOM lookup on an id, which
+ * is case-SENSITIVE. An `i` flag made the reader looser than the thing it
+ * stands in for, and every place the two differ is a place where SignalForge
+ * could show one document while SignalRGB runs another. Being stricter than the
+ * DOM can only ever cost a refusal, which is a sentence somebody reads; being
+ * looser costs a lie. Every effect this app writes is lower case (see
+ * build-effect.js), so nothing genuine is refused by this.
  */
 const OPENING_TAG = new RegExp(
-  `<script\\s+id="${DOCUMENT_SCRIPT_ID}"\\s+type="application/json"\\s*>`,
-  'i'
+  `<script\\s+id="${DOCUMENT_SCRIPT_ID}"\\s+type="application/json"\\s*>`
 );
+
+/** The same pattern, for counting rather than locating. See TWO_BLOCKS below. */
+const OPENING_TAG_EVERYWHERE = new RegExp(OPENING_TAG.source, 'g');
 
 const CLOSING_TAG = '</script>';
 
@@ -68,15 +80,55 @@ const NOT_AN_EFFECT = 'this file is not a SignalForge effect — it carries no S
   + 'so there is nothing in it to open.';
 
 /**
+ * What a file carrying more than one opening tag gets told.
+ *
+ * THE ATTACK THIS CLOSES, because it is not obvious. Finding the block by
+ * searching the text is exact for a file this app wrote, but a file somebody
+ * else wrote can contain the marker in a place the DOM does not see it: inside
+ * an HTML comment, or inside a <textarea>, where it is text rather than an
+ * element. `getElementById` — which is how the running effect finds its own
+ * document — would step straight past such a block and return the real one
+ * further down. A search through the raw text stops at the first one.
+ *
+ * That gap is worth exactly one thing to an attacker, and it is a bad one:
+ * SignalForge would show, tile and let somebody edit the decoy while SignalRGB
+ * runs the genuine block underneath. The window would be honestly reporting the
+ * wrong document.
+ *
+ * The fix is not to start parsing HTML — that would be a second, weaker copy of
+ * the browser, which is how this class of bug is usually MADE. It is to refuse
+ * the ambiguity outright: a SignalForge export contains the opening tag exactly
+ * once (jsonBlock in build-effect.js writes one, and escapes every `</` in the
+ * JSON so the document's own contents cannot produce another). Two is therefore
+ * never one of ours, whatever the second one is for, and a file that is not one
+ * of ours is refused with a sentence rather than guessed at.
+ */
+const TWO_BLOCKS = 'this file carries more than one SignalForge document block, so there is no '
+  + 'saying which one it actually runs. SignalForge will not open it.';
+
+/**
  * The JSON text an effect carries, or null if it carries none.
  *
  * Split out from readEffectDocument so that "is this one of ours?" can be
  * answered while listing a folder without parsing anything.
+ *
+ * Two different negatives, deliberately told apart: "there is no block here"
+ * is null, because a folder SignalRGB watches is FULL of perfectly good effects
+ * that are not ours and saying so about each of them would be noise. "There are
+ * two blocks here" is a throw, because that is a file pretending to be one of
+ * ours, and the person looking at the shelf is owed the sentence.
+ *
+ * @throws {Error} for a file carrying more than one opening tag.
  */
 export function effectDocumentJson(html) {
   const text = String(html ?? '');
   const opening = OPENING_TAG.exec(text);
   if (!opening) return null;
+  // Counted over the whole file, not just from here on: a decoy can sit either
+  // side of the genuine block, and the point is that there is more than one at
+  // all, not which one came first.
+  if ((text.match(OPENING_TAG_EVERYWHERE) ?? []).length > 1) throw new Error(TWO_BLOCKS);
+
   const start = opening.index + opening[0].length;
   const end = text.indexOf(CLOSING_TAG, start);
   // An effect whose block was never closed is a truncated file, not a document.
@@ -86,9 +138,20 @@ export function effectDocumentJson(html) {
 
 /**
  * Whether this text is an effect this app can open. Cheap: no JSON parsing, no
- * normalising — just whether the block is there and closed.
+ * normalising — just whether the block is there, alone, and closed.
+ *
+ * A file with two blocks answers false here rather than throwing: this is the
+ * question the folder listing asks about every file it finds (see listEffects),
+ * and its answer is whether to offer a tile. The sentence belongs to whoever
+ * tries to OPEN one, and readEffectDocument is where that happens.
  */
-export const looksLikeEffect = (html) => effectDocumentJson(html) !== null;
+export const looksLikeEffect = (html) => {
+  try {
+    return effectDocumentJson(html) !== null;
+  } catch {
+    return false;
+  }
+};
 
 /**
  * The document inside an exported effect.
