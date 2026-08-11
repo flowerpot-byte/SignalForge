@@ -142,11 +142,19 @@ function applyFinish(ctx, doc, timeSec) {
  * alpha values. Both ends were MEASURED rather than chosen by feel, in a
  * Chromium of the same build the preview and the harness run on:
  *
- *   alpha  frames until a full-brightness pixel reaches exactly 0
- *   0.50     8   (0.27 s)   <- trail 1, the shortest wake worth having
- *   0.12    31   (1.03 s)
- *   0.06    55   (1.83 s)
- *   0.02   116   (3.87 s)   <- trail 100, a long ghost
+ * The frame counts are the measurement, and they are host-independent: a veil
+ * is laid down once per drawn frame, whatever that frame costs in wall-clock
+ * time. The seconds beside them are NOT a second measurement, only the frame
+ * count read out at a clean 30 fps -- a host that draws faster or slower
+ * runs the same number of frames in a different amount of real time.
+ *
+ *   alpha  frames until a full-brightness pixel reaches exactly 0   at 30 fps
+ *   0.50     8                                                       0.27 s
+ *   0.12    31                                                       1.03 s
+ *   0.06    55                                                       1.83 s
+ *   0.02   116   <- trail 100, a long ghost                          3.87 s
+ *
+ * (trail 1, the shortest wake worth having, is alpha 0.50.)
  *
  * THE ONE THING THAT HAD TO BE MEASURED. A veil is a multiply, and a multiply
  * in 8 bits can stall: if `value * (1 - alpha)` rounds back to `value`, the

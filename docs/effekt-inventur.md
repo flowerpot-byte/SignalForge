@@ -424,7 +424,11 @@ des Schleiers ist **gemessen** statt geraten (`work/veil-probe.cjs`): Chromium b
 Pixel bei jeder geprüften Deckkraft bis 0,01 **exakt auf 0** herunter, es bleibt also kein
 Rest stehen — die Befürchtung, dass ein 8-Bit-Multiplikat bei kleinen Werten hängenbleibt,
 hat sich nicht bestätigt. Deshalb ist die Skala geometrisch von 0,5 (Nachglühen 8 Bilder)
-bis 0,02 (116 Bilder ≈ 3,9 s) gespannt. Die Ebenen werden dabei in eine eigene, unsichtbare
+bis 0,02 (116 Bilder) gespannt — die Bildzahlen sind die eigentliche Messung, wirtunabhängig,
+weil der Schleier pro gezeichnetem Bild aufgetragen wird und nicht pro Sekunde. Die
+Sekundenangabe (≈ 3,9 s für 116 Bilder) gilt nur bei sauberen 30 fps und ist es nicht selbst:
+ein Wirt, der schneller oder langsamer zeichnet, durchläuft dieselben 116 Bilder in einer
+anderen Zeit. Die Ebenen werden dabei in eine eigene, unsichtbare
 Fläche gemalt und erst danach kopiert und eingefärbt — sonst würde Helligkeit und Farbdrehung
 bei jedem Bild erneut auf den Nachzieh-Rest angewandt und der liefe binnen einer Sekunde ins
 Weiße. Die Parität ist wie angekündigt umgestellt: Einzelbild-Vergleich für Dokumente ohne

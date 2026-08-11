@@ -180,10 +180,14 @@ ${reads}
     // host that both ticks animation frames at 60Hz AND hands over a timestamp
     // that never moves would play this at twice speed -- and, since render()
     // is then called once per real animation frame, at twice the compute cost
-    // of the intended 30fps too, not only twice the apparent tempo. Frozen is
-    // fatal and twice speed is not, and the pump below runs at exactly this
-    // rate, so the one case that matters -- no animation frames at all -- is
-    // exact.
+    // of the intended 30fps too, not only twice the apparent tempo. It also
+    // HALVES A TRAIL'S WAKE, in real time: the veil is laid down once per
+    // render() call, a frame count and not a duration (see the note beside
+    // TRAIL_STRONGEST_VEIL/TRAIL_WEAKEST_VEIL in src/engine/engine.js), so
+    // twice as many calls per real second work through that same frame count
+    // twice as fast. Frozen is fatal and twice speed is not, and the pump
+    // below runs at exactly this rate, so the one case that matters -- no
+    // animation frames at all -- is exact.
     if (usable(stamp)) {
       previousStamp = stamp;
       drawnStamp = stamp;
