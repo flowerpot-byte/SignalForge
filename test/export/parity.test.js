@@ -9,6 +9,9 @@ import { join } from 'node:path';
 import { runJobs } from '../harness/render.js';
 import { meanDifference, maxDifference, meanBrightness } from '../harness/pixels.js';
 import { buildEffectHtml } from '../../src/export/build-effect.js';
+import { effectControls, withLiveMotion } from '../../src/export/effect-controls.js';
+import { normalizeDocument } from '../../src/engine/document.js';
+import { foregroundOf, backgroundOf } from '../../src/engine/slots.js';
 
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
@@ -394,6 +397,129 @@ test('the exported effect renders the same pixels as the engine does', async () 
     // Still motion at t=0: the two paths must land on the same pixels.
     assert.equal(maxDifference(viaEngine.pixels, viaExport.pixels), 0,
       `mean difference was ${meanDifference(viaEngine.pixels, viaExport.pixels)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ============================================================================
+// A BACKGROUND UNDER THE LAYER THE APP EDITS
+// ============================================================================
+//
+// Every document above carries its layers as data and no controls at all, which
+// is the right shape for asking "do the two renderers agree". These two ask a
+// narrower question that only a document with two slots can ask, and it needs
+// the REAL control list baked in to ask it: every control's bind path names its
+// layer by ID ("background.angle"), and applyControls resolves that name to a
+// POSITION on every single frame of the exported effect (resolveLayerPath in
+// src/engine/bind.js) while the engine job is handed the document untouched.
+//
+// So if the export ever bound the background's knobs to the foreground — which
+// is exactly what reading layers[0] used to do the moment a document had two
+// layers — the exported file would write the gradient's angle into the swarm
+// and these comparisons would come apart. With the ids right, every control
+// writes back the value it was defaulted from and the two paths land on the
+// same pixels.
+//
+// The pairing is the one the whole feature was asked for: rain over a conic
+// that turns.
+
+/** The document as export-effect.js would prepare it, controls and all. */
+function withRealControls(raw) {
+  const normalized = normalizeDocument(raw).doc;
+  const layerId = foregroundOf(normalized.layers).id;
+  const backgroundId = backgroundOf(normalized.layers)?.id ?? null;
+  let prepared = withLiveMotion(normalized, layerId);
+  if (backgroundId) prepared = withLiveMotion(prepared, backgroundId);
+  return { ...prepared, controls: effectControls(prepared, layerId, backgroundId) };
+}
+
+const RAIN_OVER_CONIC = {
+  name: 'Regen vor einem Farbkreis',
+  description: 'a background under the layer the app edits',
+  publisher: 'SignalForge',
+  layers: [
+    {
+      id: 'background', type: 'gradient', shape: 'conic', bands: 3, angle: 113,
+      stops: [{ at: 0, color: '#20106a' }, { at: 100, color: '#0aa3c2' }],
+      motions: [{ kind: 'spin', speed: 48, amount: 70 }]
+    },
+    {
+      id: 'fill', type: 'particles', pattern: 'rain', count: 90, size: 4,
+      tilt: 10, seed: 7, speed: 55,
+      stops: [{ at: 0, color: '#aaddff' }, { at: 100, color: '#ffffff' }],
+      motions: [{ kind: 'breathe', speed: 30, amount: 40 }]
+    }
+  ]
+};
+
+/**
+ * The same document held still, DERIVED rather than written out a second time.
+ *
+ * The single-frame comparison drives the exported effect from its own clock and
+ * the engine from an explicit second, so anything that moves would be measuring
+ * clock alignment rather than engine equivalence — the same reason DOC at the
+ * top of this file holds its own swarm still. Deriving it means the two cases
+ * cannot drift into being about different pictures.
+ */
+const STILL_RAIN_OVER_CONIC = {
+  ...RAIN_OVER_CONIC,
+  layers: RAIN_OVER_CONIC.layers.map((layer) => ({
+    ...layer, motions: [], ...(layer.type === 'particles' ? { speed: 0 } : {})
+  }))
+};
+
+test('a still background under a still swarm renders the same on both paths', async () => {
+  const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-background-'));
+  const file = join(dir, 'effect.html');
+  const doc = withRealControls(STILL_RAIN_OVER_CONIC);
+  writeFileSync(file, buildEffectHtml({ doc, engineSource, lang: 'en' }), 'utf8');
+
+  try {
+    const [viaEngine, viaExport] = await runJobs([
+      { name: 'engine', kind: 'engine', doc, timeSec: 0 },
+      { name: 'export', kind: 'html', file, settleMs: 400 }
+    ]);
+
+    assert.ok(meanBrightness(viaEngine.pixels) > 5, 'engine frame is blank');
+    assert.ok(meanBrightness(viaExport.pixels) > 5, 'exported frame is blank');
+    assert.equal(viaEngine.width, viaExport.width);
+    assert.equal(viaEngine.height, viaExport.height);
+    assert.equal(maxDifference(viaEngine.pixels, viaExport.pixels), 0,
+      `mean difference was ${meanDifference(viaEngine.pixels, viaExport.pixels)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('rain over a turning background agrees frame for frame from frame zero', async () => {
+  const engineSource = readFileSync(new URL('../../dist/engine.bundle.js', import.meta.url), 'utf8');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-parity-background-seq-'));
+  const file = join(dir, 'effect.html');
+  const doc = withRealControls(RAIN_OVER_CONIC);
+  writeFileSync(file, buildEffectHtml({ doc, engineSource, lang: 'en' }), 'utf8');
+
+  try {
+    const [viaEngine, viaExport, still] = await runJobs([
+      { name: 'engine', kind: 'engine', doc, frames: secondsFrom(TRAIL_STAMPS) },
+      { name: 'export', kind: 'html', file, stamps: TRAIL_STAMPS, restart: true, settleMs: 0 },
+      // The control: the same document with nothing moving. If the moving run
+      // came back identical to this, the sequence above would be proving
+      // nothing about time at all.
+      {
+        name: 'still', kind: 'engine',
+        doc: withRealControls(STILL_RAIN_OVER_CONIC), frames: secondsFrom(TRAIL_STAMPS)
+      }
+    ]);
+
+    assert.ok(meanBrightness(viaEngine.pixels) > 5, 'engine frame is blank');
+    assert.ok(meanBrightness(viaExport.pixels) > 5, 'exported frame is blank');
+    assert.ok(maxDifference(viaEngine.pixels, still.pixels) > 0,
+      'nothing moved in thirty frames, so this compares nothing');
+    assert.equal(maxDifference(viaEngine.pixels, viaExport.pixels), 0,
+      `after ${TRAIL_STAMPS.length} frames the two paths differ; mean difference `
+        + `${meanDifference(viaEngine.pixels, viaExport.pixels)}`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
