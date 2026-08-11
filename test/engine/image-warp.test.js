@@ -5,6 +5,27 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runJobs } from '../harness/render.js';
 import { meanBrightness, meanDifference, pixelAt, isColour } from '../harness/pixels.js';
+import { speedToRate } from '../../src/engine/motion/speed.js';
+import { WARP_SPEED_SCALE } from '../../src/engine/motion/warp.js';
+
+// Every moving sample below is taken at a stated point of the warp field's own
+// cycle, not at a stated wall-clock second.
+//
+// warp's field phase is timeSec * speedToRate(speed) * WARP_SPEED_SCALE, and
+// the tempo curve's ceiling has moved once already (MAX_RATE in
+// src/engine/motion/speed.js went from 1 to 7 to answer "far too slow even at
+// maximum speed"). A hard-coded `timeSec: 12` therefore stopped meaning "a
+// good way into the cycle" and started meaning "eight cycles further on,
+// wherever that lands" -- which, on this fixture, landed close enough to the
+// starting frame that "different time, different frame" failed on a motion
+// that was working perfectly. The phases below are the ones this file has
+// always tested at; they are now stated as such.
+const WARP_SPEED = 60;
+const atPhase = (phase) => phase / (speedToRate(WARP_SPEED) * WARP_SPEED_SCALE);
+/** A good way into the field's slowest wave -- what `timeSec: 12` used to buy. */
+const MOVED = atPhase(10.478);
+/** A different point of the same field -- what `timeSec: 5` used to buy. */
+const MOVED_ELSEWHERE = atPhase(4.366);
 
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
@@ -17,7 +38,7 @@ const STRIPES = 'iVBORw0KGgoAAAANSUhEUgAAACgAAAAKCAIAAABJ+IsHAAAAIUlEQVR42mP8z4A
 function warpDoc(amount, timeSecIgnored) {
   return {
     assets: { q: { kind: 'image', mime: 'image/png', data: QUADRANTS } },
-    layers: [{ type: 'image', asset: 'q', fit: 'stretch', motion: { kind: 'warp', speed: 60, amount } }]
+    layers: [{ type: 'image', asset: 'q', fit: 'stretch', motion: { kind: 'warp', speed: WARP_SPEED, amount } }]
   };
 }
 
@@ -43,7 +64,7 @@ function warpDoc(amount, timeSecIgnored) {
 function coverDoc(amount) {
   return {
     assets: { s: { kind: 'image', mime: 'image/png', data: STRIPES } },
-    layers: [{ type: 'image', asset: 's', fit: 'cover', motion: { kind: 'warp', speed: 60, amount } }]
+    layers: [{ type: 'image', asset: 's', fit: 'cover', motion: { kind: 'warp', speed: WARP_SPEED, amount } }]
   };
 }
 
@@ -53,9 +74,9 @@ test('warp moves the picture without draining or blowing out its colours', async
     { name: 'zero-a', kind: 'engine', timeSec: 0, doc: warpDoc(0) },
     { name: 'zero-b', kind: 'engine', timeSec: 30, doc: warpDoc(0) },
     { name: 'warp-a', kind: 'engine', timeSec: 0, doc: warpDoc(60) },
-    { name: 'warp-b', kind: 'engine', timeSec: 12, doc: warpDoc(60) },
+    { name: 'warp-b', kind: 'engine', timeSec: MOVED, doc: warpDoc(60) },
     { name: 'warp-a-again', kind: 'engine', timeSec: 0, doc: warpDoc(60) },
-    { name: 'warp-max', kind: 'engine', timeSec: 5, doc: warpDoc(100) }
+    { name: 'warp-max', kind: 'engine', timeSec: MOVED_ELSEWHERE, doc: warpDoc(100) }
   ];
   const r = Object.fromEntries((await runJobs(jobs)).map((x) => [x.name, x]));
 
@@ -88,9 +109,9 @@ test('warp holds up under fit: cover, where the old padding bug actually broke',
     { name: 'zero-a', kind: 'engine', timeSec: 0, doc: coverDoc(0) },
     { name: 'zero-b', kind: 'engine', timeSec: 30, doc: coverDoc(0) },
     { name: 'warp-a', kind: 'engine', timeSec: 0, doc: coverDoc(60) },
-    { name: 'warp-b', kind: 'engine', timeSec: 12, doc: coverDoc(60) },
+    { name: 'warp-b', kind: 'engine', timeSec: MOVED, doc: coverDoc(60) },
     { name: 'warp-a-again', kind: 'engine', timeSec: 0, doc: coverDoc(60) },
-    { name: 'warp-max', kind: 'engine', timeSec: 5, doc: coverDoc(100) }
+    { name: 'warp-max', kind: 'engine', timeSec: MOVED_ELSEWHERE, doc: coverDoc(100) }
   ];
   const r = Object.fromEntries((await runJobs(jobs)).map((x) => [x.name, x]));
 

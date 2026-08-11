@@ -4,14 +4,19 @@
 import { speedToRate } from './speed.js';
 
 /**
- * speedToRate(motion.speed) maps onto this many radians per second at full
- * tilt (rate 1, i.e. speed 100) for drift and breathe. Warp gets its own,
- * larger scale (see layers/image.js) — its visible motion is more subtle per
- * radian, so it needs a faster phase to read as comparably fast.
+ * Radians per second per unit of speedToRate, for drift and breathe. Warp gets
+ * its own, larger scale (see layers/image.js) — its visible motion is more
+ * subtle per radian, so it needs a faster phase to read as comparably fast.
  *
  * It lives here rather than in one layer type because "speed 40 means the same
  * tempo whatever is moving" is a promise across the whole app, and a second
  * copy of the number in a second layer type is how that promise gets broken.
+ *
+ * DELIBERATELY NOT THE PLACE TO MAKE THINGS FASTER. This constant multiplies
+ * every speed alike, so raising it would speed up the default along with the
+ * top of the slider and change the tempo of every effect already exported.
+ * The slider's ceiling is MAX_RATE in speed.js, which moves the top without
+ * touching the default. That is where the "far too slow at maximum" fix went.
  */
 export const SPEED_SCALE = 0.6;
 

@@ -10,6 +10,24 @@
 export const WARP_PEAK_FACTOR = 2;
 
 /**
+ * Warp's equivalent of SPEED_SCALE (src/engine/motion/breathe.js): how many
+ * radians of field phase one second buys per unit of speedToRate. Larger than
+ * breathe's on purpose — warp's visible motion is more subtle per radian, so
+ * it needs a faster phase to read as comparably fast.
+ *
+ * It lives beside the field it drives, and there is exactly one of it. It used
+ * to be written out separately in src/engine/layers/image.js and
+ * src/engine/layers/gradient.js — two copies of a number whose whole job is to
+ * make "tempo 40 means the same tempo whatever is moving" true, which is
+ * precisely the promise two copies quietly break.
+ *
+ * Like SPEED_SCALE, this is deliberately NOT the knob for making things
+ * faster: it multiplies every speed alike, default included. The slider's
+ * ceiling is MAX_RATE in src/engine/motion/speed.js.
+ */
+export const WARP_SPEED_SCALE = 2.0;
+
+/**
  * A slow organic warp built from overlaid sine waves.
  *
  * The displacement is split into a row part and a column part, so one frame

@@ -6,6 +6,7 @@ import {
 } from '../document.js';
 import { speedToRate } from '../motion/speed.js';
 import { breatheFactor, motionPhase } from '../motion/breathe.js';
+import { WARP_SPEED_SCALE } from '../motion/warp.js';
 import {
   BUFFER_PAD, BUFFER_SCALE, SOURCE_WIDTH, SOURCE_HEIGHT, MAX_AMPLITUDE, drawWarped
 } from './warp-buffer.js';
@@ -42,9 +43,6 @@ import {
  * and warp keeps its whole amplitude. Drift therefore means the same thing
  * with and without warp here, which on the picture layer it does not.
  */
-
-/** Warp's phase scale — the picture layer's own, so the tempo means the same. */
-const WARP_SPEED_SCALE = 2.0;
 
 /** At full strength, a linear drift slides the ramp this much of its length. */
 const LINEAR_DRIFT_REACH = 0.5;

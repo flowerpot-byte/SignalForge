@@ -5,16 +5,20 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runJobs } from '../harness/render.js';
 import { meanBrightness, pixelAt, isColour, meanDifference } from '../harness/pixels.js';
+import { speedToRate } from '../../src/engine/motion/speed.js';
+import { SPEED_SCALE } from '../../src/engine/motion/breathe.js';
 
 // 4x4 PNG: red / green / blue / white quadrants, two pixels each way.
 const QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAHklEQVR42mXJsQ0AAAgDIOr/P9fVRFZSkMI4QtE/C5t8BQM0UanVAAAAAElFTkSuQmCC';
 
 // The breathe cycle starts at full brightness and dips. Its darkest point is
 // half a cycle in: phase = timeSec * speedToRate(speed) * SPEED_SCALE must
-// equal PI. speedToRate(100) is exactly 1 (see src/engine/motion/speed.js),
-// the same as the old linear speed/100 at speed 100, so with SPEED_SCALE 0.6
-// this constant is unchanged by the tempo curve.
-const BREATHE_DARKEST_AT = Math.PI / 0.6;
+// equal PI. Both numbers are read out of the engine rather than written down
+// here, because both have moved once already: speedToRate(100) is the tempo
+// curve's ceiling, which was raised from 1 to 7 to answer "far too slow even
+// at maximum speed". A hand-computed constant would have quietly started
+// sampling some arbitrary point of a much faster cycle instead of its darkest.
+const BREATHE_DARKEST_AT = Math.PI / (speedToRate(100) * SPEED_SCALE);
 
 function docWith(layer) {
   return {

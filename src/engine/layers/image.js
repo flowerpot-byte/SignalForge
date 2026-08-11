@@ -5,12 +5,11 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, clamp } from '../document.js';
 import { computeSourceRect } from '../util/fit.js';
 import { speedToRate } from '../motion/speed.js';
 import { breatheFactor, motionPhase } from '../motion/breathe.js';
+import { WARP_SPEED_SCALE } from '../motion/warp.js';
 import {
   BUFFER_WIDTH, BUFFER_HEIGHT, BUFFER_PAD, MAX_AMPLITUDE, drawWarped
 } from './warp-buffer.js';
 
-/** Warp's equivalent of SPEED_SCALE: radians per second at full tilt. */
-const WARP_SPEED_SCALE = 2.0;
 /** Drift eats at most this fraction of the source rect to make room to pan. */
 const DRIFT_MAX_INSET = 0.12;
 

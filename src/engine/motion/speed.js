@@ -22,6 +22,38 @@ const S0 = DEFAULT_SPEED / 100;
 const R0 = S0;
 
 /**
+ * Rate at the very top of the slider — the ceiling this whole mapping ends at.
+ *
+ * It used to be 1, inherited from the linear `speed / 100` that this curve
+ * replaced, where 1 was simply what 100/100 comes to. Nothing ever chose it.
+ * What it meant in practice was measured (.superpowers/sdd/
+ * signalrgb-motion-bug-report.md, section 5) and then re-measured here by
+ * rendering: at tempo 100, a full breathe cycle took 10.47 seconds. A ten-
+ * and-a-half-second breath at the far end of a slider labelled "Tempo" is not
+ * a fast setting, and "even at maximum speed far too slow" is exactly what
+ * came back from hardware.
+ *
+ * 7 was picked from the measurement, not by feel: a full breathe cycle is
+ * 2*PI / (rate * SPEED_SCALE) seconds, so the rate needed for a cycle of
+ * about a second and a half — a brisk breath, the top of what this control
+ * should be able to ask for — is 2*PI / (1.5 * 0.6) = 6.98. Rounded to 7 that
+ * is 1.50 seconds, measured by rendering (test/engine/speed.test.js states
+ * the pair, and the report records the sweep).
+ *
+ * Raising THIS rather than SPEED_SCALE (src/engine/motion/breathe.js) or
+ * WARP_SPEED_SCALE (src/engine/layers/image.js, gradient.js) is the whole
+ * point. Those two are per-motion constants: multiplying them speeds
+ * everything up including the default, which would change the tempo of every
+ * effect Max has already built and exported. The ceiling of the curve is the
+ * one number that can move while the anchor at the default stays nailed down,
+ * because the curve is anchored at both ends independently — see S0/R0 and
+ * the segment comment below. The promise "tempo 40 means the same tempo
+ * whatever is moving" also survives untouched: every motion still reads the
+ * same rate out of the same function.
+ */
+const MAX_RATE = 7;
+
+/**
  * Curvature of the segment below the default (speed 0..15) and the segment
  * above it (speed 15..100). 0 means no curve at all — a straight line
  * across that segment, i.e. today's linear mapping restricted to it.
@@ -93,20 +125,32 @@ function easeSegment(x, x0, x1, y0, y1, k) {
  * Two exponential segments joined exactly at the default (see S0/R0 and the
  * LOW_SEGMENT_K/HIGH_SEGMENT_K comment above): speedToRate(0) is exactly 0,
  * speedToRate(DEFAULT_SPEED) is exactly the old linear value at that
- * position (0.15), and speedToRate(100) is exactly 1 — the same ceiling the
- * old linear mapping had, so "speed 100 means rate 1" still holds
- * everywhere that assumed it.
+ * position (0.15), and speedToRate(100) is exactly MAX_RATE.
  *
- *   speed    old (speed/100)   speedToRate
- *   0        0.0000            0.0000
- *   1        0.0100            0.0190
- *   5        0.0500            0.0777
- *   10       0.1000            0.1233
- *   15       0.1500            0.1500   <- default: identical to old, by construction
- *   20       0.2000            0.1712
- *   30       0.3000            0.2202
- *   50       0.5000            0.3505
- *   100      1.0000            1.0000
+ * Three anchors, and only the top one has ever moved. When the ceiling went
+ * from 1 to 7 (see MAX_RATE), the segment BELOW the default did not change at
+ * all — it ends at the default, which is nailed down — and the segment above
+ * kept its exact shape, because it is the same normalized ease stretched onto
+ * a taller range. Every rate above the default is therefore the old one with
+ * its distance above 0.15 multiplied by the same (7 - 0.15) / (1 - 0.15) =
+ * 8.06. One factor, uniformly, rather than a re-tuned curve: the feel of the
+ * slider is what it was, the top of it simply reaches somewhere worth going.
+ *
+ *   speed    linear (speed/100)   was      now      breathe cycle now
+ *   0        0.0000               0.0000   0.0000   (stopped)
+ *   1        0.0100               0.0190   0.0190   551 s
+ *   5        0.0500               0.0777   0.0777   135 s
+ *   10       0.1000               0.1233   0.1233   85 s
+ *   15       0.1500               0.1500   0.1500   69.8 s  <- default: unchanged
+ *   20       0.2000               0.1712   0.3210   32.6 s
+ *   30       0.3000               0.2202   0.7153   14.6 s
+ *   50       0.5000               0.3505   1.7659   5.9 s
+ *   100      1.0000               1.0000   7.0000   1.5 s
+ *
+ * The cycle column is 2*PI / (rate * SPEED_SCALE) with SPEED_SCALE 0.6, and
+ * the two ends of it were confirmed by rendering rather than by trusting the
+ * arithmetic — see test/engine/speed.test.js and .superpowers/sdd/
+ * quickfixes-report.md.
  *
  * Below the default, the curve is steeper than the old linear mapping near
  * speed 0 (a given slider nudge near the very bottom changes the rate
@@ -123,5 +167,5 @@ function easeSegment(x, x0, x1, y0, y1, k) {
 export function speedToRate(speed) {
   const u = clamp(Number(speed) || 0, 0, 100) / 100;
   if (u <= S0) return easeSegment(u, 0, S0, 0, R0, LOW_SEGMENT_K);
-  return easeSegment(u, S0, 1, R0, 1, HIGH_SEGMENT_K);
+  return easeSegment(u, S0, 1, R0, MAX_RATE, HIGH_SEGMENT_K);
 }
