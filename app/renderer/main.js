@@ -539,7 +539,15 @@ async function boot() {
   const STARTERS = Object.freeze({
     solid: { type: 'solid' },
     linear: { type: 'gradient', shape: 'linear' },
-    radial: { type: 'gradient', shape: 'radial' }
+    radial: { type: 'gradient', shape: 'radial' },
+    // The three that repeat. They name their shape and nothing else, exactly
+    // as the two above do: the band count is left out so DEFAULT_BANDS
+    // (src/engine/document.js) fills it in, which is what keeps the tile's
+    // picture and the effect the tile makes the same data rather than two
+    // descriptions of it.
+    conic: { type: 'gradient', shape: 'conic' },
+    stripes: { type: 'gradient', shape: 'stripes' },
+    waves: { type: 'gradient', shape: 'waves' }
   });
 
   /**

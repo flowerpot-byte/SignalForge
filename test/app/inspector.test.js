@@ -76,15 +76,19 @@ test('no slider offers a value the engine would clamp away', () => {
 // `amount`. Crossing those two would leave speed offering 0..100 and strength
 // 1..100, which no test of "the two tables are equal" would ever notice.
 test('every slider offers exactly the range the matching exported control offers', () => {
-  // Two documents, because no single layer type has every slider: the angle
-  // and the stop positions belong to a gradient, and everything else is on
-  // offer whatever is loaded. Taken together they must account for every entry
-  // in the shared table.
+  // Three documents, because no single layer type OR SHAPE has every slider:
+  // the angle and the stop positions belong to a gradient, the band count only
+  // to a gradient whose shape repeats, and everything else is on offer whatever
+  // is loaded. Taken together they must account for every entry in the shared
+  // table.
   const fields = [
     ...describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1'),
     ...describeInspector(normalizeDocument({
       layers: [{ id: 'g1', type: 'gradient', motions: [{ kind: 'warp' }] }]
-    }).doc, 'g1')
+    }).doc, 'g1'),
+    ...describeInspector(normalizeDocument({
+      layers: [{ id: 'g2', type: 'gradient', shape: 'stripes', motions: [{ kind: 'warp' }] }]
+    }).doc, 'g2')
   ];
   const pairs = [
     ['layers.0.motions.0.speed', 'tempo'],
@@ -94,6 +98,7 @@ test('every slider offers exactly the range the matching exported control offers
     ['greenMagenta', 'greenMagenta'],
     ['blueYellow', 'blueYellow'],
     ['layers.0.angle', 'angle'],
+    ['layers.0.bands', 'bands'],
     ['layers.0.stops.0.at', 'stop']
   ];
 

@@ -120,7 +120,10 @@ export const TILES = Object.freeze([
   Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'drop', starts: null }),
   Object.freeze({ key: 'solid', labelKey: 'gallery.solid', glyph: null, starts: 'solid' }),
   Object.freeze({ key: 'linear', labelKey: 'gallery.linear', glyph: null, starts: 'linear' }),
-  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: null, starts: 'radial' })
+  Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: null, starts: 'radial' }),
+  Object.freeze({ key: 'conic', labelKey: 'gallery.conic', glyph: null, starts: 'conic' }),
+  Object.freeze({ key: 'stripes', labelKey: 'gallery.stripes', glyph: null, starts: 'stripes' }),
+  Object.freeze({ key: 'waves', labelKey: 'gallery.waves', glyph: null, starts: 'waves' })
 ]);
 
 /**

@@ -696,7 +696,44 @@ runHarness('unsaved-changes harness', async () => {
     report.snapshotAfterTileDiscard = await snapshot();
     await shot('08-tile-discarded-and-started');
 
-    // --- and the picture tile, the fourth entrance --------------------------
+    // --- and EVERY tile on the shelf, not only the three named above --------
+    //
+    // The guard lives in startEffect (app/renderer/main.js) and every tile
+    // reaches it, so a tile added later is covered "automatically". That is
+    // exactly the kind of sentence this project does not accept on trust — it
+    // is one forgotten `await` or one tile wired straight to preview.setDocument
+    // away from being false, and the failure is silent and costs somebody
+    // their work. So this walks the shelf AS IT ACTUALLY IS, presses every
+    // tile on it in turn with unsaved work on the stage, and records which of
+    // them asked. A tile added without the guard shows up here as a name
+    // missing from the list.
+    //
+    // Every press starts an effect, and an effect just begun is itself work in
+    // no file (startEffect calls markChanged), so the stage carries something
+    // worth losing again before the next press. The name is set as well, so
+    // the fixture does not depend on that being true.
+    discardAnswer = 'discard';
+    const shelf = await d.js(
+      `[...document.querySelectorAll('#gallery-rail .tile')].map((tile) => tile.dataset.tile)`
+    );
+    const tilesThatAsked = [];
+    for (const key of shelf) {
+      // The picture tile opens a file dialog instead, and has its own block
+      // below — it cannot be pressed by id without the dialog it puts up.
+      if (key === 'picture') continue;
+      await d.setInput('footer-name', `Work before ${key}`);
+      await wait(120);
+      const askedBefore = discardAsked.length;
+      await d.clickById(`gallery-${key}`);
+      await waitFor(() => discardAsked.length > askedBefore, `the ${key} tile asked before discarding`);
+      await wait(200);
+      tilesThatAsked.push(key);
+    }
+    report.shelfTiles = shelf;
+    report.tilesThatAsked = tilesThatAsked;
+    await shot('08b-every-tile-asked');
+
+    // --- and the picture tile, the last entrance ----------------------------
     //
     // Driven through `pickPicture` above: the gallery's own hidden
     // <input type="file">, given a real path by the protocol, which is the

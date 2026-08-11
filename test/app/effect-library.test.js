@@ -58,8 +58,9 @@ test('an effect that has been exported can be found and opened again', async (t)
     );
   });
 
-  await t.test('the four ways to start an effect are untouched by it', () => {
-    assert.deepEqual(report.startingTiles, ['picture', 'solid', 'linear', 'radial']);
+  await t.test('the seven ways to start an effect are untouched by it', () => {
+    assert.deepEqual(report.startingTiles,
+      ['picture', 'solid', 'linear', 'radial', 'conic', 'stripes', 'waves']);
   });
 
   await t.test('pressing the other heading swaps the shelves', () => {

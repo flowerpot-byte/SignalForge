@@ -9,7 +9,7 @@ import {
 import { nextStopPosition } from '../../app/renderer/components/field.js';
 import { TILES } from '../../app/renderer/components/gallery.js';
 import {
-  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS,
+  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS, MOTION_KINDS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS
 } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
@@ -54,10 +54,37 @@ test('a radial gradient is not offered an angle, because turning it does nothing
   assert.ok(pathsOf({ type: 'gradient', shape: 'linear' }).includes('layers.0.angle'));
 });
 
-test('a gradient gets all four motions, unlike a solid colour', () => {
+test('a gradient gets every motion there is, unlike a solid colour', () => {
   const list = fieldsOf({ type: 'gradient' }).find((f) => f.type === 'motions');
-  assert.ok(list.values.includes('drift'));
-  assert.ok(list.values.includes('warp'));
+  // The one layer type with structure at every angle, so nothing is withheld.
+  assert.deepEqual(list.values, [...MOTION_KINDS]);
+});
+
+test('the band count is offered exactly for the shapes that repeat', () => {
+  // The column's rule: a control that is there can be used. "linear" and
+  // "radial" are one traversal of the ramp, so there is nothing to repeat.
+  for (const shape of ['linear', 'radial']) {
+    assert.ok(!pathsOf({ type: 'gradient', shape }).includes('layers.0.bands'),
+      `a ${shape} gradient must not be offered a band count`);
+  }
+  for (const shape of ['conic', 'stripes', 'waves']) {
+    assert.ok(pathsOf({ type: 'gradient', shape }).includes('layers.0.bands'),
+      `a ${shape} gradient must be offered a band count`);
+  }
+});
+
+test('a conic is offered an angle, because that is where its sweep begins', () => {
+  assert.ok(pathsOf({ type: 'gradient', shape: 'conic' }).includes('layers.0.angle'));
+  assert.ok(pathsOf({ type: 'gradient', shape: 'stripes' }).includes('layers.0.angle'));
+});
+
+test('stripes keep their colours and lose their positions, because a band has none', () => {
+  const paths = pathsOf({ type: 'gradient', shape: 'stripes' });
+  assert.ok(paths.includes('layers.0.stops.0.color'), 'a stripe IS its colour');
+  assert.ok(!paths.includes('layers.0.stops.0.at'),
+    'a stripe is one colour edge to edge, so a position along it means nothing');
+  // And every other shape still reads them.
+  assert.ok(pathsOf({ type: 'gradient', shape: 'waves' }).includes('layers.0.stops.0.at'));
 });
 
 test('a third stop brings its own pair of controls', () => {
@@ -172,13 +199,24 @@ test('no section is headed that nothing ever builds', () => {
 // ---------------------------------------------------------- the gallery
 
 test('every tile in the starting gallery does something', () => {
-  assert.equal(TILES.length, 4);
+  assert.equal(TILES.length, 7);
   const picture = TILES.filter((tile) => tile.starts === null);
   assert.equal(picture.length, 1, 'exactly one tile opens a file dialog');
   assert.deepEqual(
     TILES.filter((tile) => tile.starts).map((tile) => tile.starts),
-    ['solid', 'linear', 'radial']
+    ['solid', 'linear', 'radial', 'conic', 'stripes', 'waves']
   );
+});
+
+test('every gradient shape the engine can draw has a tile that starts one', () => {
+  // The shelf is how an effect BEGINS, so a shape somebody can only reach by
+  // starting a different effect and then changing a dropdown is a shape that
+  // is effectively hidden. Derived from the engine's list rather than written
+  // out, so a sixth shape cannot be added to the engine and quietly left off.
+  const started = new Set(TILES.map((tile) => tile.starts).filter(Boolean));
+  for (const shape of GRADIENT_SHAPES) {
+    assert.ok(started.has(shape), `no tile starts a ${shape} gradient`);
+  }
 });
 
 // ------------------------------------------------ where a new stop lands

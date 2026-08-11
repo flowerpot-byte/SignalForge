@@ -34,14 +34,35 @@ import '../../src/engine/index.js';
  * and it cannot be confused with a screenshot that happens to look right.
  */
 
-/** A 2D context that records instead of painting. */
+/**
+ * A 2D context that records instead of painting.
+ *
+ * It answers every call the layer renderers make, including the ones the
+ * conic sweep needs — a wedge is moveTo/arc/fill and the sweep is then painted
+ * through translate/rotate/drawImage. Deliberately complete rather than
+ * forgiving: a renderer reaching for a canvas call that is not here throws,
+ * which is the right answer, because a silently swallowed call would let a
+ * tile "draw" something nobody ever asked the canvas for.
+ */
 function recordingContext(calls) {
   return {
     globalAlpha: 1,
     globalCompositeOperation: 'source-over',
+    imageSmoothingEnabled: false,
+    imageSmoothingQuality: 'low',
     set fillStyle(value) { calls.push({ op: 'fillStyle', value }); },
     fillRect(x, y, width, height) { calls.push({ op: 'fillRect', x, y, width, height }); },
-    save() {}, restore() {},
+    clearRect(x, y, width, height) { calls.push({ op: 'clearRect', x, y, width, height }); },
+    save() { calls.push({ op: 'save' }); },
+    restore() { calls.push({ op: 'restore' }); },
+    translate(x, y) { calls.push({ op: 'translate', x, y }); },
+    rotate(radians) { calls.push({ op: 'rotate', radians }); },
+    beginPath() { calls.push({ op: 'beginPath' }); },
+    closePath() { calls.push({ op: 'closePath' }); },
+    moveTo(x, y) { calls.push({ op: 'moveTo', x, y }); },
+    arc(x, y, r, from, to) { calls.push({ op: 'arc', x, y, r, from, to }); },
+    fill() { calls.push({ op: 'fill' }); },
+    drawImage(source, ...rest) { calls.push({ op: 'drawImage', source, rest }); },
     createLinearGradient(x0, y0, x1, y1) {
       const stops = [];
       calls.push({ op: 'linear', x0, y0, x1, y1, stops });
@@ -121,10 +142,12 @@ function mountWith(starterDocument) {
 }
 
 /** What main.js's own starterDocument hands over, in one place for this file. */
+const SHAPE_STARTERS = ['linear', 'radial', 'conic', 'stripes', 'waves'];
 const STARTERS = {
   solid: { layers: [{ id: 'fill', type: 'solid', motions: [] }] },
-  linear: { layers: [{ id: 'fill', type: 'gradient', shape: 'linear', motions: [] }] },
-  radial: { layers: [{ id: 'fill', type: 'gradient', shape: 'radial', motions: [] }] }
+  ...Object.fromEntries(SHAPE_STARTERS.map((shape) => [
+    shape, { layers: [{ id: 'fill', type: 'gradient', shape, motions: [] }] }
+  ]))
 };
 const defaults = (kind) => STARTERS[kind] ?? null;
 
@@ -132,7 +155,7 @@ const defaults = (kind) => STARTERS[kind] ?? null;
 
 test('every starting tile draws on a canvas of the engine\'s own size', () => {
   const { drawings } = mountWith(defaults);
-  assert.deepEqual(Object.keys(drawings).sort(), ['linear', 'radial', 'solid']);
+  assert.deepEqual(Object.keys(drawings).sort(), [...SHAPE_STARTERS, 'solid'].sort());
   for (const [kind, canvas] of Object.entries(drawings)) {
     assert.equal(canvas.width, CANVAS_WIDTH, `${kind} draws at the wrong width`);
     assert.equal(canvas.height, CANVAS_HEIGHT, `${kind} draws at the wrong height`);
@@ -162,7 +185,7 @@ test('the gradient tiles carry the engine\'s default colour stops', () => {
   }
 });
 
-test('linear and radial are the two shapes the engine draws, at the canvas centre', () => {
+test('linear and radial run from the canvas centre, the way the engine lays them out', () => {
   const { drawings } = mountWith(defaults);
   const linear = drawings.linear.calls.find((call) => call.op === 'linear');
   const radial = drawings.radial.calls.find((call) => call.op === 'radial');
@@ -205,6 +228,61 @@ test('a tile paints what the document says, not a colour of its own', () => {
   }
 });
 
+// ------------------------------------------------ the three shapes that repeat
+
+test('the stripes tile draws hard-edged bands, not a ramp', () => {
+  const { drawings } = mountWith(defaults);
+  const ramp = drawings.stripes.calls.find((call) => call.op === 'linear');
+  assert.ok(ramp, 'stripes run along a line, so they are built on a linear ramp');
+  // A hard edge is two stops at the same offset. With the engine's default two
+  // colours and its default band count, every boundary but the two ends is one.
+  const doubled = ramp.stops.filter((stop, index) =>
+    index > 0 && stop.at === ramp.stops[index - 1].at);
+  assert.ok(doubled.length > 0, 'a stripe boundary must be two stops at one offset');
+  // Every stop carries one of the layer's own colours — never a blend, which
+  // is exactly what tells a band from a ramp.
+  const colours = new Set(ramp.stops.map((stop) => stop.color));
+  assert.deepEqual([...colours].sort(), DEFAULT_GRADIENT_STOPS.map((s) => s.color).sort());
+});
+
+test('the waves tile draws a smooth repeat with no doubled stop anywhere', () => {
+  const { drawings } = mountWith(defaults);
+  const ramp = drawings.waves.calls.find((call) => call.op === 'linear');
+  assert.ok(ramp, 'waves run along a line too');
+  for (let index = 1; index < ramp.stops.length; index += 1) {
+    assert.notEqual(ramp.stops[index].at, ramp.stops[index - 1].at,
+      'a wave has no hard edge in it, so no two stops may share an offset');
+  }
+  // It swings out and back: the first and the last stop of the whole ramp are
+  // the same colour, which is what makes the repeat seamless.
+  assert.equal(ramp.stops[0].color, ramp.stops.at(-1).color);
+  // And it passes through colours neither stop names — the blend between them.
+  const named = new Set(DEFAULT_GRADIENT_STOPS.map((stop) => stop.color));
+  assert.ok(ramp.stops.some((stop) => !named.has(stop.color)),
+    'a wave must pass through the middle of the ramp, not step between its ends');
+});
+
+test('the conic tile sweeps wedges into a picture and paints it turned', () => {
+  const { drawings } = mountWith(defaults);
+  const calls = drawings.conic.calls;
+  // The sweep itself is not drawn on the tile's canvas — it is drawn once into
+  // a canvas of its own and then painted here, which is what lets it be turned
+  // every frame for the price of one drawImage.
+  const painted = calls.filter((call) => call.op === 'drawImage');
+  assert.equal(painted.length, 1, 'the wheel is painted exactly once');
+  assert.ok(calls.some((call) => call.op === 'rotate'), 'and it is painted through a rotation');
+  // The wedges are on the OTHER canvas. It is a real canvas element made by
+  // this very DOM, so its own recording is reachable through the drawImage.
+  const wedges = painted[0].source.calls.filter((call) => call.op === 'arc');
+  assert.ok(wedges.length >= 180,
+    `a sweep needs enough wedges not to band, got ${wedges.length}`);
+  // Deliberately NOT createConicGradient: the host's real browser version is
+  // unknown (see src/engine/layers/gradient.js), so the sweep must be built
+  // out of calls canvas has always had.
+  assert.equal(typeof recordingContext([]).createConicGradient, 'undefined',
+    'this fake offers no createConicGradient, so the engine cannot be using one');
+});
+
 // ------------------------------------------------------------- the fourth tile
 
 test('the picture tile shows the empty stage, not a preview and not a blank', () => {
@@ -240,14 +318,14 @@ test('a preview is decoration beside its own name, not something to read out', (
 
 test('the tiles still work when nobody hands them a document to draw', () => {
   // The stand-in DOM of another test, or any caller with no engine: the strip
-  // must still be a strip of four working buttons.
+  // must still be a strip of working buttons, one per tile.
   installFakeDom();
   const container = makeElement('div');
   const started = [];
   mountGallery(container, { t: (key) => key, onPicture: () => {}, onStart: (k) => started.push(k) });
   const tiles = all(container).filter((node) => node.dataset.tile);
-  assert.equal(tiles.length, 4);
+  assert.equal(tiles.length, TILES.length);
   assert.equal(find(container, 'tile-canvas').length, 0);
   for (const tile of tiles) tile.click();
-  assert.deepEqual(started, ['solid', 'linear', 'radial']);
+  assert.deepEqual(started, TILES.filter((tile) => tile.starts).map((tile) => tile.starts));
 });

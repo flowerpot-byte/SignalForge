@@ -53,11 +53,25 @@ const RANGES = Object.freeze({
   greenMagenta: withStep(CONTROL_RANGES.greenMagenta),
   blueYellow: withStep(CONTROL_RANGES.blueYellow),
   angle: withStep(CONTROL_RANGES.angle),
+  bands: withStep(CONTROL_RANGES.bands),
   // The one range in this table the exported effect does not also offer, and
   // src/export/effect-controls.js says why at length: a stop position needs a
   // gradient to be seen against, and SignalRGB's panel has none.
   stop: withStep(CONTROL_RANGES.stop)
 });
+
+/**
+ * The gradient shapes built out of a repeat of the ramp, and therefore the
+ * only ones with anything for a band count to do.
+ *
+ * Derived from the engine's list rather than written out, so a sixth shape
+ * added over there has to answer this question here instead of silently
+ * arriving with no band control: everything that is not one of the two
+ * single-traversal shapes repeats.
+ */
+const REPEATING_SHAPES = Object.freeze(
+  GRADIENT_SHAPES.filter((shape) => shape !== 'linear' && shape !== 'radial')
+);
 
 /** The fields that belong to the document itself, in the order they appear. */
 const DOCUMENT_FIELDS = Object.freeze(['saturation', 'greenMagenta', 'blueYellow', 'brightness']);
@@ -178,17 +192,31 @@ export function describeInspector(doc, layerId) {
       path: `${at}.shape`, type: 'select', section: 'fill',
       labelKey: 'inspector.shape', values: [...GRADIENT_SHAPES]
     });
-    // Only while it means something. A radial gradient runs outwards from the
-    // middle and has no angle to turn, so offering the slider would be
-    // offering a control that provably does nothing — and this column's whole
-    // rule is that a control which is there can be used. (The EXPORTED effect
-    // does keep it whatever the shape, and src/export/effect-controls.js says
-    // why: over there the shape can be switched from the same panel, so a
-    // hidden angle would be a dead end rather than a tidy-up.)
-    if (layer.shape === 'linear') {
+    // Each of the next two only while it means something. This column's whole
+    // rule is that a control which is there can be used, so a control that
+    // provably cannot change a pixel for the shape currently chosen is not
+    // drawn at all. (The EXPORTED effect keeps both whatever the shape, and
+    // src/export/effect-controls.js says why: over there the shape can be
+    // switched from the same panel, so a hidden field would be a dead end
+    // rather than a tidy-up. Here the shape dropdown is two rows up and this
+    // column redraws the moment it changes.)
+    //
+    // The angle: a radial gradient runs outwards from the middle and has no
+    // direction to turn. Every other shape does — including the conic, whose
+    // angle is where its sweep begins.
+    if (layer.shape !== 'radial') {
       fields.push({
         path: `${at}.angle`, type: 'number', section: 'fill',
         labelKey: 'inspector.angle', ...RANGES.angle
+      });
+    }
+    // The band count: only the three shapes that repeat have anything to
+    // repeat. "linear" and "radial" ARE one traversal of the ramp by
+    // definition (see MIN_BANDS in src/engine/document.js).
+    if (REPEATING_SHAPES.includes(layer.shape)) {
+      fields.push({
+        path: `${at}.bands`, type: 'number', section: 'fill',
+        labelKey: 'inspector.bands', ...RANGES.bands
       });
     }
     // The list itself carries no label of its own: unlike the motion list it
@@ -205,10 +233,18 @@ export function describeInspector(doc, layerId) {
         path: `${at}.stops.${i}.color`, type: 'color', section: 'fill',
         labelKey: 'inspector.stopColour'
       });
-      fields.push({
-        path: `${at}.stops.${i}.at`, type: 'number', section: 'fill',
-        labelKey: 'inspector.stopAt', ...RANGES.stop
-      });
+      // And the same rule once more, for the one shape that does not read a
+      // stop's POSITION: a stripe is one colour from edge to edge, so there is
+      // nothing along it for a position to mean, and the engine builds its
+      // bands from the colours and their order alone (see addRepeatingStops in
+      // src/engine/layers/gradient.js). The colours stay, because those are
+      // the whole of what a stripe is.
+      if (layer.shape !== 'stripes') {
+        fields.push({
+          path: `${at}.stops.${i}.at`, type: 'number', section: 'fill',
+          labelKey: 'inspector.stopAt', ...RANGES.stop
+        });
+      }
     });
   }
 

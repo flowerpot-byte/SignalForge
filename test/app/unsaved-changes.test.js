@@ -344,6 +344,20 @@ test('unsaved work is known about, and asked about before it is thrown away', as
     );
   });
 
+  await t.test('EVERY tile on the shelf asks, not only the ones this file names', () => {
+    // The guard is one call in startEffect and every tile reaches it, so a new
+    // tile is covered "automatically" — which is a claim, not a fact, until
+    // somebody presses all of them. The harness walked the shelf as the window
+    // actually built it and pressed each one with unsaved work on the stage.
+    const shelf = report.shelfTiles.filter((key) => key !== 'picture');
+    assert.ok(shelf.length >= 6, `the shelf should hold every way of starting an effect, got ${shelf.join(', ')}`);
+    assert.deepEqual(
+      report.tilesThatAsked,
+      shelf,
+      'a tile that started an effect without asking would throw away unsaved work on one click'
+    );
+  });
+
   await t.test('the picture tile asks the same question, and cancelling changes nothing', () => {
     assert.equal(report.unsavedBeforePictureTile, true, 'the fixture must genuinely have unsaved work');
     assert.deepEqual(
