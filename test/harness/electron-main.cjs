@@ -41,7 +41,7 @@ const ASSETS_TIMEOUT_MS = 20_000;
  * called, which renders synchronously. After this returns there is a frame on
  * the canvas, whatever the machine was busy with.
  */
-async function renderFirstFrame(win) {
+async function waitForAssets(win) {
   await win.webContents.executeJavaScript(`new Promise(function (resolve, reject) {
     var deadline = Date.now() + ${ASSETS_TIMEOUT_MS};
     (function check() {
@@ -56,7 +56,35 @@ async function renderFirstFrame(win) {
       setTimeout(check, 5);
     })();
   })`);
+}
+
+async function renderFirstFrame(win) {
+  await waitForAssets(win);
   await win.webContents.executeJavaScript('update(performance.now()); undefined;');
+}
+
+/**
+ * Take requestAnimationFrame away from the page, the way the real host can.
+ *
+ * SignalRGB runs effects in an offscreen Ultralight view and carries its own
+ * recovery code for a view whose frames have gone stale
+ * (UltralightView::TryRecoverIfBehind re-kicks window.__lastRAFCallback), so
+ * "the animation-frame loop has stopped delivering" is a condition that host
+ * really has, not a hypothetical. A stub that quietly hands back an id and
+ * never calls anything reproduces it exactly: any effect that has no second
+ * way to reach its own render step freezes on whatever frame it last drew.
+ */
+/** SignalRGB writing control values into page globals, as one script. */
+function assignGlobals(values) {
+  return Object.entries(values)
+    .map(([key, value]) => `window[${JSON.stringify(key)}] = ${JSON.stringify(value)};`)
+    .join(' ');
+}
+
+async function stopAnimationFrames(win) {
+  await win.webContents.executeJavaScript(
+    'window.requestAnimationFrame = function () { return 0; }; undefined;'
+  );
 }
 
 async function main() {
@@ -74,8 +102,32 @@ async function main() {
       // Load an exported effect file and read its canvas back.
       await win.loadFile(job.file);
 
-      // There is a frame on the canvas from here on -- see renderFirstFrame.
-      await renderFirstFrame(win);
+      // stopRaf: withhold the animation-frame loop from here on, so what the
+      // canvas ends up showing can only have been drawn by whatever OTHER way
+      // in the effect has (see stopAnimationFrames).
+      if (job.stopRaf) await stopAnimationFrames(win);
+
+      if (job.stamps) {
+        // stamps: drive the effect's own update() with an explicit list of
+        // timestamps, standing in for a host whose animation-frame clock
+        // behaves differently from Chromium's -- one that repeats a value, or
+        // goes backwards, or passes nothing at all. The automatic first frame
+        // is skipped so the sequence handed over here IS the effect's whole
+        // history, with nothing anchored to this machine's real clock; for the
+        // same reason any setGlobals are written BEFORE the first of them
+        // rather than after the last, so the control value is in place for
+        // every frame of that history instead of only the final one.
+        await waitForAssets(win);
+        if (job.setGlobals) await win.webContents.executeJavaScript(assignGlobals(job.setGlobals));
+        for (const stamp of job.stamps) {
+          await win.webContents.executeJavaScript(
+            `update(${stamp === null ? 'undefined' : JSON.stringify(stamp)}); undefined;`
+          );
+        }
+      } else {
+        // There is a frame on the canvas from here on -- see renderFirstFrame.
+        await renderFirstFrame(win);
+      }
 
       // settleMs is no longer what makes the frame appear; it is elapsed
       // animation time, which the motion tests need in order to compare two
@@ -98,11 +150,8 @@ async function main() {
       // non-module <script> are global, so it is reachable as `update`) --
       // the exact same function requestAnimationFrame would have called, not
       // a reimplementation of it.
-      if (job.setGlobals) {
-        const assignments = Object.entries(job.setGlobals)
-          .map(([key, value]) => `window[${JSON.stringify(key)}] = ${JSON.stringify(value)};`)
-          .join(' ');
-        await win.webContents.executeJavaScript(assignments);
+      if (job.setGlobals && !job.stamps) {
+        await win.webContents.executeJavaScript(assignGlobals(job.setGlobals));
         await win.webContents.executeJavaScript('update(performance.now()); undefined;');
         await new Promise((resolve) => setTimeout(resolve, job.afterSetGlobalsMs ?? job.settleMs ?? 120));
       }

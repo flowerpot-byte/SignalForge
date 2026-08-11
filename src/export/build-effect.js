@@ -60,9 +60,45 @@ function bootstrap(controls) {
   var base = SF.normalizeDocument(raw).doc;
   var renderer = SF.createRenderer();
   var assets = null;
-  var start = null;
-  var lastFrame = -1e9;
+
+  // ---- The clock, and why it is not simply the host's timestamp ----------
+  //
+  // SignalRGB's documentation and every effect it ships drive an effect from
+  // window.requestAnimationFrame, so that is still the way in. What has
+  // changed is that neither the loop nor the timestamp is trusted to be the
+  // ONLY way in, because in the real host neither is guaranteed:
+  //
+  //  - the effect runs in an offscreen Ultralight view, and SignalRGB carries
+  //    its own recovery code for one whose frames have gone stale
+  //    (UltralightView::TryRecoverIfBehind re-kicks a single remembered
+  //    callback, and logs "Still stale after {} frames: recovery did not
+  //    help"). A loop that stops delivering is a designed-for condition there.
+  //  - every effect SignalRGB itself ships ignores the timestamp argument
+  //    entirely and steps a counter once per frame instead. An effect that
+  //    cannot draw without a well-behaved timestamp is depending on something
+  //    the host's own effects never depend on.
+  //
+  // So: elapsed time is accumulated here rather than derived, from the
+  // timestamp whenever it advances sanely and from a plain frame count
+  // whenever it does not. With a healthy host this is exactly the old
+  // (stamp - start) / 1000 and the preview and the exported file still land
+  // on the same pixels for the same frames; with a host that repeats a
+  // timestamp, hands over none, or resumes after a long pause, the picture
+  // keeps moving instead of freezing on a perfect still frame.
+  //
+  // No wall clock is read (Date.now / performance.now are forbidden here and
+  // in the engine, so that a frame depends on nothing but its own inputs) --
+  // the fallback is a frame count, which needs no clock at all.
   var FRAME_GAP = 1000 / 30;
+  var NOMINAL_STEP = 1 / 30;
+  /** Longer than this between two timestamps means the view was paused. */
+  var MAX_STEP_SEC = 1;
+
+  var seconds = 0;
+  var previousStamp = null;
+  var drawnStamp = null;
+  var drawnAny = false;
+  var ticks = 0;
 
   SF.loadAssets(base, {
     resolveUrl: function (asset) {
@@ -84,17 +120,87 @@ ${reads}
     return values;
   }
 
-  function update(stamp) {
-    window.requestAnimationFrame(update);
-    if (!assets) return;
-    if (start === null) start = stamp;
-    if (stamp - lastFrame < FRAME_GAP) return;
-    lastFrame = stamp;
-    var doc = SF.applyControls(base, readControls());
-    renderer.render(ctx, doc, assets, (stamp - start) / 1000);
+  function usable(stamp) {
+    return typeof stamp === 'number' && isFinite(stamp);
   }
 
-  window.requestAnimationFrame(update);`;
+  /**
+   * Hold the effect to 30 frames a second -- but only ever on the strength of
+   * a timestamp that is actually moving forward. The old gate was
+   * "stamp - lastFrame < FRAME_GAP", which is true forever the moment the
+   * host stops advancing its timestamp: the render step is then never reached
+   * again and the effect freezes on the frame it happens to have drawn. A gate
+   * that cannot tell "too soon" from "not moving" must not be allowed to
+   * refuse.
+   */
+  function tooSoon(stamp) {
+    if (!drawnAny || !usable(stamp) || drawnStamp === null) return false;
+    var since = stamp - drawnStamp;
+    return since > 0 && since < FRAME_GAP;
+  }
+
+  /** Move the effect's own clock on by one frame. */
+  function advance(stamp) {
+    if (!drawnAny) {
+      // The first frame is always t = 0, whatever the host started counting
+      // from -- which is what keeps the exported file and the preview on the
+      // same frame for the same elapsed time.
+      drawnAny = true;
+      if (usable(stamp)) { previousStamp = stamp; drawnStamp = stamp; }
+      return;
+    }
+    if (usable(stamp) && previousStamp !== null && stamp > previousStamp) {
+      var step = (stamp - previousStamp) / 1000;
+      previousStamp = stamp;
+      drawnStamp = stamp;
+      // A jump far larger than a frame is a view that was paused and has come
+      // back, not a second of animation to catch up on in one go.
+      seconds += step <= MAX_STEP_SEC ? step : NOMINAL_STEP;
+      return;
+    }
+    // No timestamp, or one that stood still or went backwards: count the
+    // frame instead, exactly as SignalRGB's own bundled effects do.
+    //
+    // The step is a nominal thirtieth of a second because there is no way to
+    // ask how long a frame really took without reading a wall clock, which is
+    // forbidden here. That is an accepted trade with a known worst case: a
+    // host that both ticks animation frames at 60Hz AND hands over a timestamp
+    // that never moves would play this at twice speed. Frozen is fatal and
+    // twice speed is not, and the pump below runs at exactly this rate, so the
+    // one case that matters -- no animation frames at all -- is exact.
+    if (usable(stamp)) { previousStamp = stamp; drawnStamp = stamp; }
+    seconds += NOMINAL_STEP;
+  }
+
+  /** One frame, from whichever way in reached it. */
+  function step(stamp) {
+    if (!assets) return;
+    if (tooSoon(stamp)) return;
+    advance(stamp);
+    var doc = SF.applyControls(base, readControls());
+    renderer.render(ctx, doc, assets, seconds);
+  }
+
+  function update(stamp) {
+    if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(update);
+    ticks += 1;
+    step(stamp);
+  }
+
+  // The second way in. setTimeout keeps running where requestAnimationFrame
+  // has stopped (measured in this project's own harness), so a timer that only
+  // draws when no animation frame has arrived since it last looked keeps a
+  // stalled effect alive without drawing a single extra frame while the loop
+  // is healthy.
+  if (typeof setInterval === 'function') {
+    var seenTicks = -1;
+    setInterval(function () {
+      if (ticks === seenTicks) step(undefined);
+      seenTicks = ticks;
+    }, FRAME_GAP);
+  }
+
+  if (typeof window.requestAnimationFrame === 'function') window.requestAnimationFrame(update);`;
 }
 
 /**
