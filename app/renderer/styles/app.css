@@ -727,6 +727,17 @@ html, body {
 }
 .section-actions { margin-left: auto; display: flex; gap: var(--space-1); }
 
+/* A run of cards that comes and goes together — today exactly one of them, the
+   background's own settings under the "Hintergrund" heading.
+
+   It is deliberately invisible: no fill, no stroke, no padding and no margin of
+   its own, so the cards inside it sit exactly where they would sit without it.
+   A box that could be SEEN would say there is a section inside the section, and
+   there is not — what it is for is that the entrance animation has one element
+   to be played on instead of five (see mountInspector), so the cards arrive as
+   one thing rather than scattering. */
+.field-cards { display: block; margin: 0; padding: 0; border: 0; }
+
 /* A card: one control group, on a fill one step up from the column, with an
    8px gap to the next and no border at all. Measured: the reference's cards
    have no stroke — scanning across one goes page colour to card colour in a

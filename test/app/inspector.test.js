@@ -153,18 +153,56 @@ test('every slider offers exactly the range the matching exported control offers
     ['layers.1.seed', 'seed']
   ];
 
-  for (const [path, property] of pairs) {
-    const field = fields.find((f) => f.path === path);
+  // ------------------------------------------------------ and the background
+  //
+  // A LIST OF ITS OWN, AND IT HAS TO BE ONE. A background is a gradient like
+  // any other, so its cards come out at "layers.0.angle" and "layers.0.bands"
+  // — the very paths four of the documents above already produce for their own
+  // gradients. Concatenating the two would leave `find` returning whichever
+  // came first, and the four background pairs would silently be checking the
+  // FOREGROUND's ranges: the exact failure the particle layer was moved to
+  // index 1 to avoid, one layer down, where moving it is not an option because
+  // being first is what makes it the background.
+  //
+  // `stripes` rather than a plain gradient so the band count is offered at all
+  // (linear and radial are one traversal of the ramp and are given none), and a
+  // motion on it so its tempo and strength are there to be paired.
+  const backgroundFields = describeInspector(normalizeDocument({
+    layers: [
+      { id: 'bg', type: 'gradient', shape: 'stripes', motions: [{ kind: 'drift' }] },
+      { id: 'front', type: 'particles' }
+    ]
+  }).doc, 'front');
+  const backgroundPairs = [
+    ['layers.0.angle', 'bgAngle'],
+    ['layers.0.bands', 'bgBands'],
+    ['layers.0.motions.0.speed', 'bgTempo'],
+    ['layers.0.motions.0.amount', 'bgStrength']
+  ];
+
+  const check = (list, path, property) => {
+    const field = list.find((f) => f.path === path);
     assert.ok(field, `${path} is not offered in the settings column at all`);
     assert.equal(field.min, CONTROL_RANGES[property].min, `${path} min differs from ${property}`);
     assert.equal(field.max, CONTROL_RANGES[property].max, `${path} max differs from ${property}`);
+  };
+
+  for (const [path, property] of pairs) check(fields, path, property);
+  for (const [path, property] of backgroundPairs) check(backgroundFields, path, property);
+
+  // And the background's four really are the background's: every one of them
+  // has to sit under the background heading, or the pairing above would be
+  // satisfied by the foreground's own sliders appearing at the same paths.
+  for (const [path] of backgroundPairs) {
+    assert.equal(backgroundFields.find((f) => f.path === path).section, 'background',
+      `${path} was paired with a background range but is not in the background section`);
   }
 
   // And nothing the exported effect offers is left without a slider: a
   // seventh range added over there has to be answered here.
   assert.deepEqual(
     Object.keys(CONTROL_RANGES).sort(),
-    pairs.map(([, property]) => property).sort(),
+    [...pairs, ...backgroundPairs].map(([, property]) => property).sort(),
     'every exported control range must have a slider in the app, and the other way round'
   );
 });

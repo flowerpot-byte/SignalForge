@@ -14,6 +14,11 @@ import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
 import { enter } from './components/motion.js';
 import { decodeAsset as decodeImage } from './components/decode.js';
+// Pure arithmetic over the document's own layer list, the same kind of import
+// the settings column already makes (see components/inspector.js): which layer
+// is the one being edited and which is the background is a question about the
+// document, not about the window, and it is answered in one place.
+import { foregroundOf } from '../../src/engine/slots.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -200,18 +205,25 @@ async function boot() {
   const COLOUR_LAYER = 'fill';
 
   /**
-   * The one layer, whatever it is — the document has exactly one for now, and
-   * every lookup below asks for it this way rather than by a fixed id. A
-   * project whose picture layer was named something else (an effect exported
-   * by the command line calls it "a1") used to arrive with no measurable
-   * picture at all, because the lookup was by the name this window happens to
-   * use.
+   * The layer this window edits, whatever it is, asked for by slot rather than
+   * by a fixed id. A project whose picture layer was named something else (an
+   * effect exported by the command line calls it "a1") used to arrive with no
+   * measurable picture at all, because the lookup was by the name this window
+   * happens to use.
+   *
+   * IT IS THE LAST LAYER AND NOT THE FIRST, which is the one line in this file
+   * that the background slot actually changed. `layers[0]` was the same layer
+   * either way for as long as a document could only hold one; a document with a
+   * background carries that background first, so reading index 0 would hand the
+   * crop drag, the thumbnail and the settings column the layer UNDERNEATH the
+   * one the user is working on. See src/engine/slots.js for the whole
+   * position-and-id decision.
    */
-  const onlyLayer = (doc = preview.document()) => doc.layers[0] ?? null;
+  const editedLayer = (doc = preview.document()) => foregroundOf(doc.layers);
 
   /** That layer, but only when it is a picture — otherwise nothing. */
   const pictureLayer = (doc = preview.document()) => {
-    const layer = onlyLayer(doc);
+    const layer = editedLayer(doc);
     return layer && layer.type === 'image' ? layer : null;
   };
 

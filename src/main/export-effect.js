@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { buildEffectHtml } from '../export/build-effect.js';
 import { effectControls, withLiveMotion } from '../export/effect-controls.js';
 import { normalizeDocument } from '../engine/document.js';
+import { foregroundOf, backgroundOf } from '../engine/slots.js';
 import { COVER_EXTENSION } from './cover-image.js';
 
 /**
@@ -182,9 +183,22 @@ export async function exportEffect({
     return { ok: false, reason: 'exists', path, coverPath: replacesCover ? coverPath : null };
   }
 
-  const layerId = normalized.layers[0].id;
-  const prepared = withLiveMotion(normalized, layerId);
-  const finished = { ...prepared, controls: effectControls(prepared, layerId) };
+  // WHICH LAYER THE CONTROLS ADDRESS. It used to be `layers[0]`, which was the
+  // same layer either way for as long as a document could only hold one. It no
+  // longer is: a document with a background carries it FIRST, so `layers[0]`
+  // would now bake the background's knobs under the foreground's names and
+  // leave the foreground with none at all. The two slots are asked for by name
+  // (src/engine/slots.js) and everything downstream addresses them by id.
+  const layerId = foregroundOf(normalized.layers).id;
+  const backgroundId = backgroundOf(normalized.layers)?.id ?? null;
+  // Both slots get an inert motion entry if they have none, for the reason
+  // withLiveMotion exists at all: three controls with nowhere to write are
+  // three controls that do nothing. Chained rather than combined because the
+  // function takes one layer at a time and hands back a whole normalized
+  // document, so running it twice is running it once, twice.
+  let prepared = withLiveMotion(normalized, layerId);
+  if (backgroundId) prepared = withLiveMotion(prepared, backgroundId);
+  const finished = { ...prepared, controls: effectControls(prepared, layerId, backgroundId) };
   const html = buildEffectHtml({ doc: finished, engineSource, lang });
 
   // Drawn from the very document that is about to be written, before either

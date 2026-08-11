@@ -83,7 +83,7 @@ import {
  * -100..100 controls are the first of their kind this project ships. If they
  * misbehave in SignalRGB's own UI, that is the thing to look at first.
  */
-export const CONTROL_RANGES = Object.freeze({
+const FOREGROUND_RANGES = Object.freeze({
   tempo: Object.freeze({ min: 1, max: 100 }),
   strength: Object.freeze({ min: 0, max: 100 }),
   // 100 is the middle of this range on purpose, and it is the default: a
@@ -180,6 +180,34 @@ export const CONTROL_RANGES = Object.freeze({
 });
 
 /**
+ * The same table, plus the background's four sliders.
+ *
+ * FOUR ALIASES AND NOT FOUR NUMBERS. A background is a solid or a gradient, so
+ * every range it needs is a range this table already holds — the aliases point
+ * at the very same frozen objects rather than restating 0..360 and 1..24, which
+ * is what stops the two from ever drifting apart. What they buy is a NAME: an
+ * exported control's `property` becomes a global in the finished effect and is
+ * the label's only companion in SignalRGB's flat panel, so a background's angle
+ * cannot be called `angle` while the foreground's already is.
+ *
+ * The same collision the four particle entries met, met again one layer down
+ * and answered the same way — see the note beside particleCount above. It is
+ * worse here than there, because a gradient over a gradient really can put two
+ * sliders called "Winkel" one under the other with nothing to tell them apart.
+ *
+ * There is deliberately no `bgStop`: stop POSITIONS are not offered in an
+ * exported panel at all (see the `stop` note above), for the foreground or for
+ * the background.
+ */
+export const CONTROL_RANGES = Object.freeze({
+  ...FOREGROUND_RANGES,
+  bgAngle: FOREGROUND_RANGES.angle,
+  bgBands: FOREGROUND_RANGES.bands,
+  bgTempo: FOREGROUND_RANGES.tempo,
+  bgStrength: FOREGROUND_RANGES.strength
+});
+
+/**
  * A colour picker.
  *
  * SECOND NOTE, unverified, and a larger one than the negative minimum above:
@@ -244,8 +272,26 @@ function dropdown(property, de, en, values, value, bind) {
  * exported effect and render, but SignalRGB's own UI only gets to steer the
  * first. Exposing every entry would mean inventing property names like
  * `motion2`, which is a feature, not this task.
+ *
+ * `backgroundId` names the layer UNDERNEATH, if there is one, and its knobs come
+ * out as a block of their own after the foreground's and before the
+ * document-wide ones. Two things decide that order and neither is taste:
+ *
+ *  - SignalRGB's panel is FLAT. It has no headings, so the only thing that can
+ *    group a background's controls is that they are next to each other and that
+ *    every one of them says "Hintergrund" in its label. Sprinkling them among
+ *    the foreground's would leave two "Farbe" sliders with a "Muster" between
+ *    them.
+ *  - The foreground is what the effect IS. Somebody who installs rain over a
+ *    gradient reaches for the rain first, so the rain is at the top; what is
+ *    behind it comes next; and the grade that is applied to both of them
+ *    together stays where it has always been, at the bottom.
+ *
+ * Both ids are looked up by id and not by position (`doc.layers.find`), which
+ * is what makes this safe against a document whose layers were reordered — see
+ * src/engine/slots.js for the id-and-position decision in full.
  */
-export function effectControls(doc, layerId) {
+export function effectControls(doc, layerId, backgroundId = null) {
   const controls = [];
   const layer = doc.layers.find((entry) => entry.id === layerId);
 
@@ -270,21 +316,32 @@ export function effectControls(doc, layerId) {
    * option is fixed by exporting again from the app, where the whole list is
    * live; a dead option is a control somebody drags and blames themselves for.
    */
-  const motionControls = () => {
-    const motion = layer.motions?.[0];
+  const motionControlsFor = (target, id, names) => {
+    const motion = target.motions?.[0];
     if (!motion) return;
     // The same rule the sliders follow (see slider() above): the offer gives
     // way, never the document's own value. A hand-edited project can carry a
     // warp on a solid layer, and a dropdown whose default is not one of its
     // own options leaves SignalRGB to decide what that means.
-    const offered = motionKindsFor(layer.type, layer.figure);
+    const offered = motionKindsFor(target.type, target.figure);
     const kinds = offered.includes(motion.kind) ? offered : [...offered, motion.kind];
     controls.push(
-      dropdown('motion', 'Modus', 'Motion', kinds, motion.kind, `${layerId}.motions.0.kind`),
-      slider('tempo', 'Tempo', 'Speed', motion.speed, `${layerId}.motions.0.speed`),
-      slider('strength', 'Staerke', 'Strength', motion.amount, `${layerId}.motions.0.amount`)
+      dropdown(names.motion[0], names.motion[1], names.motion[2], kinds, motion.kind,
+        `${id}.motions.0.kind`),
+      slider(names.tempo[0], names.tempo[1], names.tempo[2], motion.speed, `${id}.motions.0.speed`),
+      slider(names.strength[0], names.strength[1], names.strength[2], motion.amount,
+        `${id}.motions.0.amount`)
     );
   };
+
+  /** What the foreground's three motion controls are called. */
+  const MOTION_NAMES = Object.freeze({
+    motion: ['motion', 'Modus', 'Motion'],
+    tempo: ['tempo', 'Tempo', 'Speed'],
+    strength: ['strength', 'Staerke', 'Strength']
+  });
+
+  const motionControls = () => motionControlsFor(layer, layerId, MOTION_NAMES);
 
   if (layer && layer.type === 'image') {
     motionControls();
@@ -389,6 +446,59 @@ export function effectControls(doc, layerId) {
       slider('seed', 'Anordnung', 'Arrangement', layer.seed, `${layerId}.seed`)
     );
     motionControls();
+  }
+
+  // ----------------------------------------------------------- the background
+  //
+  // Everything it offers is prefixed `bg` and labelled "Hintergrund" /
+  // "Background", because SignalRGB's panel is one flat run of controls and
+  // there is nothing else that can say which layer a knob belongs to. See the
+  // note on the four aliases in CONTROL_RANGES for why sharing a name with the
+  // foreground would have been a bug and not a tidy-up.
+  //
+  // Only the two types a background can be are answered here. That is not a gap
+  // to fill in later: BACKGROUND_KINDS (src/engine/slots.js) is exactly `solid`
+  // and `gradient`, because a background has to cover the canvas and those are
+  // the two types that do. A document hand-edited to put something else
+  // underneath still RENDERS — the engine draws every layer it is given — it
+  // simply gets no controls of its own, which is the same thing that happens to
+  // a foreground of an unknown type a few lines up.
+  const background = backgroundId
+    ? doc.layers.find((entry) => entry.id === backgroundId)
+    : null;
+
+  if (background && background.type === 'solid') {
+    controls.push(colour('bgColor', 'Hintergrund Farbe', 'Background Colour', background.color,
+      `${backgroundId}.color`));
+  }
+
+  if (background && background.type === 'gradient') {
+    background.stops.forEach((stop, index) => {
+      const at = index + 1;
+      controls.push(colour(`bgColor${at}`, `Hintergrund Farbe ${at}`, `Background Colour ${at}`,
+        stop.color, `${backgroundId}.stops.${index}.color`));
+    });
+    controls.push(
+      dropdown('bgShape', 'Hintergrund Form', 'Background Shape', GRADIENT_SHAPES, background.shape,
+        `${backgroundId}.shape`),
+      // Offered whatever the shape is, for exactly the reason the foreground's
+      // angle and bands are — the Form dropdown right above it can be switched
+      // from this very panel, and a slider that only appeared for some shapes
+      // would leave somebody who switched with no way to set the one thing
+      // those shapes are about.
+      slider('bgAngle', 'Hintergrund Winkel', 'Background Angle', background.angle,
+        `${backgroundId}.angle`),
+      slider('bgBands', 'Hintergrund Baender', 'Background Bands', background.bands,
+        `${backgroundId}.bands`)
+    );
+  }
+
+  if (background) {
+    motionControlsFor(background, backgroundId, {
+      motion: ['bgMotion', 'Hintergrund Modus', 'Background Motion'],
+      tempo: ['bgTempo', 'Hintergrund Tempo', 'Background Speed'],
+      strength: ['bgStrength', 'Hintergrund Staerke', 'Background Strength']
+    });
   }
 
   // The three document-wide settings that are about the picture rather than

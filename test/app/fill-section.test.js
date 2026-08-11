@@ -225,7 +225,13 @@ test('neither table names a section the other has never heard of', () => {
 // of dead weight the left column's fifth entry could once hide.
 test('no section is headed that nothing ever builds', () => {
   const sections = new Set();
-  for (const layer of [{ type: 'solid' }, { type: 'gradient' }, { type: 'image', asset: 'q' }]) {
+  // LAYER_TYPES and not a hand-written three. It used to name solid, gradient
+  // and image inline, which was every type there was when it was written and
+  // has been a shrinking fraction of them ever since — and the moment a section
+  // existed that only one of the OTHER types produces ("Hintergrund", which is
+  // offered to the two types that leave ground for it), the guard called that
+  // section dead weight. The maintained list cannot go out of date that way.
+  for (const layer of LAYER_TYPES) {
     for (const field of fieldsOf(layer)) sections.add(field.section);
   }
   for (const name of Object.keys(SECTION_TITLES)) {

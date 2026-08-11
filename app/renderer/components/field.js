@@ -10,6 +10,7 @@ import { icon } from './icons.js';
 // here keeps every colour this file can ever write traceable back to the
 // document (test/app/color-literals.test.js).
 import { colorAtPosition } from '../../../src/engine/document.js';
+import { backgroundKindOf, withBackgroundKind } from '../../../src/engine/slots.js';
 
 /**
  * A control's id, derived from the field's path so it is the same before and
@@ -177,6 +178,46 @@ function selectField(field, { t, value, onChange }) {
 }
 
 /**
+ * Whether there is a background, and what it is made of.
+ *
+ * A dropdown like any other to look at, and the one control in this column
+ * whose value is not the thing it writes: it SHOWS a word out of
+ * BACKGROUND_KINDS and it REPORTS the document's whole layer list with that
+ * background put into it (or taken out of it). Everything about how that is
+ * done lives in src/engine/slots.js, which is arithmetic over a plain array and
+ * is tested without a DOM.
+ *
+ * That indirection is what lets one dropdown add and remove a layer without
+ * this window learning how to build one. The list it reports goes back through
+ * setDocument and therefore through normalizeDocument, exactly as adding a
+ * motion or a colour stop already does — so a background arrives with the
+ * engine's own defaults in it and no colour is ever named here (the rule
+ * test/app/color-literals.test.js keeps over this whole tree).
+ *
+ * `value` is the layer list itself, because the field's path is `layers`.
+ */
+function backgroundField(field, { t, value, onChange }) {
+  const wrapper = row('control control-row');
+  const id = fieldId(field.path);
+
+  const select = document.createElement('select');
+  select.id = id;
+  for (const kind of field.values) {
+    const node = document.createElement('option');
+    node.value = kind;
+    node.textContent = t(optionKey(field, kind));
+    select.append(node);
+  }
+  select.value = backgroundKindOf(value);
+  select.addEventListener('change', () => {
+    onChange(field.path, withBackgroundKind(value, select.value));
+  });
+
+  wrapper.append(labelFor(id, t(field.labelKey)), select);
+  return wrapper;
+}
+
+/**
  * The motion list, as pieces rather than as a finished block: one row per
  * motion, and the button that adds another.
  *
@@ -276,6 +317,7 @@ export function createField(field, options) {
   if (field.type === 'number') return numberField(field, options);
   if (field.type === 'select') return selectField(field, options);
   if (field.type === 'color') return colorField(field, options);
+  if (field.type === 'background') return backgroundField(field, options);
   return null;
 }
 

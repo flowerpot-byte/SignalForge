@@ -137,6 +137,21 @@ const GLYPHS = Object.freeze({
     ['path', { d: 'M2.5 13.5 12 4' }],
     ['path', { d: 'M8.5 13.5a6 6 0 0 0-1.2-3.5' }]
   ],
+  /**
+   * The background: one field standing BEHIND another.
+   *
+   * Two overlapping rounded squares, the back one offset up and left so a
+   * corner of it stays visible past the front one — which is the whole sentence
+   * this section is about, and the only way to say it in sixteen pixels. It is
+   * deliberately not the `solid` or the `gradient` glyph: a background is
+   * either of those, so borrowing one of them would name the wrong half of the
+   * choice, and both are already spoken for by the "Fläche" heading and the
+   * starting gallery's own tiles.
+   */
+  background: [
+    ['rect', { x: 1.5, y: 1.5, width: 9, height: 9, rx: 2 }],
+    ['rect', { x: 5.5, y: 5.5, width: 9, height: 9, rx: 2 }]
+  ],
   /** The drop target, and the empty stage's own sign. */
   drop: [
     ['path', { d: 'M8 1.8v7.4' }],
