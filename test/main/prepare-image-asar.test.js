@@ -8,8 +8,8 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
 import { resolveElectronBin } from '../../src/main/prepare-image.js';
+import { runElectron } from '../harness/spawn-electron.js';
 
 const require_ = createRequire(import.meta.url);
 const REPO = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -159,37 +159,20 @@ test('the DEFAULT window factory prepares an image from inside an .asar', async 
 
     // `electron <path-to.asar>` loads that archive as the application, which
     // is what puts every module below inside one.
-    const child = spawn(resolveElectronBin(), [archive], {
-      env: { ...process.env, SF_ASAR_IMAGE: image, SF_ASAR_OUT: outFile },
-      stdio: ['ignore', 'ignore', 'pipe']
-    });
-    let stderr = '';
-    let settled = false;
-    child.stderr.on('data', (chunk) => { stderr += chunk; });
-
-    // The same timeout-plus-settled-guard pair prepare-image.js and
-    // test/harness/render.js both use, and for the same reason: a descendant
-    // holding a pipe open can stop 'close' from ever firing.
-    const code = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        child.kill();
-        reject(new Error(`Electron did not finish within ${TIMEOUT_MS}ms\n${stderr}`));
-      }, TIMEOUT_MS);
-      child.on('error', (error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(error);
-      });
-      child.on('close', (value) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(value);
-      });
-    });
+    // Through runElectron (test/harness/spawn-electron.js): the same
+    // timeout-plus-settled-guard pair this used to carry itself, in the one
+    // place every Electron spawn in the suite now shares — including the kill,
+    // because a descendant holding a pipe open can stop 'close' from ever
+    // firing and nothing else would come back for the process.
+    const { code, stderr } = await runElectron(
+      resolveElectronBin(),
+      [archive],
+      {
+        env: { ...process.env, SF_ASAR_IMAGE: image, SF_ASAR_OUT: outFile },
+        timeoutMs: TIMEOUT_MS,
+        label: 'the packaged image factory'
+      }
+    );
 
     assert.ok(
       existsSync(outFile),

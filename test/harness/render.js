@@ -31,7 +31,12 @@ export async function runJobs(jobs, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   try {
     await new Promise((resolve, reject) => {
       const child = spawn(electronBinary, [join(here, 'electron-main.cjs'), jobFile, outFile], {
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
+        // The child's own watchdog (test/harness/driver.js), set a few seconds
+        // inside what this side is prepared to wait. A run that wedges then
+        // says so itself and quits, instead of being killed from out here —
+        // and, more to the point, instead of surviving out here being killed.
+        env: { ...process.env, SF_HARNESS_WATCHDOG_MS: String(Math.max(5_000, timeoutMs - 5_000)) }
       });
 
       // The machine's owner may be using it for other work while these
@@ -62,6 +67,10 @@ export async function runJobs(jobs, { timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
+        // Killed here too, not only on the timeout: a spawn that reports an
+        // error may still have left a process running, and nothing else would
+        // ever come back for it.
+        child.kill();
         reject(error);
       });
 

@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { runElectron } from '../harness/spawn-electron.js';
 
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -30,21 +30,17 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // The environment is passed on whole, and that matters: SF_EFFECTS_SANDBOX_REQUIRED
   // and SF_SINGLE_INSTANCE_TEST are armed for the whole suite by the two
   // --import scripts in package.json, and the child has to inherit both.
-  const child = spawn(require_('electron'), [join(root, 'test', 'harness', 'selftest.js')], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env }
-  });
-
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (c) => { stdout += c; });
-  child.stderr.on('data', (c) => { stderr += c; });
-
-  const code = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { child.kill(); reject(new Error(`app did not finish\n${stderr}`)); }, 60_000);
-    child.on('error', reject);
-    child.on('close', (c) => { clearTimeout(timer); resolve(c); });
-  });
+  //
+  // runElectron (test/harness/spawn-electron.js) is the one place the spawn,
+  // the pipe draining, the timeout and — the part that matters here — the kill
+  // live. 90 s, not 60: the self-test's own watchdog fires at 60 s (see
+  // WATCHDOG_MS in test/harness/driver.js), and a run that wedges should
+  // report ITS reason, not be cut down before it can give one.
+  const { code, stdout, stderr } = await runElectron(
+    require_('electron'),
+    [join(root, 'test', 'harness', 'selftest.js')],
+    { timeoutMs: 90_000, label: 'the self-test harness' }
+  );
 
   assert.equal(code, 0, `app exited with ${code}\n${stderr}`);
   const report = JSON.parse(stdout.trim().split('\n').pop());

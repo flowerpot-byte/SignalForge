@@ -51,6 +51,9 @@ function waitForExit(proc, ms = 20_000) {
 
 /** Kill and wait for the process to actually be gone, not merely asked to go. */
 function killAndWaitForExit(proc, ms = 10_000) {
+  // Already gone: 'close' has fired and will not fire again, so waiting for it
+  // would mean sitting out the full timeout for nothing.
+  if (proc.child.exitCode !== null || proc.child.signalCode !== null) return Promise.resolve();
   return new Promise((resolve) => {
     const timer = setTimeout(resolve, ms);
     proc.child.on('close', () => { clearTimeout(timer); resolve(); });
@@ -62,6 +65,14 @@ test('a second instance exits without opening a window, and the first is told ab
   const out = mkdtempSync(join(tmpdir(), 'signalforge-singleinstance-'));
   const effects = join(out, 'Effects');
   const first = spawnHarness(out, effects);
+  // Held out here so the `finally` can reach it however this test ends. Both
+  // processes are real Electron main processes with a real window each, and a
+  // test that threw between spawning one and waiting for it would otherwise
+  // leave it resident — which is the whole class of defect this round is
+  // about. The harness itself also carries a watchdog (see
+  // test/support/single-instance-harness.js), because this test process dying
+  // outright is the one thing no `finally` here can cover.
+  let second = null;
 
   try {
     // The first instance: a genuine app.requestSingleInstanceLock() success,
@@ -80,7 +91,7 @@ test('a second instance exits without opening a window, and the first is told ab
 
     // The second instance: same userData, same effects sandbox, so it is
     // contending for the exact same lock the first one holds.
-    const second = spawnHarness(out, effects);
+    second = spawnHarness(out, effects);
     await waitForExit(second);
 
     assert.match(
@@ -114,6 +125,10 @@ test('a second instance exits without opening a window, and the first is told ab
     // files open until it has actually exited, and rmSync below fails on
     // exactly the files this process's own userData holds open.
     await killAndWaitForExit(first);
+    // The loser normally quits itself the moment it is refused the lock, so
+    // this is almost always a no-op — but "almost always" is what left three
+    // Electron processes on this machine for six hours.
+    if (second) await killAndWaitForExit(second);
     // A failed cleanup here must never mask a real assertion failure above —
     // node:test would otherwise report the wrong thing as the reason this
     // test failed.

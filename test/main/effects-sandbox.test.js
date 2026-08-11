@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -12,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import {
   resolveEffectsTarget, SANDBOX_ENV, SANDBOX_REQUIRED_ENV, SANDBOX_MISSING_MESSAGE
 } from '../../src/main/effects-target.js';
+import { runElectron } from '../harness/spawn-electron.js';
 
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -143,24 +143,20 @@ test('a harness that redirects userData and forgets the sandbox dies loudly inst
     // inherited as-is, which is what proves the arming in package.json reaches
     // a spawned Electron on its own.
     assert.equal(process.env[SANDBOX_ENV], undefined, 'this test must not be handed a sandbox');
-    const child = spawn(require_('electron'), [join(root, 'test', 'support', 'forgetful-harness.js')], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, SF_FORGETFUL_OUT: out }
-    });
-
-    let stdout = '';
-    let stderr = '';
-    child.stdout.on('data', (c) => { stdout += c; });
-    child.stderr.on('data', (c) => { stderr += c; });
-
-    const code = await new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        child.kill();
-        reject(new Error(`the forgetful harness never finished\n${stderr}`));
-      }, 60_000);
-      child.on('error', reject);
-      child.on('close', (c) => { clearTimeout(timer); resolve(c); });
-    });
+    // Through runElectron (test/harness/spawn-electron.js), like every other
+    // Electron spawn in the suite, so this one cannot be the copy that forgets
+    // to kill what it started. This harness is meant to be refused within a
+    // second or two of starting; 60 s is only there so a machine under load
+    // still gets a real answer.
+    const { code, stdout, stderr } = await runElectron(
+      require_('electron'),
+      [join(root, 'test', 'support', 'forgetful-harness.js')],
+      {
+        env: { ...process.env, SF_FORGETFUL_OUT: out },
+        timeoutMs: 60_000,
+        label: 'the forgetful harness'
+      }
+    );
 
     assert.notEqual(
       code, 0,

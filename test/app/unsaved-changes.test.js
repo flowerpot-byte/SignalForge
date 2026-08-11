@@ -3,12 +3,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { constants, setPriority } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { runElectron } from '../harness/spawn-electron.js';
 
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -50,35 +49,22 @@ const dropImportSkip = process.env[DROP_IMPORT_ENV] === '1'
  * here and is never set by the suite.
  */
 async function runHarness() {
-  const child = spawn(require_('electron'), [join(root, 'test', 'harness', 'unsaved.js')], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env }
-  });
-
   // `npm test` runs its files side by side, and this one holds a real window
-  // rendering a real preview for the better part of half a minute. The render
-  // harness (test/harness/render.js) yields the same way and for the same
-  // reason: the pixel tests running beside this one measure a moving picture
-  // against the clock, and nothing here is in a hurry.
-  try {
-    setPriority(child.pid, constants.priority.PRIORITY_BELOW_NORMAL);
-  } catch {
-    // Best effort only; correctness never depends on it.
-  }
-
-  let stdout = '';
-  let stderr = '';
-  child.stdout.on('data', (c) => { stdout += c; });
-  child.stderr.on('data', (c) => { stderr += c; });
-
-  const code = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      child.kill();
-      reject(new Error(`the unsaved-changes harness did not finish\n${stderr}`));
-    }, 90_000);
-    child.on('error', reject);
-    child.on('close', (c) => { clearTimeout(timer); resolve(c); });
-  });
+  // rendering a real preview for the better part of half a minute — so it is
+  // asked to yield (see the `yieldPriority` flag): the pixel tests running
+  // beside this one measure a moving picture against the clock, and nothing
+  // here is in a hurry.
+  //
+  // 90 s here against the harness's own 75 s watchdog (see WATCHDOG_MS in
+  // test/harness/unsaved.js), so a wedged run says which step it wedged on
+  // rather than being killed without a word. runElectron
+  // (test/harness/spawn-electron.js) is what makes sure it is killed anyway if
+  // it comes to that.
+  const { code, stdout, stderr } = await runElectron(
+    require_('electron'),
+    [join(root, 'test', 'harness', 'unsaved.js')],
+    { timeoutMs: 90_000, label: 'the unsaved-changes harness', yieldPriority: true }
+  );
 
   assert.equal(code, 0, `the harness exited with ${code}\n${stderr}`);
   return JSON.parse(stdout.trim().split('\n').pop());
