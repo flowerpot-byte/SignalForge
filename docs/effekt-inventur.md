@@ -342,7 +342,7 @@ exportierte Datei dieselben Pixel zeigen. Eine Hash-Funktion über den Partikel-
 | A7 Wischbewegung | **Fast** | `drift` auf `linear`/`stripes` schwingt hin und her statt in eine Richtung zu marschieren — die Bewegung ist da, der harte Wisch mit stehenbleibender Farbe nicht |
 | A8 Regenbogen-Spalten | **Ja, mit Umweg** | `stripes` mit vier Stopps und 24 Wiederholungen kommt nah; ein echter 360°-Regenbogen bräuchte mehr als 4 Stopps oder A4 |
 | A11 Verzerrtes Bild | **Ja, ganz** | `warp` ist genau dieselbe Puffer-Mathematik (`src/engine/layers/warp-buffer.js`) |
-| A1 Partikelsystem | **Nein** | Ebenentyp fehlt. Mit gesätem Zufall aber **machbar**, weil die Bewegung linear in `t` ist |
+| A1 Partikelsystem | **Ja, ganz** (seit 11.08., siehe C1) | Ebenentyp `particles`; geschlossene Formel je Partikel aus gesätem Zufall, vier Muster |
 | A2 Nachzieh-Schleier | **Ja, mit einer Einschränkung** (seit 11.08., siehe C2) | Dokumentfeld `trail` (0 = aus = wie bisher). Sichtbar nur dort, wo eine Ebene die Fläche **nicht** deckend übermalt — also bei Deckkraft < 1, bei `atmen`/`pulsieren` oder (später) bei Partikeln |
 | A5 Figuren (Kreis/Ring/Stern/Herz) | **Ja, ganz** (seit 11.08., siehe C4) | Ebenentyp `shape`; Kreis, Ring, Stern, Herz auf durchsichtigem Grund |
 | A6 Kachelraster | **Nein** | Ebenentyp oder Verlaufsform fehlt. Phase je Zelle aus gesätem Zufall |
@@ -356,6 +356,27 @@ ganz, A2 (Nachzieh-Schleier) mit einer Einschränkung, die bei C2 ausbuchstabier
 A5 (Figuren) ganz. Die Zusammenrechnung darunter ist die von vor diesem Bau und wird bewusst
 nicht überschrieben: der volle Wert der ersten beiden zeigt sich erst mit den Partikeln (C1),
 und bis dahin wäre eine höhere Zahl hier eine Behauptung statt einer Messung.
+
+**Nachtrag 11.08.2026, zweiter — A1 ist gebaut, und damit ist der Satz oben eingelöst.**
+Die Partikelebene steht (C1). Die Einschränkung bei A2 ist damit ganz weg: der Schleier hat
+jetzt genau das, wofür er gedacht war, denn eine Partikelebene deckt die Fläche nie. Gemessen
+im echten Fenster: mittlere Bildhelligkeit 3,08 ohne Schleier, 34,57 mit
+(`work/particles-shots/`, elffach).
+
+**Die Zusammenrechnung ist damit fällig, und hier ist sie — ehrlich gerechnet.** Von den 31
+gelesenen Effekten sind jetzt nachbaubar: die **neun** aus der Poison-Vorlage (`Poison`,
+`Corrosive`, `Calm Water`, `Titanium`, `Crimson`, `Jade`, `Nuclear`, `Peach`, `Magma`) —
+alle sind wandernde Partikel in 3–4 Farben mit Schleier, und alle drei Bausteine gibt es;
+dazu `Arctic` (Schnee, einfarbig mit Deckkraft-Streuung), `Starlight` (Partikel bei
+Reisetempo 0), `Custom Sunrise` und `Aurora` näherungsweise, plus die sechs, die schon vorher
+gingen (`Solid Color`, `Good Night!`, `Rainbow`, `Black Ice`, `Gradient Wave`, `Neon Shift`)
+und `MaxAmbient`. Das sind **rund 20 von 31**. Die vorhergesagten „grob 25" sind damit
+**nicht** erreicht, und das ist keine Nachlässigkeit, sondern die Rechnung von damals war zu
+optimistisch: sie hat A6 (Kachelraster, drei Effekte) und A5-Reste mitgezählt, die C5 noch
+gar nicht gebaut hat, und `Hydrogen`, `Terminal`, `Biohazard`, `Radar`, `Vibe`, `Spin`,
+`Enigma`, `Electric`, `Dark Magic` und `Rick and Morty` brauchen weiter Bausteine, die es
+nicht gibt (Tonreaktion, Text, Kachelraster, Zeiger-Geometrie). Der Sprung durch C1 ist
+trotzdem der größte einzelne des ganzen Projekts: **von 6 auf ungefähr 20.**
 
 **Und eine Einschränkung ist mit A5 weggefallen, nicht nur eine Zeile dazugekommen.** Der
 Nachzieh-Schleier (C2) hatte bis dahin nichts, woran er sichtbar werden konnte: jede Ebene,
@@ -390,6 +411,36 @@ Lebensdauer.
 
 **Aufwand:** groß — der größte Posten der Liste, aber auch der einzige, der allein so viel
 freischaltet.
+
+**Nachtrag 11.08.2026 — gebaut, mit fünf Abweichungen von diesem Entwurf.**
+
+Gebaut ist der Ebenentyp `particles` mit `pattern` (Regen / Aufsteigen / Treiben / Schnee),
+`stops` (2–4 Farben), `count` (1–400), `size` (1–25 % der Bildhöhe), `speed` (0–100 auf der
+gemeinsamen Tempokurve), `tilt` (−180…180) und `seed` (0–99). **Eine** Kachel in der
+Startleiste, nicht vier.
+
+1. **Die Bewegung ist ein FELD und keine Bewegungsart.** Jede andere Ebene ist ein Standbild,
+   dem man eine Bewegung hinzufügen kann; eine Partikelebene ohne Bewegung ist gar keine
+   Partikelebene, sondern ein Punktehaufen. Das Reisen IST die Ebene. `motions` bedeutet
+   deshalb weiter genau das, was es überall bedeutet, und angeboten werden dort nur `atmen`
+   und `pulsieren` — `wandern` und `drehen` würden die Streuung als Ganzes verschieben und
+   eine wachsende leere Kante hinterlassen, weil es kein Nachfüllen gibt.
+2. **Keine Lebensdauer.** Der Entwurf sah eine vor. Es gibt keine: die Phase läuft im Kreis
+   (`frac`), was dasselbe ist wie Sterben-und-Nachfüllen, nur in einem Schritt statt zwei.
+   Der Sprung passiert nachweislich außerhalb der Leinwand (`test/engine/particles.test.js`).
+3. **Keine Form-Wahl (Ring / Punkt / Quadrat).** Der Bestand malt Ringe; auf 320 × 200 und
+   danach auf ein paar Dutzend LEDs heruntergerechnet ist ein 6-Pixel-Ring ein Punkt mit
+   einem Loch, das niemand sieht. Weggelassen, nicht vergessen — die Formebene (C4) malt
+   Ringe, wenn es um Ringe geht.
+4. **Die Richtung gehört dem Muster, das Feld ist nur eine NEIGUNG.** Der erste Entwurf hatte
+   einen absoluten Winkel mit musterabhängigem Standardwert. Das war falsch und ist im
+   echten Fenster aufgefallen: „Aufsteigen" fiel nach unten, sobald das Dokument einmal
+   normalisiert war. Siehe `MAX_PARTICLE_TILT` in `src/engine/document.js`.
+5. **`Anzahl` ist bei 400 gedeckelt, und die Messung sagt, dass nicht die Kosten das
+   entscheiden.** Gemessen (`test/harness/particle-cost.js`): 1,02 µs je Partikel bei
+   Standardgröße, 2,47 µs bei der größten — die 5-ms-Linie läge erst bei rund 2000 bis 4900
+   Partikeln. 400 ist gewählt für Luft auf einem nie gemessenen Wirt, weil der Bestand bei
+   50–200 liegt, und weil die Leinwand vorher voll ist als der Prozessor.
 
 **Grenze, die ihn bindet:** Kein Zustand über Bilder hinweg. Jedes Partikel muss eine
 **geschlossene Funktion seines Index und der Zeit** sein:
