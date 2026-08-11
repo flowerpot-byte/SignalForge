@@ -13,6 +13,7 @@ import { mountGallery } from './components/gallery.js';
 import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
 import { enter } from './components/motion.js';
+import { decodeAsset as decodeImage } from './components/decode.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -279,6 +280,15 @@ async function boot() {
    * its slack for whichever fit was in force when the picture was dropped.
    */
   /**
+   * The picture itself, decoded — and given up on if it never arrives.
+   *
+   * Its own file, with its own watchdog and its own tests: see
+   * components/decode.js for why waiting on a decoder is the one step in this
+   * path that has to be able to stop waiting.
+   */
+  const decodeAsset = (asset) => decodeImage(asset);
+
+  /**
    * The size a picture actually has, read from the picture itself.
    *
    * An asset in the document carries its bytes but not the size the importer
@@ -289,17 +299,10 @@ async function boot() {
    * Rejecting on a picture that will not decode is the point as much as the
    * measurement is: it happens before the opened document is allowed near the
    * preview, so a project whose picture is damaged leaves the one on screen
-   * alone instead of replacing it with an empty canvas.
+   * alone instead of replacing it with an empty canvas. The refusal is what the
+   * caller must then SAY — see the guard around onOpenEffect, without which a
+   * tile press ended here in silence.
    */
-  function decodeAsset(asset) {
-    return new Promise((resolve, reject) => {
-      const image = new Image();
-      image.onload = () => resolve(image);
-      image.onerror = () => reject(new Error('a picture in this project could not be decoded'));
-      image.src = `data:${asset.mime};base64,${asset.data}`;
-    });
-  }
-
   async function measureAsset(asset) {
     const image = await decodeAsset(asset);
     return { width: image.naturalWidth, height: image.naturalHeight, image };
@@ -630,8 +633,12 @@ async function boot() {
     // What each tile draws on itself: the very document pressing it produces.
     starterDocument,
     // The other shelf: an effect that already exists, opened again. Goes
-    // through the same unsaved-work question every other entrance does.
-    onOpenEffect: openEffect,
+    // through the same unsaved-work question every other entrance does — and
+    // through the same guard, which is the part that was missing. A tile press
+    // is fire and forget (gallery.js awaits nothing), so anything that threw on
+    // the way — a foreign effect whose embedded picture will not decode being
+    // the real case — made pressing a tile do visibly nothing at all.
+    onOpenEffect: guard('library.openFailed', openEffect),
     /**
      * One library tile's picture, as PNG bytes in base64.
      *
@@ -960,7 +967,11 @@ async function boot() {
    * nobody but the console ever hears about.
    */
   function guard(failedKey, run) {
-    return () => run().catch((err) => {
+    // The arguments travel through, so a handler that is HANDED something can
+    // be guarded too: a library tile passes the entry it stands for
+    // (see onOpenEffect below), and before this it was the one document
+    // entrance in the window with no guard at all.
+    return (...args) => run(...args).catch((err) => {
       console.error(`${failedKey} failed:`, err);
       showMessage(`${i18n.t(failedKey)}: ${err.message || err}`, true);
     });
