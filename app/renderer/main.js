@@ -559,7 +559,16 @@ async function boot() {
     circle: { type: 'shape', figure: 'circle' },
     ring: { type: 'shape', figure: 'ring' },
     star: { type: 'shape', figure: 'star' },
-    heart: { type: 'shape', figure: 'heart' }
+    heart: { type: 'shape', figure: 'heart' },
+    // The swarm, and it names NOTHING AT ALL beyond its type — not even the
+    // pattern, where the four figures above each name theirs. That is not an
+    // omission: the pattern's own default is the first entry of
+    // PARTICLE_PATTERNS, so leaving it out is what makes normalizeDocument the
+    // single place that decides where an effect starts, exactly as leaving the
+    // colour out does for the solid and the band count for the stripes. There
+    // is one particle tile rather than four (see gallery.js for why at length),
+    // so there is no pattern for this table to have to distinguish.
+    particles: { type: 'particles' }
   });
 
   /**

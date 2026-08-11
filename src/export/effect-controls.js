@@ -5,7 +5,10 @@ import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_BANDS, MAX_BANDS,
   MAX_HUE_SHIFT, MAX_TRAIL, motionKindsFor, normalizeDocument,
   SHAPE_FIGURES, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE,
-  MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS, MIN_STAR_POINTS, MAX_STAR_POINTS
+  MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS, MIN_STAR_POINTS, MAX_STAR_POINTS,
+  PARTICLE_PATTERNS, MIN_PARTICLE_COUNT, MAX_PARTICLE_COUNT,
+  MIN_PARTICLE_SIZE, MAX_PARTICLE_SIZE, MIN_PARTICLE_SEED, MAX_PARTICLE_SEED,
+  MAX_PARTICLE_TILT
 } from '../engine/document.js';
 
 /**
@@ -137,7 +140,43 @@ export const CONTROL_RANGES = Object.freeze({
   hueCycle: Object.freeze({ min: 0, max: 100 }),
   // Same shape, same reason: 0 is not "a very short wake", it is the hard
   // clear this engine has always done, and it is where the slider starts.
-  trail: Object.freeze({ min: 0, max: MAX_TRAIL })
+  trail: Object.freeze({ min: 0, max: MAX_TRAIL }),
+
+  // ------------------------------------------------------------ the particles
+  //
+  // FOUR ENTRIES WITH NAMES OF THEIR OWN, AND NOT ONE OF THEM SHARES A KEY WITH
+  // A CONTROL THAT ALREADY EXISTS. Two of them look at first glance as though
+  // they could — a particle has a `size` and a tempo, and this table already
+  // holds a `size` and a `tempo` — and both would have been wrong:
+  //
+  //   `size` is already the SHAPE layer's, clamped 1..200 because a figure is
+  //   the whole picture and is allowed to be bigger than the canvas. A particle
+  //   is one of up to four hundred and is clamped 1..25, so sharing the key
+  //   would offer a control eight times wider than the engine accepts and
+  //   quietly throw away everything above 25 — the exact fault the note at the
+  //   head of this table warns about.
+  //
+  //   `tempo` is a MOTION's rate, and the collision there is worse than a
+  //   range. SignalRGB's own panel is FLAT: it has no section headings, so the
+  //   list this file builds arrives as one run of sliders. A particle layer
+  //   that also carries a breathe would then show two sliders both labelled
+  //   "Tempo", one after the other, with nothing whatsoever to tell them apart.
+  //   So the layer's own travel gets a name and a label of its own.
+  particleCount: Object.freeze({ min: MIN_PARTICLE_COUNT, max: MAX_PARTICLE_COUNT }),
+  particleSize: Object.freeze({ min: MIN_PARTICLE_SIZE, max: MAX_PARTICLE_SIZE }),
+  // 0 is deliberately IN this range where a motion's `tempo` floor is 1, and
+  // the difference is what the zero means. A motion set to tempo 0 is a motion
+  // that was chosen and then stopped, which "none" already says better. A
+  // particle layer at travel speed 0 is a still field of points — which is
+  // exactly what `Starlight` is in the 31 effects read for
+  // docs/effekt-inventur.md: its points never move, they only fade.
+  travelSpeed: Object.freeze({ min: 0, max: 100 }),
+  // How far off its pattern's own direction the swarm leans. Signed, so that
+  // leaning each way is a step either side of nothing — the third control in
+  // this table with a negative minimum, after the two colour axes, and the same
+  // unverified note applies to it (see the bottom of the block above).
+  tilt: Object.freeze({ min: -MAX_PARTICLE_TILT, max: MAX_PARTICLE_TILT }),
+  seed: Object.freeze({ min: MIN_PARTICLE_SEED, max: MAX_PARTICLE_SEED })
 });
 
 /**
@@ -310,6 +349,44 @@ export function effectControls(doc, layerId) {
       slider('posY', 'Position Y', 'Position Y', layer.position.y, `${layerId}.position.y`),
       slider('thickness', 'Randstaerke', 'Thickness', layer.thickness, `${layerId}.thickness`),
       slider('points', 'Zacken', 'Points', layer.points, `${layerId}.points`)
+    );
+    motionControls();
+  }
+
+  // A swarm. Colours first for the same reason a gradient's and a figure's are
+  // — the colour IS the effect and everything else is applied to it — then what
+  // the swarm does, then how many and how big, then which way and how fast, and
+  // last the one control that is not a quality of the picture at all.
+  //
+  // A STOP'S POSITION IS NOT OFFERED HERE AND IS NOT READ BY THE RENDERER. On a
+  // gradient the position is left out of the exported panel for a reason of
+  // taste (there is no gradient bar to judge it against — see the note on
+  // `stop` above); here it is left out because it MEANS nothing. A particle
+  // takes one of these colours whole, chosen by its own hash, exactly as
+  // `Poison` and its eight copies pick `colors[this.ssi]`. The colours have an
+  // order; there is nothing for them to have a position along.
+  if (layer && layer.type === 'particles') {
+    layer.stops.forEach((stop, index) => {
+      const at = index + 1;
+      controls.push(colour(`color${at}`, `Farbe ${at}`, `Colour ${at}`, stop.color,
+        `${layerId}.stops.${index}.color`));
+    });
+    controls.push(
+      dropdown('pattern', 'Muster', 'Pattern', PARTICLE_PATTERNS, layer.pattern,
+        `${layerId}.pattern`),
+      slider('particleCount', 'Anzahl', 'Count', layer.count, `${layerId}.count`),
+      slider('particleSize', 'Groesse', 'Size', layer.size, `${layerId}.size`),
+      // A LEAN off the pattern's own direction, not an absolute angle — which
+      // is what makes the Pattern dropdown right above it tell the truth in
+      // this panel. Switching to "rise" here really does make the swarm rise,
+      // because the direction belongs to the pattern and this only leans it.
+      // The earlier design, an absolute angle with a per-pattern default, could
+      // not do that from a panel like this one at all: SignalRGB's controls
+      // write one value each and there is nowhere to put a rule that changes a
+      // second field. See MAX_PARTICLE_TILT in src/engine/document.js.
+      slider('tilt', 'Neigung', 'Tilt', layer.tilt, `${layerId}.tilt`),
+      slider('travelSpeed', 'Reisetempo', 'Travel Speed', layer.speed, `${layerId}.speed`),
+      slider('seed', 'Anordnung', 'Arrangement', layer.seed, `${layerId}.seed`)
     );
     motionControls();
   }

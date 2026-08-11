@@ -165,7 +165,12 @@ const STARTERS = {
   ])),
   ...Object.fromEntries(FIGURE_STARTERS.map((figure) => [
     figure, { layers: [{ id: 'fill', type: 'shape', figure, motions: [] }] }
-  ]))
+  ])),
+  // The swarm names only its type — no pattern — because there is ONE particle
+  // tile rather than one per pattern (gallery.js says why at length), so
+  // normalizeDocument's own default is what it starts on. Mirrored from
+  // main.js's STARTERS exactly as the eleven above it are.
+  particles: { layers: [{ id: 'fill', type: 'particles', motions: [] }] }
 };
 const defaults = (kind) => STARTERS[kind] ?? null;
 
@@ -174,7 +179,7 @@ const defaults = (kind) => STARTERS[kind] ?? null;
 test('every starting tile draws on a canvas of the engine\'s own size', () => {
   const { drawings } = mountWith(defaults);
   assert.deepEqual(Object.keys(drawings).sort(),
-    [...SHAPE_STARTERS, ...FIGURE_STARTERS, 'solid'].sort());
+    [...SHAPE_STARTERS, ...FIGURE_STARTERS, 'solid', 'particles'].sort());
   for (const [kind, canvas] of Object.entries(drawings)) {
     assert.equal(canvas.width, CANVAS_WIDTH, `${kind} draws at the wrong width`);
     assert.equal(canvas.height, CANVAS_HEIGHT, `${kind} draws at the wrong height`);

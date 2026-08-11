@@ -94,6 +94,238 @@ export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial', 'conic', 'stri
 export const SHAPE_FIGURES = Object.freeze(['circle', 'ring', 'star', 'heart']);
 
 /**
+ * The four ways a `particles` layer can move.
+ *
+ * A FIELD of one `particles` layer type rather than four layer types, for the
+ * same three reasons GRADIENT_SHAPES and SHAPE_FIGURES both give above, and
+ * the third of them decides it here as well: the pattern is a dropdown in
+ * SignalRGB's own panel, so somebody who exported rain can try snow without
+ * coming back to the app.
+ *
+ * WHY THESE FOUR AND NOT SOME OTHER FOUR. docs/effekt-inventur.md, section A1,
+ * counts at least 16 of the 31 effects read as particle systems and finds nine
+ * of them to be one file recoloured. Reading what those files actually do, the
+ * corpus moves particles in exactly these ways:
+ *
+ *   rain   `Poison`'s `Square`: y grows every frame, x wanders a little, and
+ *          the drop is finished when it is past the bottom. The most common
+ *          single movement in the corpus.
+ *   rise   `Poison`'s `UpSquare`, the same file's other half: y SHRINKS every
+ *          frame. `Poison` runs both at once, which is why the two are
+ *          patterns of one layer type and not one pattern with a sign.
+ *   drift  `Arctic`'s `Drop`: `this.x += speed / 50`, straight across, with a
+ *          slow global sway. Sideways travel, not falling.
+ *   snow   the look `Arctic` is named for, which its own maths only half
+ *          delivers: a slow fall with a sideways sway. Its sway is global
+ *          (`gDrop = Math.sin(gCount)`, one value for every flake at once);
+ *          ours is per particle, because a hundred flakes swaying in lockstep
+ *          is the one thing real snow never does.
+ *
+ * The order is the order the dropdown is built in, and it is commonest first.
+ *
+ * Everything a pattern MEANS — which way it travels, how fast, how much the
+ * speeds and sizes vary, how far it sways and whether it grows as it goes —
+ * is in PARTICLE_PATTERN_LOOKS in src/engine/layers/particles.js. Including the
+ * direction, which is the one that had to move there: a direction that lived
+ * here as a per-pattern DEFAULT for a field could be left behind when the
+ * pattern changed, and was (see MAX_PARTICLE_TILT below).
+ */
+export const PARTICLE_PATTERNS = Object.freeze(['rain', 'rise', 'drift', 'snow']);
+
+/**
+ * How far off its own direction a swarm leans, in degrees.
+ *
+ * A LEAN AND NOT AN ABSOLUTE ANGLE, and that is the correction of a real
+ * mistake rather than a preference. The first design gave a particle layer an
+ * `angle` field like a gradient's — absolute, 0..360 — whose DEFAULT depended
+ * on the pattern: 90 for rain, 270 for rise. It survived every unit test and
+ * was caught by the walkthrough in test/harness/particle-shots.js, which
+ * measured the angle after switching the pattern from the real dropdown and
+ * recorded 90 for all four. The reason is obvious once seen: normalizeDocument
+ * fills in a default only for a field that was never set, so a layer that had
+ * been through it once already carried an angle, and choosing "rise" left it
+ * falling. THE PATTERN'S NAME WAS A LIE, in the app and in SignalRGB's own
+ * panel alike.
+ *
+ * Two ways out were weighed. Making the settings column write the new pattern's
+ * angle whenever the pattern changed would fix the app and NOT the exported
+ * effect — SignalRGB's controls write one value each and there is nowhere to
+ * put such a rule — so the same lie would survive where nobody could see it
+ * being told. Making the field a lean fixes both at once, with no rule
+ * anywhere: each pattern carries its own direction (PARTICLE_PATTERN_LOOKS in
+ * src/engine/layers/particles.js, beside everything else a pattern means), and
+ * this field says how far off it to lean.
+ *
+ * So "rise" rises, always, whatever else is set; snow falls; drift goes
+ * sideways. Nothing is lost by giving up the absolute angle, because the range
+ * is the whole circle: a lean of 180 turns any pattern round completely, so
+ * every direction is still reachable for every pattern. What is gained is that
+ * one slider means one thing — "lean" — instead of meaning "direction, unless
+ * you change the pattern, in which case it silently means the old pattern's
+ * direction".
+ *
+ * SIGNED, so that leaning left and leaning right are a step either side of
+ * nothing rather than 15 and 345. The same shape greenMagenta and blueYellow
+ * already have. Zero is the default and it is the pattern's own direction
+ * exactly, so a document that says nothing about the lean gets the pattern
+ * undisturbed.
+ */
+export const MAX_PARTICLE_TILT = 180;
+export const DEFAULT_PARTICLE_TILT = 0;
+
+/**
+ * How many particles there are.
+ *
+ * THE CEILING IS A MEASUREMENT AND NOT A TASTE — but the measurement did not
+ * pick it, and saying which part of it is which is the whole of this note. It
+ * was taken by rendering, in a real Chromium with hardware acceleration off
+ * (the honest setting: SignalRGB runs effects in an offscreen view with
+ * `is_accelerated: 0`), and reading the cost against the frame budget. The
+ * table is in .superpowers/sdd/particles-report.md and is reproduced by
+ * `npx electron test/harness/particle-cost.js`.
+ *
+ * The budget is the 15 % of one core the window's own cost readout warns at
+ * (app/renderer/components/cost.js), which at 30 frames a second is 5 ms a
+ * frame. What the sweep found is that the cost is very nearly a straight line
+ * in the count, as it must be — one filled disc each:
+ *
+ *   at the DEFAULT size   1.04 microseconds a particle, so the budget is
+ *                         reached at about 4800 of them
+ *   at the LARGEST size   2.48 microseconds a particle, so the budget is
+ *                         reached at about 2000 of them
+ *
+ * So the honest finding is that COST DOES NOT DECIDE THIS CEILING. 400 at the
+ * largest size costs 1.01 ms, a fifth of the budget; the worst combination a
+ * single layer can be asked for — 400 of them at the largest size, four
+ * colours, a wake and a turning hue making applyFinish walk all 64000 pixels
+ * on top — costs 1.13 ms, and 1.42 ms in a bad frame. That is 4.25 % of a core
+ * against a line at 15 %.
+ *
+ * WHAT DID DECIDE IT, then, said plainly rather than dressed up as a
+ * measurement:
+ *
+ *  1. HEADROOM FOR A HOST NOBODY HAS MEASURED. Everything above is this
+ *     machine's Chromium. The effect runs in SignalRGB's Ultralight, a
+ *     different browser on somebody else's computer, very likely while a game
+ *     is running. 400 leaves 5x at the worst size and 12x at the default; a
+ *     ceiling set where this machine's line falls would be a promise this
+ *     project cannot keep.
+ *  2. NOTHING IN THE CORPUS COMES CLOSE. `Poison` and its eight copies run 30
+ *     objects of each of two kinds, and docs/effekt-inventur.md puts the
+ *     corpus's whole range at 50 to 200. 400 is already twice the busiest thing
+ *     anybody has been observed to want.
+ *  3. THE CANVAS RUNS OUT BEFORE THE PROCESSOR DOES. 400 particles at the
+ *     default size cover about a fifth of a 320 x 200 canvas; past that a swarm
+ *     stops reading as particles and starts reading as a texture, which is what
+ *     the gradient layer is for.
+ *
+ * If any of those three ever changes — a measured host, a corpus effect that
+ * wants more, a reason to fill the canvas — this number can move, and the
+ * measurement above says it may move a long way before cost is the reason to
+ * stop.
+ *
+ * The floor is 1 rather than 0 for the reason MIN_SHAPE_SIZE gives: zero
+ * particles is not a setting, it is "not there", and the visibility switch is
+ * what says that.
+ */
+export const MIN_PARTICLE_COUNT = 1;
+export const MAX_PARTICLE_COUNT = 400;
+export const DEFAULT_PARTICLE_COUNT = 80;
+
+/**
+ * How big one particle is, as a percent of the CANVAS HEIGHT.
+ *
+ * The same sentence `size` means on a shape layer (see MIN_SHAPE_SIZE): it is
+ * the DIAMETER of the particle, as a percent of the canvas's height. One word
+ * meaning one thing across two layer types is worth more than a scale tuned to
+ * each, and it means somebody who has learned what "size 50" does to a circle
+ * already knows what it would do to a particle.
+ *
+ * The ceiling is 25 and not 200. A shape layer's figure is the picture, so it
+ * is allowed to be larger than the canvas; a particle is one of up to four
+ * hundred, and at 25 (a diameter of half the canvas height) eighty of them
+ * already cover the frame several times over. Above that the layer stops being
+ * particles and becomes a slowly churning field of overlapping discs, which is
+ * a thing the gradient layer does better.
+ *
+ * The default is 3 — a diameter of six canvas pixels. Small, because the point
+ * of this layer is many of them, and because SignalRGB samples this canvas down
+ * to a few dozen LEDs: what reads on the hardware is where the light IS, not
+ * how big each dot was.
+ */
+export const MIN_PARTICLE_SIZE = 1;
+export const MAX_PARTICLE_SIZE = 25;
+export const DEFAULT_PARTICLE_SIZE = 3;
+
+/**
+ * How fast the particles travel, 0..100, on the shared tempo curve.
+ *
+ * A FIELD OF THE LAYER AND NOT A MOTION ENTRY, which is the one structural
+ * decision this layer type makes that none of the other four had to. Every
+ * other layer in this engine is a still picture that a motion may or may not be
+ * added to: a gradient with no motion is a perfectly good gradient. A particle
+ * layer with no motion is not a particle layer at all — it is a scatter of
+ * dots. The travel IS the layer, so it is a field of it, and `motions` keeps
+ * meaning exactly what it means everywhere else: something done to a layer on
+ * top of what the layer already is.
+ *
+ * It goes through speedToRate (src/engine/motion/speed.js) like every other
+ * tempo in this app, so the slider feels the same here as it does on a drift,
+ * and the two ends of it mean the same kind of thing.
+ *
+ * The default is 30 rather than the 15 every motion defaults to, and the
+ * difference is the point above restated: a motion at 15 is a slow motion added
+ * to a picture that is already there, while a particle layer at 15 is a picture
+ * that has not arrived yet. At 30 (rate 0.72, from the table in speed.js) rain
+ * crosses the canvas in about two seconds, which is rain.
+ */
+export const DEFAULT_PARTICLE_SPEED = 30;
+
+/**
+ * Which scatter it is, 0..99.
+ *
+ * The one field in this whole document that is not a quality of the picture. It
+ * does not make the effect faster, bigger or a different colour: it hands back
+ * a DIFFERENT ARRANGEMENT of the same effect, so that somebody who likes
+ * everything about their rain except where the drops happen to be can have
+ * another go without changing anything they chose.
+ *
+ * That is the field that makes seeded noise worth having rather than merely
+ * necessary. `Math.random` gives a new arrangement every time the effect
+ * starts and no way back to the one that looked right; this gives a hundred of
+ * them, each reachable again for ever, in the preview and in the exported file
+ * alike.
+ *
+ * WHY A HUNDRED AND NOT TEN THOUSAND, WHICH WAS THE FIRST ANSWER. The hash
+ * behind this accepts any 32-bit number and every one of them gives an
+ * unrelated arrangement, so the ceiling is a decision about the CONTROL rather
+ * than about the arithmetic — and the control is a slider with no text field
+ * beside it (app/renderer/components/field.js builds every number as an
+ * `<input type="range">`). At 9999 a slider a few hundred pixels wide moves
+ * thirty seeds per pixel: it cannot be aimed, arrow-keying from one end to the
+ * other takes ten thousand presses, and the readout beside it is a number
+ * nobody can form an opinion about. At 99 one press of an arrow key is one new
+ * arrangement, which is exactly the gesture this field exists for — the slider
+ * IS the reroll button, instead of needing one built beside it.
+ *
+ * A hundred unrelated arrangements is far more than anybody auditions. Nothing
+ * is lost by the smaller range because there is no order to these: seed 7 is
+ * not "between" seed 6 and seed 8 in any sense, so having fewer of them is
+ * having fewer things to try, not a coarser version of anything.
+ *
+ * Whole numbers only: a seed of 3.7 is the seed 4 with a false suggestion that
+ * there is something between them.
+ *
+ * The default is fixed at 0, which is what "reproducible" means here: a fresh
+ * document, opened on two machines a year apart, is the same picture. Zero is
+ * safe to default to only because the hash salts it — see SEED_SALT in
+ * src/engine/hash.js, where mix32's one fixed point is dealt with.
+ */
+export const MIN_PARTICLE_SEED = 0;
+export const MAX_PARTICLE_SEED = 99;
+export const DEFAULT_PARTICLE_SEED = 0;
+
+/**
  * How big the figure is, as a percent of the CANVAS HEIGHT.
  *
  * One number for four figures, and what it names is the same thing in all four:
@@ -250,6 +482,39 @@ export const DEFAULT_BANDS = 6;
  * figure (it becomes a circle), so the offer and the document agree.
  */
 export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
+/**
+ * A particle layer offers the two opacity motions and nothing else — the same
+ * list a solid colour gets, arrived at from the opposite direction and for
+ * completely different reasons. The coincidence is written down here so that
+ * nobody later "tidies" the two into one constant: a change to what a flat
+ * colour can be seen to do has nothing to say about what a swarm can.
+ *
+ * DRIFT IS NOT OFFERED, and this one is measurable rather than aesthetic. Drift
+ * displaces a whole layer bodily by up to DRIFT_CENTRE_REACH of the canvas
+ * (motion/drift.js). A particle layer covers the canvas by CONSTRUCTION: every
+ * particle's spawn position is drawn once, from the hash, across a span that is
+ * exactly the canvas plus a margin, and nothing refills a gap because there is
+ * no respawn logic to do it with (see src/engine/layers/particles.js). Sliding
+ * that span bodily would push its covered area off one edge and leave a widening
+ * empty band at the other — not a moving swarm, a swarm with a hole beside it.
+ * The layer already has a field for "which way do they go", and it is `angle`.
+ *
+ * SPIN IS NOT OFFERED for the same reason, one dimension up: turning the span
+ * about the middle of the canvas sweeps its corners off the canvas and brings
+ * empty corners in. It would also fight the field that already says which way
+ * the particles travel.
+ *
+ * WARP IS NOT OFFERED for the reason it is offered on no figure either:
+ * drawWarped (layers/warp-buffer.js) writes an alpha of 255 into every pixel by
+ * construction, so a warped particle layer would be an opaque 320 x 200
+ * rectangle — covering every layer beneath it and its own wake with them, which
+ * is the one thing this layer type exists not to do.
+ *
+ * BREATHE AND PULSE ARE OFFERED because they work on ctx.globalAlpha, which
+ * needs to know nothing whatsoever about what is being drawn. A swarm that
+ * swells and fades is a swarm.
+ */
+export const PARTICLE_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
 export const IMAGE_MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'pulse']);
 export const GRADIENT_MOTION_KINDS = MOTION_KINDS;
 export const SHAPE_MOTION_KINDS = Object.freeze(['none', 'drift', 'breathe', 'pulse']);
@@ -268,6 +533,7 @@ export const SPINNABLE_FIGURES = Object.freeze(['star', 'heart']);
 export function motionKindsFor(type, figure) {
   if (type === 'solid') return SOLID_MOTION_KINDS;
   if (type === 'image') return IMAGE_MOTION_KINDS;
+  if (type === 'particles') return PARTICLE_MOTION_KINDS;
   if (type === 'shape') {
     return SPINNABLE_FIGURES.includes(figure) ? SPINNING_SHAPE_MOTION_KINDS : SHAPE_MOTION_KINDS;
   }
@@ -705,6 +971,68 @@ function normalizeLayer(raw, index, usedIds, problems) {
       // 5.7 lands on 6 instead of always downwards — the same rule `bands` uses.
       points: clamp(
         Math.round(num(input.points, DEFAULT_STAR_POINTS)), MIN_STAR_POINTS, MAX_STAR_POINTS
+      ),
+      motions: normalizeMotions(input, id, problems)
+    };
+  }
+
+  // A swarm on transparent ground. Like the shape layer it owns no asset and
+  // covers nothing — which is the whole reason docs/effekt-inventur.md puts it
+  // first on the build list (C1) and calls the trail's real beneficiary (C2).
+  //
+  // It shares `stops` with the gradient rather than inventing a second way to
+  // say "two to four colours", and that is a decision about the CORPUS as much
+  // as about this codebase. Reading the nine effects that are one file
+  // recoloured: `Poison`, `Calm Water`, `Crimson`, `Jade`, `Nuclear` and `Peach`
+  // all keep `colors = [color1, color2, color3]` and give each particle one of
+  // them by `this.ssi = Math.floor(a Math.random draw * colors.length)`. So the
+  // commonest particle effect there is is THREE colours picked per particle,
+  // not one — and `Arctic` and `Titanium`, which do use a single colour, are
+  // reached from here by setting every stop to the same value. Two to four
+  // covers both ends of what the corpus actually does.
+  //
+  // What a stop's `at` means here: nothing, and it is neither read nor offered
+  // — exactly as it already is for the `stripes` gradient shape, which has the
+  // same property that its colours have an order but no positions along
+  // anything. The field is still stored and still normalized, because the same
+  // normalizeStops does the work and because a layer whose type somebody
+  // changes by hand must not lose data on the way through.
+  if (type === 'particles') {
+    let pattern = str(input.pattern, PARTICLE_PATTERNS[0]);
+    if (!PARTICLE_PATTERNS.includes(pattern)) {
+      problems.push(`Layer "${id}": unknown pattern "${pattern}", using "${PARTICLE_PATTERNS[0]}".`);
+      pattern = PARTICLE_PATTERNS[0];
+    }
+    return {
+      ...base,
+      pattern,
+      stops: normalizeStops(input.stops, id, problems),
+      // Whole particles only, rounded rather than truncated — the same rule
+      // `bands` and a star's `points` follow.
+      count: clamp(
+        Math.round(num(input.count, DEFAULT_PARTICLE_COUNT)),
+        MIN_PARTICLE_COUNT, MAX_PARTICLE_COUNT
+      ),
+      // Percent of the canvas height, meaning the particle's DIAMETER — the
+      // same sentence `size` means on a shape layer.
+      size: clamp(num(input.size, DEFAULT_PARTICLE_SIZE), MIN_PARTICLE_SIZE, MAX_PARTICLE_SIZE),
+      // How fast they travel, on the shared tempo curve. A field of the layer
+      // and not a motion entry — see DEFAULT_PARTICLE_SPEED above for why that
+      // is the one structural difference this layer type has from the other
+      // four. 0 is inside the range on purpose, and it is not "stopped by
+      // mistake": particles that do not travel are a still field of points,
+      // which is precisely what `Starlight` in the corpus is (its points never
+      // move at all, they only fade in and out).
+      speed: clamp(num(input.speed, DEFAULT_PARTICLE_SPEED), 0, 100),
+      // How far off the pattern's own direction they lean — NOT an absolute
+      // angle. See MAX_PARTICLE_TILT above for the mistake that was, and why a
+      // lean is the only shape of this field that keeps a pattern's name honest
+      // in SignalRGB's panel as well as in ours.
+      tilt: clamp(num(input.tilt, DEFAULT_PARTICLE_TILT), -MAX_PARTICLE_TILT, MAX_PARTICLE_TILT),
+      // Which arrangement. Whole numbers only.
+      seed: clamp(
+        Math.round(num(input.seed, DEFAULT_PARTICLE_SEED)),
+        MIN_PARTICLE_SEED, MAX_PARTICLE_SEED
       ),
       motions: normalizeMotions(input, id, problems)
     };

@@ -160,7 +160,50 @@ export const TILES = Object.freeze([
   Object.freeze({ key: 'circle', labelKey: 'gallery.circle', glyph: null, starts: 'circle' }),
   Object.freeze({ key: 'ring', labelKey: 'gallery.ring', glyph: null, starts: 'ring' }),
   Object.freeze({ key: 'star', labelKey: 'gallery.star', glyph: null, starts: 'star' }),
-  Object.freeze({ key: 'heart', labelKey: 'gallery.heart', glyph: null, starts: 'heart' })
+  Object.freeze({ key: 'heart', labelKey: 'gallery.heart', glyph: null, starts: 'heart' }),
+  // ------------------------------------------------------------------------
+  // PARTICLES: ONE TILE, NOT FOUR — AND THAT IS THE FIGURES' RULE, NOT AN
+  // EXCEPTION TO IT
+  // ------------------------------------------------------------------------
+  //
+  // A particle layer has a `pattern` field with four values (rain, rise, drift,
+  // snow), and the obvious reading of the block above is that four values means
+  // four tiles. It is the wrong reading, and getting it right means saying what
+  // the rule over this shelf actually is.
+  //
+  // The rule is not "one tile per value of a field". If it were, a gradient's
+  // `angle` and its `bands` would each be a row of tiles, and they are not. The
+  // rule is the honesty rule at the top of this file taken to its conclusion: A
+  // VALUE EARNS A TILE WHEN IT IS A DIFFERENT FRAME ZERO. The five gradient
+  // shapes are five different pictures standing still; the four figures are
+  // four different silhouettes standing still; so each of those earns a rail of
+  // its own.
+  //
+  // The four patterns are not. What separates rain from snow is entirely
+  // MOTION — the direction, the speed, the sway, the growth — and at frame zero
+  // all four are the same scatter of dots. A tile has no animation loop and
+  // must not grow one (three extra render loops under the stage would cost the
+  // frames the stage needs, which is why the tiles are still pictures at all).
+  //
+  // So four tiles here would be literally honest and functionally misleading:
+  // each tile really would be frame zero of what pressing it produces, and a
+  // person pressing two of them would get the same picture twice. That teaches
+  // them that a tile does not predict what they get — which is the one thing
+  // this shelf has never done, and once it is untrue of these four it is not to
+  // be trusted for any of the eleven above them either.
+  //
+  // Three ways round it were considered and all three are worse. A direction
+  // badge over the canvas would make this the only tile in the window that says
+  // something its own picture does not (and "never a glyph standing in for a
+  // picture" is already the rule for the library shelf). Rendering the starter
+  // at some t > 0 breaks "frame zero, once, at mount" for exactly one layer
+  // type. Compositing several moments into one still is a second implementation
+  // of the effect for preview purposes, which is the very drift the note at the
+  // top of this file says this project has already been bitten by.
+  //
+  // The pattern is therefore a card in the settings column, where it belongs
+  // beside the other things about the swarm that a still picture cannot show.
+  Object.freeze({ key: 'particles', labelKey: 'gallery.particles', glyph: null, starts: 'particles' })
 ]);
 
 /**

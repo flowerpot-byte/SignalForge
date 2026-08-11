@@ -733,6 +733,29 @@ runHarness('unsaved-changes harness', async () => {
     report.tilesThatAsked = tilesThatAsked;
     await shot('08b-every-tile-asked');
 
+    // The walk above leaves the stage on whatever the LAST tile started, and
+    // that matters to the block below in a way it did not use to. `snapshot()`
+    // includes a hash of the live canvas, which is what catches the one field
+    // no control shows (a picture's crop offset) — and it only works as a
+    // record of "the document did not change" while the document is a STILL
+    // picture. Every tile on this shelf produced one until the particle tile
+    // arrived: a swarm travels with no motion entry on it at all, because the
+    // travel IS the layer (see DEFAULT_PARTICLE_SPEED in
+    // src/engine/document.js), so its canvas hashes differently every frame and
+    // the comparison below would fail for a reason that has nothing to do with
+    // the picture tile it is testing.
+    //
+    // So the stage is put back on a still document first. The solid tile is
+    // chosen because it is the least it can possibly be — one flat colour, no
+    // motions, nothing that moves — and the press goes through the same guard
+    // as every other, with 'discard' still the standing answer.
+    await d.setInput('footer-name', 'Work before the picture tile');
+    await wait(120);
+    await d.clickById('gallery-solid');
+    await d.until(`document.getElementById('sf-layers-0-color') !== null`,
+      'the stage is back on a still document before the picture tile', 100);
+    await wait(200);
+
     // --- and the picture tile, the last entrance ----------------------------
     //
     // Driven through `pickPicture` above: the gallery's own hidden

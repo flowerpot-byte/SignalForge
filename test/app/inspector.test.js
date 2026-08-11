@@ -99,7 +99,21 @@ test('every slider offers exactly the range the matching exported control offers
     }).doc, 's1'),
     ...describeInspector(normalizeDocument({
       layers: [{ id: 's2', type: 'shape', figure: 'star', motions: [{ kind: 'spin' }] }]
-    }).doc, 's2')
+    }).doc, 's2'),
+    // ...and a swarm, which has to be the SECOND layer of its document and not
+    // the first. Every document above puts its layer at index 0, so every path
+    // above begins "layers.0." — and a particle layer has a `size` of its own,
+    // clamped 1..25 against a figure's 1..200. Both would be "layers.0.size",
+    // the `find` below takes the first match, and the pair would silently be
+    // checking the figure's range twice instead of checking the particle's at
+    // all. A layer in front of it moves its paths to "layers.1." and the two
+    // stop colliding.
+    ...describeInspector(normalizeDocument({
+      layers: [
+        { id: 'ahead', type: 'solid' },
+        { id: 'p1', type: 'particles', motions: [{ kind: 'breathe' }] }
+      ]
+    }).doc, 'p1')
   ];
   const pairs = [
     ['layers.0.motions.0.speed', 'tempo'],
@@ -123,7 +137,20 @@ test('every slider offers exactly the range the matching exported control offers
     ['layers.0.position.x', 'posX'],
     ['layers.0.position.y', 'posY'],
     ['layers.0.thickness', 'thickness'],
-    ['layers.0.points', 'points']
+    ['layers.0.points', 'points'],
+    // The particle layer's four, at layers.1 for the reason given above. Two of
+    // them are the same crossing posX and posY are: the exported controls are
+    // called particleCount and particleSize because a control's property
+    // becomes a global in the finished effect and `size` is already the
+    // figure's, while the document calls them count and size. `travelSpeed` is
+    // the third of that kind and the one with real teeth — SignalRGB's panel is
+    // flat, so a layer speed sharing `tempo` would put two sliders both
+    // labelled "Tempo" next to each other in it.
+    ['layers.1.count', 'particleCount'],
+    ['layers.1.size', 'particleSize'],
+    ['layers.1.tilt', 'tilt'],
+    ['layers.1.speed', 'travelSpeed'],
+    ['layers.1.seed', 'seed']
   ];
 
   for (const [path, property] of pairs) {

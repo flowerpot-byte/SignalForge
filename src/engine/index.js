@@ -6,11 +6,13 @@ import * as imageLayer from './layers/image.js';
 import * as solidLayer from './layers/solid.js';
 import * as gradientLayer from './layers/gradient.js';
 import * as shapeLayer from './layers/shape.js';
+import * as particlesLayer from './layers/particles.js';
 
 registerLayer('image', imageLayer);
 registerLayer('solid', solidLayer);
 registerLayer('gradient', gradientLayer);
 registerLayer('shape', shapeLayer);
+registerLayer('particles', particlesLayer);
 
 export {
   CANVAS_WIDTH,
@@ -23,10 +25,24 @@ export {
   GRADIENT_MOTION_KINDS,
   SHAPE_MOTION_KINDS,
   SPINNING_SHAPE_MOTION_KINDS,
+  PARTICLE_MOTION_KINDS,
   SPINNABLE_FIGURES,
   motionKindsFor,
   GRADIENT_SHAPES,
   SHAPE_FIGURES,
+  PARTICLE_PATTERNS,
+  MAX_PARTICLE_TILT,
+  DEFAULT_PARTICLE_TILT,
+  MIN_PARTICLE_COUNT,
+  MAX_PARTICLE_COUNT,
+  DEFAULT_PARTICLE_COUNT,
+  MIN_PARTICLE_SIZE,
+  MAX_PARTICLE_SIZE,
+  DEFAULT_PARTICLE_SIZE,
+  DEFAULT_PARTICLE_SPEED,
+  MIN_PARTICLE_SEED,
+  MAX_PARTICLE_SEED,
+  DEFAULT_PARTICLE_SEED,
   MIN_SHAPE_SIZE,
   MAX_SHAPE_SIZE,
   DEFAULT_SHAPE_SIZE,
@@ -69,5 +85,10 @@ export { driftSwing, DRIFT_CENTRE_REACH } from './motion/drift.js';
 export {
   STAR_INNER_RATIO, STAR_FIRST_POINT, HEART_LOBE_TOP, HEART_INK_HEIGHT, shapeCentre
 } from './layers/shape.js';
+export { mix32, seedHash, unitFrom, hashUnit, HASH_RANGE } from './hash.js';
+export {
+  particleField, particleCache, particleAt,
+  PARTICLE_PATTERN_LOOKS, PARTICLE_SPEED_SCALE, PARTICLE_MIN_ALPHA
+} from './layers/particles.js';
 export { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from './bind.js';
 export { prepareImageAsset } from './asset-import.js';

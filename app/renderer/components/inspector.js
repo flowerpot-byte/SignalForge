@@ -11,7 +11,7 @@
 // the browser as a plain ES module just as it does in node:test, where this
 // file is imported with no DOM whatsoever.
 import {
-  FIT_MODES, GRADIENT_SHAPES, SHAPE_FIGURES,
+  FIT_MODES, GRADIENT_SHAPES, SHAPE_FIGURES, PARTICLE_PATTERNS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
 } from '../../../src/engine/document.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
@@ -68,6 +68,18 @@ const RANGES = Object.freeze({
   positionY: withStep(CONTROL_RANGES.posY),
   thickness: withStep(CONTROL_RANGES.thickness),
   points: withStep(CONTROL_RANGES.points),
+  // The particle layer's four. Two of the names differ from the document's for
+  // the same reason posX and posY do — the exported control's `property`
+  // becomes a global in the finished effect and has to say which `size` and
+  // which tempo it is, while the document, which has one layer type per
+  // branch, can simply call them `size` and `speed`. See the note beside
+  // particleCount in CONTROL_RANGES for why sharing either key would have been
+  // a bug rather than a tidy-up.
+  particleCount: withStep(CONTROL_RANGES.particleCount),
+  particleSize: withStep(CONTROL_RANGES.particleSize),
+  travelSpeed: withStep(CONTROL_RANGES.travelSpeed),
+  tilt: withStep(CONTROL_RANGES.tilt),
+  seed: withStep(CONTROL_RANGES.seed),
   // The one range in this table the exported effect does not also offer, and
   // src/export/effect-controls.js says why at length: a stop position needs a
   // gradient to be seen against, and SignalRGB's panel has none.
@@ -334,6 +346,61 @@ export function describeInspector(doc, layerId) {
         labelKey: 'inspector.points', ...RANGES.points
       });
     }
+  }
+
+  // A swarm: what it does, what colours it is made of, then how many and how
+  // big, then which way and how fast, and last which arrangement.
+  //
+  // THE PATTERN LEADS, and the colours come straight after it rather than last
+  // the way a gradient's do. That is not inconsistency, it is the same rule
+  // read correctly: a gradient's stops carry a POSITION along the ramp, so the
+  // ramp's own shape and repeat have to be settled before a position on it
+  // means anything, which is why colour comes after them over there. A particle
+  // takes one of these colours whole and there is nothing to position it along
+  // — so a stop here is nothing but a colour, which is the shape layer's
+  // `colour` field in every way that matters, and that one sits second, right
+  // after `figure`. This follows the shape layer.
+  //
+  // AND A STOP'S POSITION IS NOT DRAWN, for the same reason it is not drawn for
+  // the `stripes` gradient a few lines up: the renderer does not read it (see
+  // src/engine/layers/particles.js), so a slider for it would be a control that
+  // provably cannot change a pixel — which is the one thing this column does
+  // not do.
+  if (layer && layer.type === 'particles') {
+    fields.push({
+      path: `${at}.pattern`, type: 'select', section: 'fill',
+      labelKey: 'inspector.pattern', values: [...PARTICLE_PATTERNS]
+    });
+    fields.push({
+      path: at, type: 'stops', section: 'fill',
+      min: MIN_GRADIENT_STOPS, max: MAX_GRADIENT_STOPS
+    });
+    layer.stops.forEach((unused, i) => {
+      fields.push({
+        path: `${at}.stops.${i}.color`, type: 'color', section: 'fill',
+        labelKey: 'inspector.stopColour'
+      });
+    });
+    fields.push({
+      path: `${at}.count`, type: 'number', section: 'fill',
+      labelKey: 'inspector.count', ...RANGES.particleCount
+    });
+    fields.push({
+      path: `${at}.size`, type: 'number', section: 'fill',
+      labelKey: 'inspector.size', ...RANGES.particleSize
+    });
+    fields.push({
+      path: `${at}.tilt`, type: 'number', section: 'fill',
+      labelKey: 'inspector.tilt', ...RANGES.tilt
+    });
+    fields.push({
+      path: `${at}.speed`, type: 'number', section: 'fill',
+      labelKey: 'inspector.travelSpeed', ...RANGES.travelSpeed
+    });
+    fields.push({
+      path: `${at}.seed`, type: 'number', section: 'fill',
+      labelKey: 'inspector.seed', ...RANGES.seed
+    });
   }
 
   if (layer && layer.type === 'image') {

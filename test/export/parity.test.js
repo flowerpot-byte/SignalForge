@@ -136,6 +136,54 @@ const DOC = {
       id: 'a11', type: 'shape', figure: 'heart', size: 51,
       position: { x: 79, y: 68 }, color: '#ff2277', opacity: 0.45, blend: 'screen',
       motions: [{ kind: 'none' }]
+    },
+    // -----------------------------------------------------------------------
+    // A SWARM, AND WHY IT IS THE HARSHEST LAYER IN THIS DOCUMENT
+    // -----------------------------------------------------------------------
+    //
+    // Every other layer here is drawn from the document's own numbers. This one
+    // is drawn from an integer hash of them (src/engine/hash.js), and it draws
+    // 120 separate discs from it — so it is the only layer whose picture would
+    // come apart completely, rather than shift slightly, if the two paths
+    // computed one bit differently.
+    //
+    // Three ways it could diverge that nothing else in this file would catch:
+    //
+    //   the hash        Math.imul on 32-bit integers, three rounds of it, per
+    //                   particle per channel. A bundler that folded one of
+    //                   those constants to a double, or an engine that got
+    //                   `>>>` wrong on a negative, would put every particle
+    //                   somewhere else.
+    //   the cache       the per-particle draws and the colour buckets are built
+    //                   once and kept on the layer's state, keyed on the seed,
+    //                   the count and the number of stops — the second cache of
+    //                   that kind in this engine, after the conic's.
+    //   the draw order  particles are drawn grouped BY COLOUR rather than by
+    //                   index (see particleCache), so where two overlap, which
+    //                   is on top depends on a counting sort. Both paths have
+    //                   to sort identically, and with three colours and 120
+    //                   particles there is plenty here to overlap.
+    //
+    // Deliberately at an awkward angle and an awkward seed, and translucent
+    // over everything else, so a particle landing half a pixel differently
+    // shows up as a difference rather than falling on a symmetry that hides it.
+    {
+      id: 'a12', type: 'particles', pattern: 'drift', count: 120, size: 6,
+      tilt: 37, seed: 13, opacity: 0.7, blend: 'screen',
+      // Three colours, which is what the corpus's commonest particle effect
+      // uses (`Poison` and its eight copies pick `colors[this.ssi]`), and what
+      // makes the colour bucketing above load-bearing here.
+      stops: [
+        { at: 0, color: '#ffdd55' }, { at: 50, color: '#55ffdd' }, { at: 100, color: '#dd55ff' }
+      ],
+      // STILL, in the one way this layer type can be still: travel speed 0.
+      // That is not a motion switched off, it is a real setting somebody can
+      // choose (a field of points that does not move — see the note beside
+      // `speed` in src/engine/document.js), and every line of the position
+      // arithmetic still runs to produce it. See the note on the clock below
+      // for why nothing in this document may actually move.
+      speed: 0,
+      motions: [{ kind: 'pulse', speed: 0, amount: 60 }]
     }
   ],
   controls: []
@@ -253,6 +301,29 @@ const TRAIL_DOC = {
         { kind: 'drift', speed: 62, amount: 85 },
         { kind: 'spin', speed: 48, amount: 70 }
       ]
+    },
+    // AND THE LAYER THIS WHOLE SEQUENCE COMPARISON WAS BUILT FOR.
+    //
+    // The single-frame test above holds its swarm still, because a moving layer
+    // there would measure clock alignment instead of engine equivalence. This
+    // test has no such limit — it drives both sides through the SAME thirty
+    // stamps — so here the swarm actually travels, which is the only way the
+    // time-dependent half of the arithmetic gets under a byte-for-byte
+    // comparison at all: the fractional part that wraps, the per-particle speed
+    // spread, the sway, the growth.
+    //
+    // It is also the pairing docs/effekt-inventur.md has been pointing at from
+    // the beginning. Section C2 ends by naming particles as the trail's real
+    // beneficiary — "die decken die Fläche nie" — and this is the first
+    // document in this project where the two are in the same frame under an
+    // exact comparison. Thirty frames of accumulated wake is the harshest thing
+    // in this file: one particle a pixel out on frame 3 is still there,
+    // compounded, on frame 30.
+    {
+      id: 'a3', type: 'particles', pattern: 'rain', count: 90, size: 4,
+      tilt: 10, seed: 7, speed: 55, blend: 'screen',
+      stops: [{ at: 0, color: '#aaddff' }, { at: 100, color: '#ffffff' }],
+      motions: [{ kind: 'breathe', speed: 30, amount: 40 }]
     }
   ],
   controls: []
