@@ -88,10 +88,22 @@ export function coverRenderScript(doc) {
     });
 
     const renderer = SF.createRenderer();
-    // Twice, as test/harness/page.html does: any scratch buffer a layer
-    // builds lazily then exists for the frame that is actually kept.
+    // Twice when there is no trail, so any scratch buffer a layer builds
+    // lazily exists for the frame that is actually kept -- safe there because
+    // render() is a pure function of (doc, assets, t) with no trail, so a
+    // throwaway first call and the kept call land on the same pixels.
+    //
+    // ONCE when doc.trail > 0, and that is not the same optimisation skipped:
+    // with a trail, render() is no longer pure -- frame N is composited over
+    // frame N-1 (see createRenderer in src/engine/engine.js) -- so a second
+    // call at t = 0 would veil the first call's frame with itself and hand
+    // back a picture the effect never actually shows. A cold single render is
+    // also the more faithful choice, not just the safe one: the exported
+    // effect's own first frame is cold too (see the WHICH FRAME note above).
+    // test/harness/page.html's sequence path (__run's frames branch) made
+    // exactly this call already, for exactly this reason.
     renderer.render(ctx, doc, assets, 0);
-    renderer.render(ctx, doc, assets, 0);
+    if (!(doc.trail > 0)) renderer.render(ctx, doc, assets, 0);
     renderer.dispose();
 
     const out = document.createElement('canvas');

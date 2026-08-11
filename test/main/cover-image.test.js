@@ -12,7 +12,7 @@ import {
   COVER_WIDTH, COVER_HEIGHT, renderCoverPng, renderCoverInProcess
 } from '../../src/main/cover-image.js';
 import { runJobs } from '../harness/render.js';
-import { pixelAt } from '../harness/pixels.js';
+import { pixelAt, meanDifference, maxDifference } from '../harness/pixels.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cli = join(root, 'bin', 'sfexport.js');
@@ -37,6 +37,41 @@ function documentInside(htmlFile) {
   const match = html.match(/<script id="sf-document" type="application\/json">([\s\S]*?)<\/script>/);
   assert.ok(match, `no embedded document found in ${htmlFile}`);
   return JSON.parse(match[1].replace(/<\\\//g, '</'));
+}
+
+/**
+ * Compare a tile against a 320 x 200 frame, through the same centred
+ * cover-crop the tile was made with — worked out here from the two sizes
+ * rather than imported, so a change to the crop has to be defended twice.
+ *
+ * Sampling rather than a whole-image diff: scaling is an interpolation, so
+ * the tile is not a pixel copy of anything. Points are taken well inside the
+ * flat regions of both documents, where interpolation has nothing to blur
+ * across and a real render must land on the source colour.
+ */
+function compareCoverToFrame(cover, frame) {
+  const scale = Math.max(COVER_WIDTH / frame.width, COVER_HEIGHT / frame.height);
+  const sourceHeight = COVER_HEIGHT / scale;
+  const offsetY = (frame.height - sourceHeight) / 2;
+
+  let total = 0;
+  let points = 0;
+  let worst = 0;
+  for (let sx = 12; sx < frame.width - 12; sx += 8) {
+    for (let sy = Math.ceil(offsetY) + 12; sy < frame.height - offsetY - 12; sy += 8) {
+      const cx = Math.round((sx + 0.5) * scale - 0.5);
+      const cy = Math.round((sy + 0.5 - offsetY) * scale - 0.5);
+      if (cx < 0 || cy < 0 || cx >= COVER_WIDTH || cy >= COVER_HEIGHT) continue;
+      const a = pixelAt(cover.pixels, cover.width, cx, cy);
+      const b = pixelAt(frame.pixels, frame.width, sx, sy);
+      const difference = (Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b)) / 3;
+      total += difference;
+      worst = Math.max(worst, difference);
+      points += 1;
+    }
+  }
+  assert.ok(points > 200, `only ${points} points compared`);
+  return { mean: total / points, worst };
 }
 
 // -------------------------------------------------------------- the choices
@@ -192,6 +227,83 @@ test('the cover window refuses to navigate and refuses to open windows', async (
 // ------------------------------------------------------------- end to end
 
 /**
+ * The bug precisely: a trailing document's tile used to be the SECOND of two
+ * renders at t = 0, and with `trail > 0` render() is no longer a pure
+ * function of (doc, assets, t) -- the second call composited a veil over the
+ * first call's own frame (see the note beside the two renderer.render() lines
+ * in coverRenderScript, src/main/cover-image.js). The tile was therefore a
+ * frame the effect never actually shows on its first paint.
+ *
+ * Proved end to end, through a real `--project` export and a real cover
+ * render (no stub windows here, unlike the timeout tests above): the shipped
+ * tile must match a genuinely single render at t = 0, and -- the falsifying
+ * half -- it must NOT match what two renders at t = 0 on one renderer would
+ * have produced, which is what the old code shipped. A layer that only
+ * partly covers the canvas (a circle, not a full-bleed gradient) and is not
+ * fully opaque is what makes the two differ at all: over an opaque
+ * full-bleed layer a doubled render looks identical to a single one, because
+ * the redraw simply covers its own veil.
+ */
+test('a trailing document\'s cover is a single cold render, not a doubled one', async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cover-trail-'));
+  const outDir = join(dir, 'Effects');
+  const projectFile = join(dir, 'project.json');
+
+  const trailDoc = {
+    name: 'Cover Trail Test',
+    // trail 100 (the weakest veil, TRAIL_WEAKEST_VEIL) and a low layer opacity
+    // are both deliberate: a doubled render's second call barely darkens the
+    // first call's frame before drawing over it again, so the two draws land
+    // almost like a double exposure -- the case where a doubled render is
+    // FURTHEST from a single one, not closest.
+    trail: 100,
+    layers: [{
+      id: 'fig', type: 'shape', figure: 'circle', color: '#ff0066',
+      size: 80, opacity: 0.3, motions: []
+    }]
+  };
+  writeFileSync(projectFile, JSON.stringify(trailDoc), 'utf8');
+
+  try {
+    execFileSync(process.execPath, [
+      cli, '--project', projectFile, '--out', outDir
+    ], { encoding: 'utf8', cwd: root });
+
+    const coverPng = join(outDir, 'Cover Trail Test.png');
+    assert.ok(existsSync(coverPng), `${coverPng} is missing`);
+
+    const [cover, single, doubled] = await runJobs([
+      { name: 'cover', kind: 'png', file: coverPng },
+      // A genuinely single render: the sequence path (`frames`) calls
+      // renderer.render() exactly once per entry (see the comment over it in
+      // test/harness/page.html), so one entry is one render, cold, at t = 0.
+      { name: 'single', frames: [0], doc: trailDoc },
+      // Exactly what the old coverRenderScript did: two renders at t = 0 on
+      // one renderer, so the second composites its own veil over the first.
+      { name: 'doubled', frames: [0, 0], doc: trailDoc }
+    ]);
+
+    const vsSingle = compareCoverToFrame(cover, single);
+    const vsDoubled = compareCoverToFrame(cover, doubled);
+    t.diagnostic(`cover vs single: mean ${vsSingle.mean}, worst ${vsSingle.worst}`);
+    t.diagnostic(`cover vs doubled: mean ${vsDoubled.mean}, worst ${vsDoubled.worst}`);
+    t.diagnostic(`single vs doubled (same size): mean ${meanDifference(single.pixels, doubled.pixels)}, `
+      + `max ${maxDifference(single.pixels, doubled.pixels)}`);
+
+    assert.ok(vsSingle.mean < 1,
+      `the tile does not match a single cold render (mean difference ${vsSingle.mean})`);
+    // The falsifying half: a doubled render is real evidence of the bug, not
+    // an assumption -- it measurably differs from a single one (checked here
+    // rather than trusted), so a tile that matched it instead would be caught.
+    assert.ok(vsDoubled.mean > 5,
+      `the two reference frames are not different enough to tell a fixed tile from a broken one `
+      + `(mean difference ${vsDoubled.mean}); the test proves nothing at this margin`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
  * Two real exports, and the question this whole feature turns on: is the file
  * beside the effect a picture OF that effect?
  *
@@ -237,43 +349,8 @@ test('an exported effect gets a tile that really is a render of that effect', as
       assert.equal(cover.height, COVER_HEIGHT);
     }
 
-    /**
-     * Compare a tile against a 320 x 200 frame, through the same centred
-     * cover-crop the tile was made with — worked out here from the two sizes
-     * rather than imported, so a change to the crop has to be defended twice.
-     *
-     * Sampling rather than a whole-image diff: scaling is an interpolation, so
-     * the tile is not a pixel copy of anything. Points are taken well inside
-     * the flat regions of both documents, where interpolation has nothing to
-     * blur across and a real render must land on the source colour.
-     */
-    const compare = (cover, frame) => {
-      const scale = Math.max(COVER_WIDTH / frame.width, COVER_HEIGHT / frame.height);
-      const sourceHeight = COVER_HEIGHT / scale;
-      const offsetY = (frame.height - sourceHeight) / 2;
-
-      let total = 0;
-      let points = 0;
-      let worst = 0;
-      for (let sx = 12; sx < frame.width - 12; sx += 8) {
-        for (let sy = Math.ceil(offsetY) + 12; sy < frame.height - offsetY - 12; sy += 8) {
-          const cx = Math.round((sx + 0.5) * scale - 0.5);
-          const cy = Math.round((sy + 0.5 - offsetY) * scale - 0.5);
-          if (cx < 0 || cy < 0 || cx >= COVER_WIDTH || cy >= COVER_HEIGHT) continue;
-          const a = pixelAt(cover.pixels, cover.width, cx, cy);
-          const b = pixelAt(frame.pixels, frame.width, sx, sy);
-          const difference = (Math.abs(a.r - b.r) + Math.abs(a.g - b.g) + Math.abs(a.b - b.b)) / 3;
-          total += difference;
-          worst = Math.max(worst, difference);
-          points += 1;
-        }
-      }
-      assert.ok(points > 200, `only ${points} points compared`);
-      return { mean: total / points, worst };
-    };
-
-    const picture = compare(pictureCover, pictureFrame);
-    const gradient = compare(gradientCover, gradientFrame);
+    const picture = compareCoverToFrame(pictureCover, pictureFrame);
+    const gradient = compareCoverToFrame(gradientCover, gradientFrame);
     t.diagnostic(`picture tile vs its own frame: mean ${picture.mean.toFixed(2)}, worst ${picture.worst}`);
     t.diagnostic(`gradient tile vs its own frame: mean ${gradient.mean.toFixed(2)}, worst ${gradient.worst}`);
 
@@ -283,7 +360,7 @@ test('an exported effect gets a tile that really is a render of that effect', as
     // The falsifying half. Without this, a tile that was black — or any two
     // tiles that were the same — would sail through the two checks above if
     // the frames happened to be black too.
-    const crossed = compare(pictureCover, gradientFrame);
+    const crossed = compareCoverToFrame(pictureCover, gradientFrame);
     t.diagnostic(`picture tile vs the OTHER effect's frame: mean ${crossed.mean.toFixed(2)}`);
     assert.ok(crossed.mean > 30, `the two effects are too alike for this test to prove anything (${crossed.mean})`);
 
