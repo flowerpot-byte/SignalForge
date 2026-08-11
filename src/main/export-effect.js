@@ -69,6 +69,26 @@ export function effectFileName(name) {
 }
 
 /**
+ * The same document with every asset that names a file instead of carrying its
+ * bytes left out.
+ *
+ * Only ever used on the copy handed to the cover renderer — see the note at the
+ * call site. A layer whose asset is gone draws nothing, and that is the right
+ * trade for a tile picture: a tile missing one layer is a worse picture, while
+ * a hidden window fetching a path a document named is a different kind of
+ * problem altogether.
+ */
+function withoutFileAssets(doc) {
+  const assets = doc.assets && typeof doc.assets === 'object' ? doc.assets : {};
+  return {
+    ...doc,
+    assets: Object.fromEntries(
+      Object.entries(assets).filter(([, asset]) => typeof asset?.data === 'string')
+    )
+  };
+}
+
+/**
  * Write the finished effect.
  *
  * `io` is injected so the whole thing can be checked against a filesystem
@@ -169,12 +189,29 @@ export async function exportEffect({
 
   // Drawn from the very document that is about to be written, before either
   // file exists, so a cover that cannot be drawn costs nothing but its own
-  // absence.
+  // absence — and from a copy with every file-shaped asset taken out of it.
+  //
+  // WHY THE STRIPPING. The cover is rendered by loading a page in a hidden
+  // window and running the engine in it, and the engine's asset resolver falls
+  // back to `asset.file` when there is no `data` (see coverRenderScript in
+  // cover-image.js). A `file` is a string from a document, and a document can
+  // come from anywhere — so that fallback is a document naming a path or a URL
+  // and a window fetching it, in a process with the whole main process behind
+  // it. Nothing in this repository produces a file-shaped asset any more (the
+  // command line embeds its pictures like the window does, and every document
+  // that arrives from a FILE is refused outright by documentFromFile in
+  // project.js), so this costs nothing today. That is exactly why it is worth
+  // doing now: it turns "no such document can reach here" from a claim about
+  // the rest of the codebase into something enforced at the door.
+  //
+  // The written .html is NOT stripped — only what is handed to the renderer.
+  // The engine keeps file-shaped assets on purpose for embedders other than
+  // this one, and an export must write the document it was given.
   let cover = null;
   let coverMessage = null;
   if (renderCover) {
     try {
-      cover = await renderCover(finished);
+      cover = await renderCover(withoutFileAssets(finished));
     } catch (error) {
       coverMessage = String(error.message || error);
     }

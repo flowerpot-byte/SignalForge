@@ -90,14 +90,25 @@ export function parseProject(text) {
  * Only the two sentences differ between the callers, because only the noun
  * differs: what is refused, and why, is identical.
  *
- * A file-shaped asset is refused rather than sanitised. normalizeDocument (see
- * src/engine/document.js) legitimately keeps `file`-shaped assets for the
- * export path (bin/sfexport.js writes effects whose images sit beside the
- * .html as sibling files, and test/engine/boundary.test.js plus
- * test/export/parity.test.js depend on that staying true). A file somebody
- * OPENS is a different guarantee: it is self-contained because every asset's
- * bytes are embedded as `data`. An asset carrying `file` instead — or
- * *alongside* `data`, which normalizeAsset would silently prefer `data` over
+ * A file-shaped asset is refused rather than sanitised, and the reason is not
+ * that something in this repository still writes one. Nothing does: every
+ * export embeds its pictures, the command line included (bin/sfexport.js goes
+ * through prepareImageFile, which hands back bytes), and the cover renderer is
+ * handed a copy with any such asset removed (withoutFileAssets in
+ * export-effect.js). The claim this comment used to make — that
+ * test/engine/boundary.test.js and test/export/parity.test.js depended on
+ * file-shaped assets — was simply not true of either file, and a security note
+ * citing evidence that is not there is worse than no note.
+ *
+ * The real reason is one layer down: normalizeDocument (src/engine/document.js)
+ * KEEPS a `file`-shaped asset, deliberately, because the engine is not only
+ * this app's — it is embedded in every effect this app writes and is meant to
+ * be usable by other embedders, whose assets may legitimately sit beside the
+ * .html as sibling files. So the engine cannot be the place that refuses one.
+ *
+ * A file somebody OPENS is a different guarantee: it is self-contained because
+ * every asset's bytes are embedded as `data`. An asset carrying `file` instead
+ * — or *alongside* `data`, which normalizeAsset would silently prefer `data` over
  * and drop, hiding the smuggled string from everything downstream — would have
  * the renderer's image loader try to resolve an attacker-chosen path or URL the
  * moment the file is opened. Rejected before normalizeDocument ever sees it, so

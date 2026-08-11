@@ -322,6 +322,51 @@ test('a stray tile picture on its own still never blocks an export', async () =>
   assert.equal(result.ok, true, result.message);
 });
 
+/**
+ * Nothing that names a file reaches the window that draws the tile.
+ *
+ * The cover is drawn by loading a page in a hidden window and running the
+ * engine in it, and the engine resolves an asset with no bytes to `asset.file`
+ * — a string out of a document. Nothing in this repository produces such an
+ * asset any more, which is exactly why the door is worth locking now: the
+ * comment that said no document could get here was a claim about the rest of
+ * the codebase, and this makes it something enforced where it matters.
+ */
+test('an asset that names a file is taken out before the cover window sees the document', async () => {
+  const cover = fakeCover();
+  const doc = {
+    name: 'Smuggled',
+    assets: {
+      embedded: { kind: 'image', mime: 'image/png', data: 'AAAA' },
+      named: { kind: 'image', mime: 'image/png', file: 'C:/Windows/win.ini' }
+    },
+    layers: [
+      { id: 'a', type: 'image', asset: 'embedded', motions: [] },
+      { id: 'b', type: 'image', asset: 'named', motions: [] }
+    ]
+  };
+
+  const { io, result } = await runExport('Smuggled', { doc, renderCover: cover.render });
+  assert.equal(result.ok, true, result.message);
+
+  const [handed] = cover.asked;
+  assert.deepEqual(
+    Object.keys(handed.assets),
+    ['embedded'],
+    'the renderer must never be handed a path a document chose'
+  );
+  assert.equal(
+    JSON.stringify(handed).includes('win.ini'),
+    false,
+    'and not anywhere else in it either'
+  );
+
+  // And the file that was WRITTEN is untouched: the engine keeps file-shaped
+  // assets on purpose for embedders other than this one, and an export writes
+  // the document it was given.
+  assert.match(io.files.get(result.path), /win\.ini/, 'only the cover copy is stripped, not the effect');
+});
+
 test('force replaces the tile picture as well as the effect', async () => {
   const html = join(FOLDER, 'Twice.html');
   const png = join(FOLDER, 'Twice.png');

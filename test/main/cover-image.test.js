@@ -91,7 +91,13 @@ function fakeWindow({ load = async () => {}, run = async () => 'AAAA' } = {}) {
   const win = {
     destroyed: false,
     loadFile: load,
-    webContents: { executeJavaScript: run },
+    events: {},
+    openHandler: null,
+    webContents: {
+      executeJavaScript: run,
+      on: (event, fn) => { win.events[event] = fn; },
+      setWindowOpenHandler: (fn) => { win.openHandler = fn; }
+    },
     destroy() { win.destroyed = true; }
   };
   return win;
@@ -156,6 +162,31 @@ test('renderCoverPng hands its budget to the in-process route, not only to the s
     }),
     /cover render timed out after 30ms/
   );
+});
+
+// -------------------------------------------------- the window cannot wander
+
+/**
+ * The cover window gets the two lines the app's own window has always had.
+ *
+ * It loads a local page and runs the engine in it, and the engine resolves an
+ * asset carrying no bytes to `asset.file` — a string out of a document, which
+ * can have come from anywhere. exportEffect takes such assets out before the
+ * document ever reaches here (see withoutFileAssets), so this is the second
+ * lock: a window that cannot navigate cannot be talked into fetching anything,
+ * whatever gets past the first.
+ */
+test('the cover window refuses to navigate and refuses to open windows', async () => {
+  const win = fakeWindow();
+  await renderCoverInProcess({ name: 'x' }, { createWindow: () => win, timeoutMs: 5000 });
+
+  assert.equal(typeof win.events['will-navigate'], 'function', 'a window that can navigate is a window that can be sent somewhere');
+  let prevented = false;
+  win.events['will-navigate']({ preventDefault: () => { prevented = true; } });
+  assert.equal(prevented, true);
+
+  assert.equal(typeof win.openHandler, 'function');
+  assert.deepEqual(win.openHandler({ url: 'https://example.invalid/' }), { action: 'deny' });
 });
 
 // ------------------------------------------------------------- end to end

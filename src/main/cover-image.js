@@ -122,6 +122,25 @@ export function coverRenderScript(doc) {
 const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
+ * The two lines the app's own window has carried from the start, on the window
+ * that draws tile pictures.
+ *
+ * This one loads a local host page and runs the engine in it, and the engine
+ * resolves an asset with no `data` to `asset.file` — a string out of a document.
+ * exportEffect now takes such assets out before the document ever gets here, so
+ * this is the second lock rather than the first, and it is worth having for the
+ * same reason the main window has it: a window that CANNOT navigate cannot be
+ * talked into fetching something, whatever gets past the door upstream.
+ *
+ * Tolerant of a window that has neither hook, because a test's stand-in window
+ * is a plain object — the point of injecting createWindow at all.
+ */
+function sealWindow(win) {
+  win?.webContents?.on?.('will-navigate', (event) => { event.preventDefault(); });
+  win?.webContents?.setWindowOpenHandler?.(() => ({ action: 'deny' }));
+}
+
+/**
  * Render the cover in THIS process, in a window nobody ever sees.
  *
  * Same shape and same reasoning as prepareImageInProcess: a caller already
@@ -154,6 +173,7 @@ export async function renderCoverInProcess(doc, {
   timeoutMs = DEFAULT_TIMEOUT_MS
 } = {}) {
   const win = createWindow();
+  sealWindow(win);
   let watchdog = null;
   try {
     const rendered = (async () => {
