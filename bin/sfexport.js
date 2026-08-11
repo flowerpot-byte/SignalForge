@@ -14,6 +14,7 @@ import { renderCoverPng } from '../src/main/cover-image.js';
 import { writeFileAtomic } from '../src/main/write-file-atomic.js';
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS,
+  MIN_BANDS, MAX_BANDS, DEFAULT_BANDS,
   motionKindsFor, normalizeColor, normalizeDocument
 } from '../src/engine/document.js';
 
@@ -30,11 +31,19 @@ const USAGE = `Usage:
 
 Options:
   --name <text>      Effect name (default: the image file name; required without --image)
-  --motion <kind>    none | warp | drift | breathe   (default: warp)
-                     --solid takes none | breathe only, and defaults to none
-  --fit <kind>       cover | stretch | contain       (default: cover, --image only)
-  --shape <kind>     linear | radial                 (default: linear, --gradient only)
-  --angle <degrees>  0..360                          (default: 0, --gradient only)
+  --motion <kind>    a gradient takes ${motionKindsFor('gradient').join(' | ')}
+                     a picture takes ${motionKindsFor('image').join(' | ')}
+                     a flat colour takes ${motionKindsFor('solid').join(' | ')}
+                     (default: warp, and none for --solid)
+  --fit <kind>       ${FIT_MODES.join(' | ')}
+                     (default: cover, --image only)
+  --shape <kind>     ${GRADIENT_SHAPES.join(' | ')}
+                     (default: linear, --gradient only)
+  --angle <degrees>  0..360
+                     (default: 0, --gradient only)
+  --bands <count>    ${MIN_BANDS}..${MAX_BANDS} repeats of the ramp, read by conic, stripes and waves;
+                     linear and radial are one traversal of it and ignore it
+                     (default: ${DEFAULT_BANDS}, --gradient only)
   --out <folder>     Where to write. Default: the detected SignalRGB folder.
   --force            Overwrite an existing effect of the same name.
 
@@ -44,14 +53,35 @@ A colour is written the way a colour usually is: #rrggbb, #rgb or rrggbb.
 // Flags that take a value. --force is handled separately as the one
 // value-less flag.
 const VALUE_FLAGS = new Set([
-  'image', 'solid', 'gradient', 'project', 'name', 'motion', 'fit', 'shape', 'angle', 'out'
+  'image', 'solid', 'gradient', 'project', 'name', 'motion', 'fit', 'shape', 'angle', 'bands', 'out'
 ]);
+
+/**
+ * What a layer type is called when a refusal has to name it.
+ *
+ * The refusal below used to say "does nothing on a flat colour" whatever the
+ * layer was, because when it was written the only narrowed type WAS the flat
+ * colour. `--image --motion spin` then produced a message about a flat colour
+ * for an effect made of a photograph — and a wrong reason is worse than none,
+ * because the person believes it. The list a type is offered comes from
+ * motionKindsFor and the words for the type come from here, so neither can be
+ * right about one type and wrong about another.
+ */
+const LAYER_WORDS = Object.freeze({
+  solid: 'a flat colour', image: 'a picture', gradient: 'a gradient'
+});
 
 /** The three ways to say what the effect is made of; exactly one is allowed. */
 const SOURCE_FLAGS = ['image', 'solid', 'gradient', 'project'];
 
 function parseArguments(argv) {
-  const options = { fit: 'cover', shape: 'linear', angle: '0', force: false };
+  // The defaults are the strings a command line would have carried, so a value
+  // that was typed and a value that was not go through exactly the same checks
+  // below. `bands` starts at the engine's own default rather than at a second
+  // copy of the number.
+  const options = {
+    fit: 'cover', shape: 'linear', angle: '0', bands: String(DEFAULT_BANDS), force: false
+  };
   for (let i = 0; i < argv.length; i += 1) {
     const flag = argv[i];
     if (flag === '--force') { options.force = true; continue; }
@@ -78,17 +108,26 @@ function parseArguments(argv) {
   options.motionGiven = options.motion !== undefined;
   if (!options.motionGiven) options.motion = options.solid !== undefined ? 'none' : 'warp';
 
-  // Judged against what THIS layer type can perform, not against the four
-  // kinds flat. `--solid --motion drift` used to build an effect whose
-  // SignalRGB panel offered a Motion option that provably does nothing (see
+  // Judged against what THIS layer type can perform, not against the six kinds
+  // flat. `--solid --motion drift` used to build an effect whose SignalRGB
+  // panel offered a Motion option that provably does nothing (see
   // SOLID_MOTION_KINDS in src/engine/document.js) — the one entrance where
   // that could still be asked for. `--project` brings its own layers and its
   // own motions and takes no --motion at all, so the wide list stands there.
-  const layerType = options.solid !== undefined ? 'solid' : 'image';
+  //
+  // Which type it is, is decided from the flag that was given rather than from
+  // "solid, and everything else": a gradient is narrowed by nothing (it is
+  // offered every motion there is) and a picture is narrowed too (no spin — see
+  // IMAGE_MOTION_KINDS), and the second of those was being judged by the
+  // picture's list while being told about a flat colour.
+  const layerType = options.solid !== undefined ? 'solid'
+    : options.gradient !== undefined ? 'gradient'
+      : 'image';
   const kinds = motionKindsFor(layerType);
   if (!kinds.includes(options.motion)) {
     throw new Error(MOTION_KINDS.includes(options.motion)
-      ? `--motion ${options.motion} does nothing on a flat colour (expected ${kinds.join('|')})`
+      ? `--motion ${options.motion} is not offered on ${LAYER_WORDS[layerType]} `
+        + `(expected ${kinds.join('|')})`
       : `unknown --motion value: "${options.motion}" (expected ${kinds.join('|')})`);
   }
   if (!FIT_MODES.includes(options.fit)) {
@@ -99,6 +138,16 @@ function parseArguments(argv) {
   }
   if (!Number.isFinite(Number(options.angle))) {
     throw new Error(`--angle needs a number of degrees, got "${options.angle}"`);
+  }
+  // Same treatment as --angle, and for the same reason: what a number MEANS is
+  // the engine's business, so a value that is a number goes through and
+  // normalizeDocument rounds it and clamps it into MIN_BANDS..MAX_BANDS (see
+  // the note beside those in src/engine/document.js). Only a value that is not
+  // a number at all is refused here, because that is not a band count somebody
+  // meant differently — it is a typo.
+  if (!Number.isFinite(Number(options.bands))) {
+    throw new Error(`--bands needs a number of repeats (${MIN_BANDS}..${MAX_BANDS}), `
+      + `got "${options.bands}"`);
   }
 
   return options;
@@ -231,6 +280,11 @@ function buildColourDocument(options, name) {
       name: 'Gradient',
       shape: options.shape,
       angle: Number(options.angle),
+      // Written on every gradient, whatever the shape, exactly as the window
+      // writes it: the shape can be switched from SignalRGB's own panel, so a
+      // band count that only existed for the shape chosen here would be a dead
+      // end the moment somebody switched to one that reads it.
+      bands: Number(options.bands),
       // Spread evenly across the ramp. Where exactly each colour sits is
       // deliberately not a command-line option: it is the one gradient
       // setting that needs to be seen while it is being chosen, which is

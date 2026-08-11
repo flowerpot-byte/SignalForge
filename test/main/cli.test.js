@@ -9,7 +9,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { effectControls } from '../../src/export/effect-controls.js';
-import { normalizeDocument } from '../../src/engine/document.js';
+import {
+  normalizeDocument, motionKindsFor, GRADIENT_SHAPES, FIT_MODES
+} from '../../src/engine/document.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const cli = join(root, 'bin', 'sfexport.js');
@@ -213,6 +215,70 @@ test('an invalid --motion value is rejected', () => {
     assert.throws(
       () => execFileSync(process.execPath, args, { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
       /unknown --motion value.*zzz/
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// The help text is the only description of this program most people will read,
+// so a list in it that is shorter than the list the program enforces is a lie
+// that costs somebody an afternoon: `--shape` said "linear | radial" long after
+// the engine had grown five shapes, and the only way to learn about the other
+// three was to read the source or to guess. Every list in there is now built
+// from the engine's own, so there is nothing left to keep in step by hand — and
+// this check is what says so out loud.
+test('the help text offers every value the program itself accepts', () => {
+  // Asked for the way somebody asks for it — by running the program with
+  // nothing to do — which is a refusal and therefore arrives on stderr with a
+  // non-zero exit. Both of those are deliberate and are checked here, so the
+  // usage text cannot quietly become a success that scripts would ignore.
+  let usage = null;
+  try {
+    execFileSync(process.execPath, [cli], { encoding: 'utf8', cwd: root, stdio: 'pipe' });
+    assert.fail('the program with no arguments must refuse rather than do something');
+  } catch (error) {
+    assert.notEqual(error.status, 0, 'a usage message must not be reported as success');
+    usage = String(error.stderr);
+  }
+
+  for (const shape of GRADIENT_SHAPES) {
+    assert.ok(usage.includes(shape), `--shape ${shape} is accepted but never mentioned`);
+  }
+  for (const type of ['solid', 'image', 'gradient']) {
+    for (const kind of motionKindsFor(type)) {
+      assert.ok(usage.includes(kind), `--motion ${kind} is accepted on a ${type} but never mentioned`);
+    }
+  }
+  for (const fit of FIT_MODES) {
+    assert.ok(usage.includes(fit), `--fit ${fit} is accepted but never mentioned`);
+  }
+  assert.ok(usage.includes('--bands'), 'the band count can be given but is never mentioned');
+});
+
+// A refusal has to be right about WHY. This one was written when the flat
+// colour was the only narrowed layer type, and it went on talking about a flat
+// colour after the picture became the second one -- so `--image --motion spin`
+// was refused with a reason about a kind of effect the user had not asked for.
+test('a motion a picture is not offered is refused as a picture, not as a flat colour', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cli-'));
+  const image = join(dir, 'blue.png');
+  writeFileSync(image, Buffer.from(BLUE_60x20, 'base64'));
+
+  try {
+    assert.throws(
+      () => execFileSync(process.execPath,
+        [cli, '--image', image, '--motion', 'spin', '--out', join(dir, 'Effects')],
+        { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      (error) => {
+        const said = String(error.stderr);
+        assert.match(said, /--motion spin is not offered on a picture/);
+        assert.ok(!/flat colour/.test(said), `a picture was refused as a flat colour: ${said}`);
+        // And it says what a picture IS offered, from the engine's own list.
+        assert.ok(said.includes(motionKindsFor('image').join('|')),
+          `the refusal must name the list it judged by: ${said}`);
+        return true;
+      }
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });

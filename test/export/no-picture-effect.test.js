@@ -12,7 +12,8 @@ import { runJobs } from '../harness/render.js';
 import { pixelAt, isColour, meanBrightness, maxDifference } from '../harness/pixels.js';
 import { effectControls, withLiveMotion, CONTROL_RANGES } from '../../src/export/effect-controls.js';
 import {
-  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS, CANVAS_WIDTH
+  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS, GRADIENT_MOTION_KINDS, CANVAS_WIDTH,
+  MAX_BANDS, DEFAULT_BANDS
 } from '../../src/engine/document.js';
 import { resolveBindingPath } from '../../src/engine/bind.js';
 import { exportEffect } from '../../src/main/export-effect.js';
@@ -250,8 +251,9 @@ test('the command line refuses a motion a flat colour cannot perform', () => {
         () => execFileSync(process.execPath,
           [cli, '--solid', '#ff0066', '--motion', kind, '--name', 'X', '--out', dir],
           { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
-        (error) => new RegExp(`--motion ${kind} does nothing on a flat colour`).test(String(error.stderr)),
-        `--solid --motion ${kind} must be refused`
+        (error) => new RegExp(`--motion ${kind} is not offered on a flat colour`).test(String(error.stderr))
+          && new RegExp(`expected ${SOLID_MOTION_KINDS.join('\\|')}`).test(String(error.stderr)),
+        `--solid --motion ${kind} must be refused, naming what a flat colour IS offered`
       );
     }
     // And the two it CAN perform still go through, so this is a narrowing and
@@ -261,10 +263,56 @@ test('the command line refuses a motion a flat colour cannot perform', () => {
         [cli, '--solid', '#ff0066', '--motion', kind, '--name', `Ok ${kind}`, '--out', dir],
         { encoding: 'utf8', cwd: root });
     }
-    // A gradient is not narrowed: it can genuinely perform all four.
-    execFileSync(process.execPath,
-      [cli, '--gradient', '#ff0000,#0000ff', '--motion', 'drift', '--name', 'Ramp Drift', '--out', dir],
-      { encoding: 'utf8', cwd: root });
+    // A gradient is not narrowed at all: it is the one layer type offered every
+    // motion there is, spin included — which the refusal above used to withhold
+    // from it, because it judged everything that was not a flat colour by the
+    // picture's list.
+    // Two of the six rather than all six: every one of these launches an
+    // Electron to draw its tile picture, and what is in question is the LIST
+    // being consulted, not each entry of it. `spin` is the entry that proves
+    // it, being in the gradient's list and in neither of the other two.
+    for (const kind of ['drift', 'spin']) {
+      assert.ok(GRADIENT_MOTION_KINDS.includes(kind), `${kind} must be a motion a gradient is offered`);
+      execFileSync(process.execPath, [cli, '--gradient', '#ff0000,#0000ff', '--motion', kind,
+        '--name', `Ramp ${kind}`, '--out', dir], { encoding: 'utf8', cwd: root });
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('the command line can say how many bands, and the engine still decides the limits', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-nopicture-'));
+  try {
+    // A count the engine has to bring back into range, so this proves both that
+    // --bands arrives AND that it goes through the one clamp there is
+    // (normalizeDocument) rather than through a second copy of the limits here.
+    execFileSync(process.execPath, [cli, '--gradient', '#ff0000,#0000ff', '--shape', 'stripes',
+      '--bands', '99', '--name', 'Many Bands', '--out', dir], { encoding: 'utf8', cwd: root });
+    const html = readFileSync(join(dir, 'Many Bands.html'), 'utf8');
+    assert.match(html, new RegExp(`"bands":\\s*${MAX_BANDS}\\b`),
+      `--bands 99 must arrive as the engine's ceiling of ${MAX_BANDS}`);
+
+    // And a gradient that was never told costs nobody a decision: the default
+    // is the engine's, not a number the command line keeps of its own.
+    execFileSync(process.execPath, [cli, '--gradient', '#ff0000,#0000ff', '--shape', 'waves',
+      '--name', 'Default Bands', '--out', dir], { encoding: 'utf8', cwd: root });
+    assert.match(readFileSync(join(dir, 'Default Bands.html'), 'utf8'),
+      new RegExp(`"bands":\\s*${DEFAULT_BANDS}\\b`));
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('a band count that is not a number is refused by name instead of becoming one', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-nopicture-'));
+  try {
+    assert.throws(
+      () => execFileSync(process.execPath, [cli, '--gradient', '#ff0000,#0000ff',
+        '--bands', 'lots', '--name', 'X', '--out', dir],
+      { encoding: 'utf8', cwd: root, stdio: 'pipe' }),
+      (error) => /--bands needs a number of repeats/.test(String(error.stderr))
+    );
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
