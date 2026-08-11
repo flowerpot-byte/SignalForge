@@ -266,7 +266,14 @@ export function createRenderer() {
       // below draws into `target`, which is the visible canvas exactly as
       // before whenever there is no trail — same object, same calls, same
       // pixels, and not one line of the old path is conditional on anything.
-      const trail = Number.isFinite(doc.trail) ? clamp(doc.trail, 0, MAX_TRAIL) : 0;
+      // Coerced the same way hueDegrees coerces hueShift (motion/hue.js): a
+      // control panel can hand back a numeric string ("50"), and Number.isFinite
+      // on the raw field would refuse that silently rather than reading it.
+      // Coerced the same way hueDegrees coerces hueShift (motion/hue.js): a
+      // control panel can hand back a numeric string ("50"), and Number.isFinite
+      // on the raw field would refuse that silently rather than reading it.
+      const trailNumber = Number(doc.trail);
+      const trail = Number.isFinite(trailNumber) ? clamp(trailNumber, 0, MAX_TRAIL) : 0;
       const target = trail > 0 ? veilContext() : ctx;
       if (trail <= 0) primed = false;
 

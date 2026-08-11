@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  trailAlpha, TRAIL_STRONGEST_VEIL, TRAIL_WEAKEST_VEIL
+  trailAlpha, TRAIL_STRONGEST_VEIL, TRAIL_WEAKEST_VEIL, createRenderer
 } from '../../src/engine/engine.js';
 import { normalizeDocument, MAX_TRAIL } from '../../src/engine/document.js';
 import { runJobs } from '../harness/render.js';
@@ -51,6 +51,75 @@ test('a document says there is no trail until it is told otherwise, and clamps w
   assert.equal(normalizeDocument({ trail: 1e6 }).doc.trail, MAX_TRAIL);
   assert.equal(normalizeDocument({ trail: -1e6 }).doc.trail, 0);
   assert.equal(normalizeDocument({ trail: 'lots' }).doc.trail, 0);
+});
+
+/**
+ * The OTHER place trail is read, and the one normalizeDocument's own coercion
+ * cannot stand in for: render() re-reads doc.trail every frame rather than
+ * trusting what normalizeDocument last approved, for the same reason radiusOf
+ * does in src/engine/layers/shape.js -- applyControls (src/engine/bind.js)
+ * writes a SignalRGB control's raw value straight into the document, and a
+ * numeric string ("50") is exactly what a panel can hand back.
+ *
+ * hueDegrees already reads hueShift with `Number(hueShift)` before checking
+ * it is finite, so a string survives; render() used to check
+ * `Number.isFinite(doc.trail)` directly, which is false for a string
+ * regardless of what it contains, and silently treated "50" as 0 (off).
+ *
+ * Run in plain Node, no Electron: a document with no layers and every colour
+ * field neutral never reaches a pixel, and the veil canvas render() builds
+ * for a trail is stubbed out here the same way ctx is, rather than needing a
+ * real one -- see the neutral-document tests in color.test.js for the
+ * pattern this borrows.
+ */
+test('trail arriving as a numeric string is read, not dropped', () => {
+  let veilCanvasesBuilt = 0;
+  let veilCopiedToVisibleCanvas = 0;
+  const fakeVeilCtx = {
+    fillStyle: '', globalAlpha: 1, globalCompositeOperation: 'source-over',
+    fillRect() {}
+  };
+  const originalDocument = globalThis.document;
+  globalThis.document = {
+    createElement(tag) {
+      assert.equal(tag, 'canvas', 'the veil is the only thing render() ever asks document for');
+      veilCanvasesBuilt += 1;
+      return { width: 0, height: 0, getContext: () => fakeVeilCtx };
+    }
+  };
+
+  const ctx = {
+    globalAlpha: 1,
+    globalCompositeOperation: 'source-over',
+    fillStyle: '',
+    fillRect() {},
+    save() {},
+    restore() {},
+    drawImage() { veilCopiedToVisibleCanvas += 1; },
+    getImageData() { throw new Error('must not read pixels back for a neutral document'); },
+    putImageData() { throw new Error('must not write pixels for a neutral document'); }
+  };
+
+  // Bypasses normalizeDocument entirely -- this is what applyControls hands
+  // render(), not what a freshly opened project file looks like.
+  const doc = {
+    layers: [], controls: [], version: 1,
+    brightness: 100, saturation: 100, greenMagenta: 0, blueYellow: 0,
+    hueShift: 0, hueCycle: 0,
+    trail: '50'
+  };
+
+  try {
+    const renderer = createRenderer();
+    renderer.render(ctx, doc, new Map(), 0);
+  } finally {
+    globalThis.document = originalDocument;
+  }
+
+  // A trail read as 0 takes the hard-clear path straight on `ctx` and never
+  // builds a veil canvas at all -- the failure this test would have caught.
+  assert.equal(veilCanvasesBuilt, 1, 'trail "50" must take the veil path, the same as trail 50');
+  assert.equal(veilCopiedToVisibleCanvas, 1, 'and the veil must be copied back onto the visible canvas');
 });
 
 // ------------------------------------------------------------- the rendering
