@@ -16,7 +16,7 @@ import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
 import { exportEffect } from '../src/main/export-effect.js';
 import {
-  listEffects, findEffect, effectPath, coverPath
+  listEffects, findEffect, effectPath, coverPath, MAX_EFFECT_BYTES, oversizedMessage
 } from '../src/main/effects-library.js';
 import { readEffectDocument } from '../src/main/effect-document.js';
 import { renderCoverPng } from '../src/main/cover-image.js';
@@ -421,13 +421,35 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
  */
 const libraryIo = {
   list: (folder) => readdirSync(folder),
-  read: (path) => readFileSync(path, 'utf8'),
+  read: (path) => { refuseOversized(path); return readFileSync(path, 'utf8'); },
   stat: (path) => {
     const info = statSync(path);
     return { size: info.size, modified: info.mtimeMs };
   },
   exists: (path) => existsSync(path)
 };
+
+/**
+ * Throw rather than read a file too large to be one of ours.
+ *
+ * EVERY read on the library path is synchronous and on the main thread, and
+ * the effects folder is a folder other programs write into (see
+ * MAX_EFFECT_BYTES in src/main/effects-library.js for the size and how it was
+ * arrived at). listEffects already steps over an oversized file without
+ * reading it; this is the same bound at the two handlers that read a named
+ * file directly — the cover and the open — so no route into readFileSync on
+ * this path is unbounded.
+ *
+ * It stats and then reads, which is a window in which the file could grow. It
+ * is not a hole worth chasing: the file would have to be replaced by a larger
+ * one in that instant, and the outcome would be one slow read rather than a
+ * wrong document. Nothing here decides anything but how many bytes to accept.
+ */
+function refuseOversized(path) {
+  const { size } = statSync(path);
+  if (size > MAX_EFFECT_BYTES) throw new Error(oversizedMessage(size));
+  return null;
+}
 
 /**
  * What has already been decided about a file, against that file's own size and
@@ -501,12 +523,19 @@ ipcMain.handle('sf:library:cover', async (_e, file) => {
 
     const path = effectPath(target.folder, entry);
     const onDisk = coverPath(target.folder, entry);
-    if (onDisk) return { ok: true, png: readFileSync(onDisk).toString('base64'), drawn: false };
+    if (onDisk) {
+      // The .png is a foreign file too — it sits in the same folder and this
+      // app never wrote most of them. A tile picture is a few hundred KB; the
+      // same bound the effect itself is held to is far more than generous.
+      refuseOversized(onDisk);
+      return { ok: true, png: readFileSync(onDisk).toString('base64'), drawn: false };
+    }
 
     const key = `${path}|${entry.bytes}|${entry.modified}`;
     const remembered = renderedCovers.get(path);
     if (remembered?.key === key) return { ok: true, png: remembered.png, drawn: true };
 
+    refuseOversized(path);
     const { doc } = readEffectDocument(readFileSync(path, 'utf8'));
     const png = (await queueCover(() => renderCoverPng(doc))).toString('base64');
     renderedCovers.set(path, { key, png });
@@ -537,7 +566,9 @@ ipcMain.handle('sf:library:open', (_e, file) => {
     const target = currentTarget();
     const entry = findEffect({ folder: target.folder, file, io: libraryIo, cache: libraryCache });
     if (!entry) return { ok: false, message: 'that effect is no longer in the effects folder.' };
-    const { doc, problems } = readEffectDocument(readFileSync(effectPath(target.folder, entry), 'utf8'));
+    const path = effectPath(target.folder, entry);
+    refuseOversized(path);
+    const { doc, problems } = readEffectDocument(readFileSync(path, 'utf8'));
     return { ok: true, file: entry.file, name: entry.name, document: doc, problems };
   } catch (error) {
     return { ok: false, message: String(error.message || error) };

@@ -30,6 +30,41 @@ import { looksLikeEffect } from './effect-document.js';
 /** A file name that could only have come from somewhere other than a listing. */
 const SUSPICIOUS = /[\\/:*?"<>|]|^\.+$/;
 
+/**
+ * The largest file anything in this app reads out of the effects folder.
+ *
+ * WHY THERE HAS TO BE ONE AT ALL. Every read on this path is synchronous and
+ * on the main thread (readFileSync in app/main.js), and the effects folder is
+ * a folder OTHER programs write into. Without a bound, one 2 GB file dropped
+ * in it — by another tool, by a bad download, by accident — freezes the whole
+ * window for as long as it takes to read, and the window is the thing drawing
+ * the preview. The size is known before a single byte is read (the listing
+ * already stats every file for its cache key), so the bound costs nothing.
+ *
+ * WHY 4 MB, MEASURED RATHER THAN PICKED. An effect this app writes carries the
+ * engine bundle plus its own document, and its pictures are scaled down to the
+ * canvas height before being embedded (prepareImageAsset in
+ * src/engine/asset-import.js), so the size is bounded in practice rather than
+ * by hope. On Max' own machine, 11.08.2026: Verlauf.html 43,884 bytes,
+ * Verlaufizughuiz.html 43,900, Verlaufizughuizhjikhgu.html 44,262,
+ * SF Bergabend.html 66,375, MaxAmbient.html 78,652 — 44 to 79 KB. The largest
+ * effect this project has ever produced came from the PNG era, before pictures
+ * were embedded as JPEG: 169 KB.
+ *
+ * 4 MB is therefore about 50x the largest effect anybody has actually made and
+ * about 24x the largest one that ever existed — room for an embedded picture
+ * far bigger than the importer would ever produce, and for whatever a later
+ * version of this app decides to carry, while still being a size a synchronous
+ * read finishes in a few milliseconds. It is a bound against absurdity, not a
+ * quota: no real effect can come near it, and nothing that does is one.
+ */
+export const MAX_EFFECT_BYTES = 4 * 1024 * 1024;
+
+/** The sentence a file too large to be one of ours is refused with. */
+export const oversizedMessage = (bytes) =>
+  `this file is ${bytes} bytes, and SignalForge does not read anything larger than `
+  + `${MAX_EFFECT_BYTES} bytes out of the effects folder — no effect is anywhere near that big.`;
+
 const withoutExtension = (file) => file.slice(0, -(EFFECT_EXTENSION.length + 1));
 
 /**
@@ -54,8 +89,14 @@ const withoutExtension = (file) => file.slice(0, -(EFFECT_EXTENSION.length + 1))
  * NEWEST FIRST, deliberately: the effect somebody just exported is the one they
  * are most likely to want back, and it is then the first tile in the strip
  * rather than somewhere alphabetical.
+ *
+ * AND NOTHING ENORMOUS IS EVER READ. The size is already known here — the
+ * cache key is built from it — so a file above MAX_EFFECT_BYTES is counted as
+ * skipped and stepped over WITHOUT io.read ever being called on it. That is
+ * the whole of the protection: this is the only place that reads every file in
+ * a folder somebody else can write into, and it reads them synchronously.
  */
-export function listEffects({ folder, io, cache = null }) {
+export function listEffects({ folder, io, cache = null, maxBytes = MAX_EFFECT_BYTES }) {
   if (!folder || !io.exists(folder)) return { folder: folder ?? null, entries: [], skipped: 0 };
 
   const suffix = `.${EFFECT_EXTENSION}`;
@@ -74,6 +115,13 @@ export function listEffects({ folder, io, cache = null }) {
       // cannot be read at all. Not an error worth stopping a whole library for.
       continue;
     }
+
+    // Before the read, and deliberately before the cache: the answer for a file
+    // this size never depends on its contents, so there is nothing to remember
+    // and nothing to look up. It is skipped exactly as an effect carrying no
+    // document is skipped, and counted the same way — the strip says a file was
+    // left out, and this is one of the two ways that can happen.
+    if (stat.size > maxBytes) { skipped += 1; continue; }
 
     const key = `${path}|${stat.size}|${stat.modified}`;
     let openable = cache?.get(path)?.key === key ? cache.get(path).openable : null;
@@ -123,10 +171,13 @@ export function listEffects({ folder, io, cache = null }) {
  * path in the first place. The explicit refusal below is belt and braces on top
  * of that, so the intent is readable rather than merely implied.
  */
-export function findEffect({ folder, file, io, cache = null }) {
+export function findEffect({ folder, file, io, cache = null, maxBytes = MAX_EFFECT_BYTES }) {
   const name = String(file ?? '');
   if (name === '' || SUSPICIOUS.test(name)) return null;
-  const { entries } = listEffects({ folder, io, cache });
+  // The same listing, and therefore the same size bound: a file too large to be
+  // listed is a file that cannot be found by name either, so no handler can
+  // reach one through this door.
+  const { entries } = listEffects({ folder, io, cache, maxBytes });
   return entries.find((entry) => entry.file === name) ?? null;
 }
 

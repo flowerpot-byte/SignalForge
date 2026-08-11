@@ -4,7 +4,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { listEffects, findEffect, effectPath, coverPath } from '../../src/main/effects-library.js';
+import {
+  listEffects, findEffect, effectPath, coverPath, MAX_EFFECT_BYTES
+} from '../../src/main/effects-library.js';
 import { buildEffectHtml, DOCUMENT_SCRIPT_ID } from '../../src/export/build-effect.js';
 
 /**
@@ -41,7 +43,11 @@ function fakeIo(files) {
     stat: (path) => {
       const value = files.get(path);
       if (value === undefined) throw new Error(`no such file: ${path}`);
-      return { size: value.text.length, modified: value.modified };
+      // `size` is stated separately where a test needs a file far larger than
+      // anything worth building in memory — a two-gigabyte file is the case
+      // the size bound exists for, and allocating one to prove it would be
+      // absurd. Everywhere else it is simply what the text weighs.
+      return { size: value.size ?? value.text.length, modified: value.modified };
     },
     exists: (path) => files.has(path) || path === FOLDER
   };
@@ -127,6 +133,69 @@ test('a file that CHANGES is read again, so an edited effect cannot be answered 
   const { entries } = listEffects({ folder: FOLDER, io, cache });
   assert.ok(io.reads.length > afterFirst, 'a changed file must be looked at again');
   assert.deepEqual(entries.map((entry) => entry.name), ['Alt', 'Bergabend']);
+});
+
+// ------------------------------------------------------------- the size bound
+
+/**
+ * The one read in this app that walks a whole folder somebody else writes into,
+ * held to never reading something enormous.
+ *
+ * Every read here is synchronous and on the main thread, so a single huge file
+ * dropped into the effects folder would freeze the window for as long as it
+ * takes to read it. The size is known before any byte is read (the cache key is
+ * built from it), so the check costs nothing — and the proof that it works is
+ * that io.read is never called on the file at all, not merely that it does not
+ * appear in the listing.
+ */
+test('a file too large to be an effect is skipped WITHOUT being read', () => {
+  const files = folder();
+  const huge = join(FOLDER, 'Riesig.html');
+  // A perfectly valid effect — the contents are not what disqualifies it — that
+  // claims to be two gigabytes.
+  files.set(huge, { text: effect('Riesig'), size: 2 * 1024 * 1024 * 1024, modified: 900 });
+
+  const io = fakeIo(files);
+  const { entries, skipped } = listEffects({ folder: FOLDER, io });
+
+  assert.ok(entries.every((entry) => entry.name !== 'Riesig'), 'it must not become a tile');
+  assert.equal(skipped, 2, 'and it is counted, so the strip can say a file was left out');
+  assert.ok(
+    !io.reads.includes(huge),
+    'the whole point: it is stepped over on its size, before anything reads two gigabytes on the main thread'
+  );
+});
+
+test('the bound is the only thing keeping it out, and it is a real number', () => {
+  const files = folder();
+  const io = fakeIo(files);
+  files.set(join(FOLDER, 'Gross.html'), { text: effect('Gross'), size: MAX_EFFECT_BYTES + 1, modified: 900 });
+  assert.ok(
+    listEffects({ folder: FOLDER, io }).entries.every((entry) => entry.name !== 'Gross'),
+    'one byte over is over'
+  );
+
+  files.set(join(FOLDER, 'Gross.html'), { text: effect('Gross'), size: MAX_EFFECT_BYTES, modified: 900 });
+  assert.ok(
+    listEffects({ folder: FOLDER, io: fakeIo(files) }).entries.some((entry) => entry.name === 'Gross'),
+    'and exactly at the bound is still in — a limit nobody can reach is not a limit'
+  );
+
+  // Every effect Max has actually made is two orders of magnitude below it. If
+  // this ever fails, the bound has been lowered into the range of real files.
+  assert.ok(MAX_EFFECT_BYTES > 20 * 169 * 1024, 'the bound must stay far above the largest effect that ever existed');
+});
+
+test('a file too large to be listed cannot be reached by naming it either', () => {
+  const files = folder();
+  files.set(join(FOLDER, 'Riesig.html'), { text: effect('Riesig'), size: MAX_EFFECT_BYTES + 1, modified: 900 });
+  const io = fakeIo(files);
+  assert.equal(
+    findEffect({ folder: FOLDER, file: 'Riesig.html', io }),
+    null,
+    'the cover and open handlers reach files through this door and no other'
+  );
+  assert.ok(!io.reads.includes(join(FOLDER, 'Riesig.html')));
 });
 
 // ---------------------------------------------------- names from outside
