@@ -194,6 +194,17 @@ CASES.push({
     motions: [{ kind: 'drift', speed: 70, amount: 100 }]
   }
 });
+// The other unmeasured path: a figure pinned to the corner (position 0, 0)
+// with a full-amplitude drift on top, so for stretches of its swing the path
+// tracePath lays down is entirely off the 320 x 200 canvas -- see the note
+// beside DRIFT_CENTRE_REACH in motion/drift.js ("a figure spends the ends of
+// its travel mostly off it"). Canvas 2D clips automatically, but arc()/fill()
+// still run and still cost whatever they cost; nothing in this table had
+// position away from the centre before this row.
+figureCase('circle, position 0 + drift (off-canvas for part of its swing)', {
+  figure: 'circle', size: 50, position: { x: 0, y: 0 },
+  motions: [{ kind: 'drift', speed: 60, amount: 100 }]
+});
 
 const FRAMES = 400;
 
