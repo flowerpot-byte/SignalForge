@@ -20,10 +20,137 @@
  * Nothing in this file knows anything about either caller's checks. It reads,
  * clicks, types, waits and photographs; the judgements stay where they belong.
  */
+import { app } from 'electron';
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 export const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// ---------------------------------------------------------------------------
+// Staying alive is a bug
+// ---------------------------------------------------------------------------
+
+/**
+ * How long a harness may take before it gives up on itself.
+ *
+ * Measured on this machine, one harness at a time, with nothing else running:
+ * selftest.js 1.4 s, tiles-shots.js 4.6 s, shots.js 20.1 s,
+ * gradient-shots.js 20.4 s, unsaved.js 36.4 s. The whole `npm test` run is
+ * about 40 s, so nothing here is allowed to take a minute.
+ *
+ * 60 s is therefore ~1.6x the slowest harness there is, which leaves room for
+ * a machine busy with other work without leaving room for a hang to hide in.
+ * unsaved.js asks for more (see its own call) because it is the slow one and
+ * because its parent gives it 90 s; the rule everywhere is that a harness's
+ * own watchdog fires BEFORE the parent's timeout, so what gets reported is
+ * this file's message about which harness got stuck rather than the parent's
+ * blunt "did not finish".
+ *
+ * Overridable through the environment purely so the checks in
+ * test/app/harness-lifecycle.test.js can prove the watchdog in two seconds
+ * instead of sixty.
+ */
+export const WATCHDOG_MS = Number(process.env.SF_HARNESS_WATCHDOG_MS) || 60_000;
+
+/**
+ * Everything that has to be true for an Electron harness not to outlive its
+ * run, installed in one call.
+ *
+ * WHY THIS EXISTS. Three orphaned electron.exe processes from this project's
+ * own harnesses were found resident on the machine's owner's computer six
+ * hours after the runs that started them, holding 156 MB between them. The
+ * mechanism was measured rather than guessed (see
+ * .superpowers/sdd/harness-cleanup-report.md): an Electron main process does
+ * NOT die of an unhandled promise rejection the way `node script.js` does. It
+ * prints UnhandledPromiseRejectionWarning and carries on running, forever,
+ * with its window still open — because Chromium's message loop keeps it alive
+ * and Electron does not arm Node's --unhandled-rejections=throw. A harness
+ * that throws outside its own try, or that waits on an event that never
+ * arrives, is therefore immortal.
+ *
+ * The three answers, all of which are needed:
+ *
+ *  - a watchdog, so "waiting forever" becomes "quit with a reason";
+ *  - handlers for uncaughtException and unhandledRejection, so a throw that
+ *    nothing caught ends the process instead of being printed at it;
+ *  - and, in the callers, a `finally` that always leaves (runHarness below).
+ *
+ * `app.exit(code)`, never `app.quit()`. quit is a REQUEST: it fires
+ * 'before-quit' and closes windows, and any listener that calls
+ * preventDefault() — an unsaved-changes question on window close, say —
+ * cancels it and leaves the process exactly as immortal as before. exit() is
+ * not refusable, and it is the only one of the two that carries an exit code,
+ * which is what keeps a failing harness red.
+ *
+ * @param {string} name  which harness this is, for the message it prints
+ * @returns {(code: number, why?: string) => void}  leave, once, with a code
+ */
+export function guardHarness(name, { watchdogMs = WATCHDOG_MS } = {}) {
+  let leaving = false;
+
+  const leave = (code, why) => {
+    if (leaving) return;
+    leaving = true;
+    if (why) process.stderr.write(`${name}: ${why}\n`);
+
+    // Drain stdout before pulling the floor out. app.exit() is immediate and
+    // does not flush, and on Windows a write to a pipe is asynchronous — the
+    // parent of most of these harnesses parses the LAST line of stdout, so an
+    // unflushed report reads as a crash. The timer is the answer to the pipe
+    // never draining (a full buffer nobody is reading), which must not turn
+    // into a second way of hanging.
+    let gone = false;
+    const go = () => { if (!gone) { gone = true; app.exit(code); } };
+    const forced = setTimeout(go, 1000);
+    process.stdout.write('', () => { clearTimeout(forced); go(); });
+  };
+
+  const watchdog = setTimeout(() => {
+    leave(1, `did not finish within ${watchdogMs}ms — quitting rather than waiting forever`);
+  }, watchdogMs);
+
+  process.on('uncaughtException', (error) => {
+    leave(1, `uncaught exception: ${String((error && error.stack) || error)}`);
+  });
+  process.on('unhandledRejection', (reason) => {
+    leave(1, `unhandled rejection: ${String((reason && reason.stack) || reason)}`);
+  });
+
+  return Object.assign(leave, { cancelWatchdog: () => clearTimeout(watchdog) });
+}
+
+/**
+ * A whole harness: wait for Electron, do the work, and leave — whatever
+ * happens.
+ *
+ * The exit code still tells the truth, which matters more than the leak this
+ * fixes: a harness that always exited 0 would turn a red test green. `body`
+ * may return a number to choose the code (the walkthrough reports its own
+ * pass/fail that way); anything else means success.
+ *
+ * @param {string} name
+ * @param {() => Promise<number|void>} body  run once, after app.whenReady()
+ */
+export function runHarness(name, body, { watchdogMs = WATCHDOG_MS } = {}) {
+  const leave = guardHarness(name, { watchdogMs });
+
+  (async () => {
+    let code = 0;
+    try {
+      await app.whenReady();
+      const result = await body();
+      code = typeof result === 'number' ? result : 0;
+    } catch (error) {
+      code = 1;
+      process.stderr.write(`${name} failed: ${String((error && error.stack) || error)}\n`);
+    } finally {
+      // The finally is the point of the whole file. An assertion that threw, a
+      // promise that rejected, a wait that timed out — all of them arrive here.
+      leave.cancelWatchdog();
+      leave(code);
+    }
+  })();
+}
 
 /**
  * The frame pump, installed in the page.
