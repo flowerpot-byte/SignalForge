@@ -10,6 +10,7 @@
   "gallery.startFailed": "Effekt konnte nicht begonnen werden",
   "inspector.title": "Einstellungen",
   "preview.dropHint": "Bild hierher ziehen",
+  "preview.loading": "Wird geladen …",
   "preview.dropFormats": "Unterstützt: {formats}",
   "preview.dropUnsupported": "Nicht unterstützter Dateityp",
   "preview.dropFailed": "Bild konnte nicht geladen werden",

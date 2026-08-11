@@ -226,8 +226,10 @@ html, body {
   background: var(--surface-sunk);
   /* The frame joins the column's own edge in answering a file crossing it, so
      the two halves of that one gesture arrive together rather than one of them
-     snapping while the other fades. */
-  transition: border-color var(--motion-press) var(--ease-out);
+     snapping while the other fades. Background is here too now, for the
+     loading condition below — same two properties, same timing. */
+  transition: border-color var(--motion-press) var(--ease-out),
+              background var(--motion-state) var(--ease-out);
 }
 /* Empty, the frame is the drop target and says so with its edge. The stronger
    stroke is deliberate: this edge is carrying a state ("waiting for a file"),
@@ -235,6 +237,21 @@ html, body {
 #preview-body:not(.has-picture) .viewport {
   border-style: dashed;
   border-color: var(--track-empty);
+}
+/* An import in flight: the drop-active accent settles into a quieter,
+   sunk-and-raised read of the SAME frame — no spinner, no second element.
+   Solid rather than dashed even on an empty stage, because a dashed edge
+   means "waiting for a gesture" and one has already been made.
+   See preview.js's setLoading for why this can never be left standing. */
+#preview-body.is-loading .viewport {
+  border-style: solid;
+  border-color: var(--accent);
+  background: var(--surface-raise);
+}
+#preview-body.is-loading .stage-empty-sign,
+#preview-body.is-loading .stage-empty-formats {
+  opacity: 0.5;
+  transition: opacity var(--motion-state) var(--ease-out);
 }
 #preview-canvas {
   display: block;
@@ -244,6 +261,14 @@ html, body {
      Deliberately NOT overflow:hidden on .viewport — that would clip the
      canvas's own focus ring, which is drawn outside its box. */
   border-radius: calc(var(--radius) - 1px);
+  transition: opacity var(--motion-state) var(--ease-out);
+}
+/* Replacing a picture that is already on the stage: dim it rather than hide
+   the empty state (which stays display:none the whole time — see
+   #preview-body.has-picture .stage-empty above), so a re-import reads as the
+   same quiet "loading" condition an empty stage shows, not a different one. */
+#preview-body.is-loading.has-picture #preview-canvas {
+  opacity: 0.5;
 }
 
 /* The empty state, inside the frame it is talking about: the sign for the

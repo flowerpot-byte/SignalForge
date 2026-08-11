@@ -452,6 +452,18 @@ async function boot() {
    */
   async function importFile(file) {
       if (!(await mayDiscard())) return;
+      // The gesture is acknowledged the instant there is nothing left to ask
+      // about — sf:importImage runs in the main process and takes on the
+      // order of half a second, and until now the stage said nothing for the
+      // whole of it. See preview.js's setLoading for what this looks like and
+      // why a fast import does not flash.
+      //
+      // Cleared in `finally`, not at the end of the try block: that is what
+      // makes it impossible to get stuck showing "loading" — a refusal
+      // (`!result.ok`, which returns early), a rejection anywhere in here (a
+      // bridge error, setDocument's own rejection) and the ordinary success
+      // path all fall through the same finally, with no exit that skips it.
+      preview.setLoading(true);
       // sf:importImage already turns its own failures into { ok: false }
       // (see app/main.js) rather than a rejection, but this runs from an event
       // callback with nobody awaiting it — an unexpected throw anywhere in
@@ -498,6 +510,8 @@ async function boot() {
       } catch (err) {
         console.error('image import failed:', err);
         showMessage(`${i18n.t('preview.dropFailed')}: ${err.message || err}`, true);
+      } finally {
+        preview.setLoading(false);
       }
   }
 

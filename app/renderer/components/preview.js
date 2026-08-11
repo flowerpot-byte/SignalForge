@@ -113,9 +113,15 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   stage.append(inner);
   container.append(stage);
 
+  // Whether an import is in flight — see setLoading below. Read by relabel()
+  // too, so a language switch mid-import (the settings column is reachable
+  // the whole time an import runs) leaves the loading line saying "wird
+  // geladen" and not the resting drop hint in the wrong language.
+  let loading = false;
+
   /** The two lines of the empty state, in the language now in force. */
   function relabel() {
-    invitation.textContent = t('preview.dropHint');
+    invitation.textContent = t(loading ? 'preview.loading' : 'preview.dropHint');
     formats.textContent = t('preview.dropFormats').replace('{formats}', SUPPORTED_FORMATS);
   }
   relabel();
@@ -195,6 +201,45 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
      */
     setTitle(text) { title.textContent = text ?? ''; },
     setDocument,
+    /**
+     * The gap between a drop (or a chosen file) and the picture actually
+     * landing — sf:importImage runs in the main process and takes on the
+     * order of half a second, and until now the stage said nothing for the
+     * whole of it. This is the frame's own quiet "wird geladen" condition,
+     * not a spinner: the border and the empty state's sign and formats line
+     * dim (see .is-loading in styles/app.css), and while there is nothing on
+     * the stage yet the invitation swaps from "drop an image" to "loading".
+     *
+     * Deliberately not a new element and not a new vocabulary — it reuses the
+     * frame the empty state and drop-active already draw, one step further
+     * along the same gesture: drag-over lights the edge, the drop resolves
+     * that into this, and the picture (or the one visible error line)
+     * replaces it in turn.
+     *
+     * The caller — importFile in app/renderer/main.js — is the one place that
+     * can promise this is always cleared: it sets loading true only after
+     * asking about unsaved work, and clears it in a `finally` that runs on
+     * every exit (the picture lands, the import is refused, or it throws), so
+     * there is no path that leaves the frame saying "loading" forever.
+     *
+     * A picture already on the stage is dimmed rather than hidden (see
+     * `#preview-canvas` in styles/app.css) — replacing a picture reads the
+     * same as arriving at an empty stage the first time, not as a different
+     * gesture.
+     *
+     * No flash on a fast import: the class is set the instant the gesture is
+     * acknowledged, exactly as loading starts, but the visible change is a
+     * CSS transition (--motion-state, ease-out) rather than an instant swap.
+     * An import under --motion-state's own duration therefore never reaches
+     * full opacity before it is cleared again and eases back out — a soft
+     * blip rather than an on/off flicker — so nothing here is skipped for a
+     * small file; the transition itself absorbs the case.
+     */
+    setLoading(isLoading) {
+      loading = Boolean(isLoading);
+      container.classList.toggle('is-loading', loading);
+      invitation.textContent = t(loading ? 'preview.loading' : 'preview.dropHint');
+    },
     /**
      * The live document the loop renders, handed out so there is exactly one
      * of it. The crop drag reads the layer's fit and offset from here and the

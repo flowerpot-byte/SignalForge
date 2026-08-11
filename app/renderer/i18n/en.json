@@ -10,6 +10,7 @@
   "gallery.startFailed": "Could not start the effect",
   "inspector.title": "Settings",
   "preview.dropHint": "Drop an image here",
+  "preview.loading": "Loading …",
   "preview.dropFormats": "Supported: {formats}",
   "preview.dropUnsupported": "Unsupported file type",
   "preview.dropFailed": "Could not load the image",
