@@ -86,6 +86,44 @@ CASES.push({
   motions: [{ kind: 'spin', speed: 60, amount: 100 }, { kind: 'warp', speed: 60, amount: 100 }]
 });
 
+// ---------------------------------------------------------------------------
+// The one case that is about the WINDOW rather than about a finished effect
+// ---------------------------------------------------------------------------
+//
+// Every case above holds its document still, so the conic's cached wheel is
+// built once and then reused — which measures the cheap half of the conic's
+// design and never the expensive one. The whole reason the wheel is cached is
+// that rebuilding it costs 360 wedge fills, and there is one gesture in the app
+// that asks for exactly that on every single frame: dragging a colour stop's
+// position or its colour, while the preview keeps running underneath.
+//
+// That gesture is the app's own worst case for this shape, it is the case the
+// 15 %-of-a-core warning is about, and it was unmeasured. So it is measured
+// here: `drag` moves a stop a whole percent per frame, which is what a mouse
+// does, and the cache is doing its job precisely BECAUSE it rebuilds — the key
+// really has changed. Both with and without a warp, because a person dragging a
+// stop on an effect that warps is not doing something unusual.
+CASES.push({
+  name: 'conic, colour-stop drag',
+  shape: 'conic',
+  bands: 3,
+  stops: [
+    { at: 0, color: '#ff0066' }, { at: 50, color: '#00b3ff' }, { at: 100, color: '#ffcc00' }
+  ],
+  drag: true,
+  motions: []
+});
+CASES.push({
+  name: 'conic, colour-stop drag + warp',
+  shape: 'conic',
+  bands: 3,
+  stops: [
+    { at: 0, color: '#ff0066' }, { at: 50, color: '#00b3ff' }, { at: 100, color: '#ffcc00' }
+  ],
+  drag: true,
+  motions: [{ kind: 'warp', speed: 60, amount: 100 }]
+});
+
 const FRAMES = 400;
 
 const MEASURE = `(function (cases, frames) {
@@ -113,6 +151,11 @@ const MEASURE = `(function (cases, frames) {
     for (var b = 0; b * batch < frames; b += 1) {
       var before = performance.now();
       for (var i = 0; i < batch; i += 1) {
+        // A colour stop under a moving mouse: one whole percent per frame, the
+        // way the app's own slider writes it. The wheel's cache key changes
+        // with it, so this is the case where the cache rebuilds every frame
+        // instead of never — see the note beside the drag cases above.
+        if (entry.drag) doc.layers[0].stops[1].at = 10 + (frame % 80);
         // A different second every frame: nothing that caches per frame can
         // look cheap here by being asked the same question twice.
         renderer.render(ctx, doc, assets, frame * 0.037);
@@ -125,17 +168,21 @@ const MEASURE = `(function (cases, frames) {
     return {
       median: samples[Math.floor(samples.length / 2)],
       worst: samples[samples.length - 1],
-      // The 90th batch of a hundred, which is the honest "a bad moment, not
-      // the worst moment" figure. The MAX is reported beside it rather than
-      // instead of it: a single batch occasionally comes back tens of
-      // milliseconds slow on this machine, for every warping layer including
-      // the ones that predate this work, and that is the browser's own
-      // rasteriser or its garbage collector rather than a cost the effect
-      // makes anybody pay every second. Reporting the max as if it were the
-      // frame cost would say a linear gradient with a warp on it needs 130 %
-      // of a core, which is measurably not what it does for the other 95 % of
-      // its frames.
-      p95: samples[Math.floor(samples.length * 0.9)]
+      // The 19th batch of 20 — hence the name, and hence not "p95" flat: with
+      // twenty samples there is no ninety-fifth percentile to speak of, there
+      // is a second-worst batch, and calling it what it is stops it being read
+      // as a figure from a distribution nobody sampled.
+      //
+      // It is the honest "a bad moment, not the worst moment" figure, and the
+      // MAX is reported beside it rather than instead of it: a single batch
+      // occasionally comes back tens of milliseconds slow on this machine, for
+      // every warping layer including the ones that predate this work, and that
+      // is the browser's own rasteriser or its garbage collector rather than a
+      // cost the effect makes anybody pay every second. Reporting the max as if
+      // it were the frame cost would say a linear gradient with a warp on it
+      // needs 130 % of a core, which is measurably not what it does for the
+      // other nineteen twentieths of its frames.
+      p95of20: samples[Math.floor(samples.length * 0.9)]
     };
   }
 
@@ -143,7 +190,12 @@ const MEASURE = `(function (cases, frames) {
   for (var c = 0; c < cases.length; c += 1) {
     run(cases[c]);              // warm-up, thrown away
     var measured = run(cases[c]);
-    out.push({ name: cases[c].name, median: measured.median, p95: measured.p95, worst: measured.worst });
+    out.push({
+      name: cases[c].name,
+      median: measured.median,
+      p95of20: measured.p95of20,
+      worst: measured.worst
+    });
   }
   return out;
 })(${JSON.stringify(CASES)}, ${FRAMES})`;
@@ -164,7 +216,7 @@ runHarness('shape-cost', async () => {
   const table = rows.map((row) => ({
     ...row,
     shareMedian: coreShare(row.median),
-    shareP95: coreShare(row.p95)
+    shareP95of20: coreShare(row.p95of20)
   }));
 
   writeFileSync(OUT, JSON.stringify({
@@ -174,11 +226,11 @@ runHarness('shape-cost', async () => {
     rows: table
   }, null, 2), 'utf8');
 
-  const worst = table.reduce((a, b) => (b.shareP95 > a.shareP95 ? b : a));
+  const worst = table.reduce((a, b) => (b.shareP95of20 > a.shareP95of20 ? b : a));
   process.stdout.write(`${table.map((row) =>
     `${row.name.padEnd(38)} ${row.median.toFixed(3)} ms  ${(row.shareMedian * 100).toFixed(2)} %`
-      + `   (p95 ${row.p95.toFixed(3)} ms, ${(row.shareP95 * 100).toFixed(2)} %)`).join('\n')}\n`);
-  process.stdout.write(`worst: ${worst.name} at ${(worst.shareP95 * 100).toFixed(2)} % of a core\n`);
+      + `   (p95-of-20 ${row.p95of20.toFixed(3)} ms, ${(row.shareP95of20 * 100).toFixed(2)} %)`).join('\n')}\n`);
+  process.stdout.write(`worst: ${worst.name} at ${(worst.shareP95of20 * 100).toFixed(2)} % of a core\n`);
   win.destroy();
   return 0;
 });
