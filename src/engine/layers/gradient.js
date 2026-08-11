@@ -92,8 +92,11 @@ const LINEAR_DRIFT_REACH = 0.5;
 /** At full strength, a radial drift moves the centre this much of the canvas. */
 const RADIAL_DRIFT_REACH = 0.3;
 
+/** The canvas diagonal, which is also how far a drifting centre can wander at most. */
+const CANVAS_DIAGONAL = Math.sqrt(CANVAS_WIDTH * CANVAS_WIDTH + CANVAS_HEIGHT * CANVAS_HEIGHT);
+
 /** Half the canvas diagonal: a radial gradient that reaches every corner. */
-const RADIAL_RADIUS = Math.sqrt(CANVAS_WIDTH * CANVAS_WIDTH + CANVAS_HEIGHT * CANVAS_HEIGHT) / 2;
+const RADIAL_RADIUS = CANVAS_DIAGONAL / 2;
 
 /**
  * How many colour samples one repeat of a wave is built from.
@@ -110,7 +113,7 @@ const RADIAL_RADIUS = Math.sqrt(CANVAS_WIDTH * CANVAS_WIDTH + CANVAS_HEIGHT * CA
 const WAVE_SAMPLES = 16;
 
 /**
- * The cached picture of a conic sweep, and the two numbers that size it.
+ * The cached picture of a conic sweep, and what sizes it.
  *
  * WHY A CACHED PICTURE AND NOT createConicGradient
  *
@@ -130,24 +133,80 @@ const WAVE_SAMPLES = 16;
  * 360 wedge fills is not something to do 30 times a second. It does not have
  * to be: turning a conic sweep is the same thing as turning the picture of
  * one, so the wheel is drawn once and every frame after that is one rotated
- * drawImage. The cache is keyed on the stops and the band count — everything
- * the PICTURE depends on — and deliberately not on the angle or on the spin,
- * which are the transform and change every frame.
+ * drawImage. The cache is keyed on everything the PICTURE depends on — the
+ * band count, and each stop's COLOUR AND ITS POSITION — and deliberately not
+ * on the angle or on the spin, which are the transform and change every frame.
  *
- * CONIC_TEXTURE is the size it is drawn at and CONIC_SPAN is how many canvas
- * units wide it is then painted. Drawn smaller than it is shown on purpose: a
- * sweep is a smooth ramp with no detail in it to lose, the up-scale costs one
- * bilinear pass the GPU-less host does anyway, and building it at 256 instead
- * of 440 is three times less area to fill on every rebuild — which is what a
- * colour-stop drag does, once per frame, while the mouse is down.
+ * The positions belong in that key and were once missing from it, which is
+ * worth writing down because the bug it caused was invisible from the outside:
+ * every wedge takes its colour from colorAtPosition(stops, ...), so a stop
+ * dragged from 50 to 20 changes every pixel of the wheel — but on a renderer
+ * that had already drawn one, the key was unchanged and the old picture was
+ * handed straight back. The Position slider did nothing at all on a colour
+ * wheel until the app was restarted. A cache key must list everything its value
+ * is a function of; anything less is a stale picture waiting for the right
+ * gesture.
  *
- * CONIC_SPAN has to cover the canvas AND the warp buffer's padding at any
- * rotation: the padded area is 360 x 240 canvas units (see BUFFER_PAD), whose
- * diagonal is 433. 440 is that, rounded up.
+ * CONIC_TEXTURE is the size it is drawn at and conicSpan() below says how many
+ * canvas units wide it is then painted. Drawn smaller than it is shown on
+ * purpose: a sweep is a smooth ramp with no detail in it to lose, the up-scale
+ * costs one bilinear pass the GPU-less host does anyway, and building it at 256
+ * instead of at its painted size is several times less area to fill on every
+ * rebuild — which is what a colour-stop drag does, once per frame, while the
+ * mouse is down.
  */
 const CONIC_TEXTURE = 256;
-const CONIC_SPAN = 440;
 const CONIC_WEDGES = 360;
+
+/** How far outside the canvas the warp buffer's padding reaches, in canvas units. */
+const CONIC_OVERHANG = BUFFER_PAD / BUFFER_SCALE;
+
+/**
+ * Half the diagonal of the area that has to end up covered: the canvas plus
+ * the warp buffer's padding (360 x 240 canvas units), measured from the middle
+ * of the canvas. A square of side 2 * this, however it is rotated, contains
+ * every point of that area — its inscribed circle already does.
+ */
+const CONIC_REACH = Math.sqrt(
+  (CANVAS_WIDTH + 2 * CONIC_OVERHANG) * (CANVAS_WIDTH + 2 * CONIC_OVERHANG)
+  + (CANVAS_HEIGHT + 2 * CONIC_OVERHANG) * (CANVAS_HEIGHT + 2 * CONIC_OVERHANG)
+) / 2;
+
+/**
+ * How wide the wheel is painted, in canvas units.
+ *
+ * A fixed 440 used to be enough, and the reasoning behind it was right about
+ * everything except the centre: it covered the padded area at any ROTATION,
+ * because a conic standing still is centred on the middle of the canvas and
+ * only turns. A conic that DRIFTS does not stay there — driftedCentre below
+ * moves it by up to RADIAL_DRIFT_REACH of the canvas in each direction, i.e.
+ * 96 x 60 units at full strength — and the square went with it, so the far
+ * corner of the canvas fell outside the picture. What was left there was black
+ * (up to 11 % of the frame, measured), or, under warp, whatever the previous
+ * frame had put in that corner of the source buffer, which nothing clears.
+ *
+ * So the span is sized from the drift as well: the wheel must reach from
+ * wherever the centre has wandered to (at most `wander` from the middle) out to
+ * the far corner of the padded area (CONIC_REACH from the middle). This fixes
+ * the cause rather than painting over it — the alternative, clearing or filling
+ * the whole padded area before every conic frame, would charge every conic
+ * effect for a fault only a drifting one can have, and the cost table would
+ * stop matching what a still conic really does. A conic that does not drift
+ * pays nothing here: with no drift this is 433, which is the old 440 without
+ * its rounding.
+ *
+ * What it does cost is sharpness, and only while drifting: the same 256-pixel
+ * texture is stretched across a wider square, so at full drift the visible
+ * canvas is drawn from a 2.6x up-scale instead of a 1.7x one. On a smooth
+ * sweep that is nothing to see; on its one hard edge (where the last colour
+ * meets the first) it widens the blend from under two canvas pixels to under
+ * three, which is still narrower than one LED.
+ */
+function conicSpan(drift) {
+  const amount = drift ? Math.abs(Number(drift.amount) || 0) : 0;
+  const wander = (amount / 100) * RADIAL_DRIFT_REACH * CANVAS_DIAGONAL;
+  return 2 * (CONIC_REACH + wander);
+}
 
 export function createState() {
   return {
@@ -281,7 +340,10 @@ function buildGradient(g, layer, angle, centre, drift, timeSec) {
 function ensureConic(layer, state) {
   const stops = rampStops(layer);
   const bands = bandCount(layer);
-  const key = `${bands}|${stops.map((stop) => stop.color).join(',')}`;
+  // Everything the picture is a function of. The positions are in here because
+  // every wedge's colour comes out of colorAtPosition, which reads them — see
+  // the note above CONIC_TEXTURE for what leaving them out cost.
+  const key = `${bands}|${stops.map((stop) => `${stop.at}:${stop.color}`).join(',')}`;
   if (state.conicKey === key && state.conic) return state.conic;
 
   if (!state.conic) {
@@ -297,7 +359,28 @@ function ensureConic(layer, state) {
   const radius = CONIC_TEXTURE;
   const step = (2 * Math.PI) / CONIC_WEDGES;
 
-  g.clearRect(0, 0, CONIC_TEXTURE, CONIC_TEXTURE);
+  // An OPAQUE base under the wedges, and not a clearRect, which is what used to
+  // be here. 360 wedges meeting at one point do not add up to an opaque
+  // picture: each is drawn anti-aliased, and near the apex a wedge is narrower
+  // than a pixel, so what a pixel there gets is 360 partial coverages composited
+  // over each other — which approaches full opacity without reaching it.
+  // Measured: a disc of some 57 texture pixels' radius around the middle (that
+  // being where one wedge stops being a pixel wide) came out between 77 % and
+  // 100 % opaque.
+  //
+  // A picture meant to cover everything must itself cover everything, and the
+  // consequences of its not doing so were real: on the warp path the source
+  // buffer is not cleared, so the PREVIOUS frame showed through the middle of
+  // the wheel by up to 23 %; on the direct path the black the renderer fills
+  // with did, darkening the middle; and on a document with a layer underneath,
+  // that layer would have.
+  //
+  // The base is the ramp's own starting colour. It can only show through where
+  // the wedges are thinner than a pixel, i.e. right at the middle — which is the
+  // one place on a colour wheel where every colour of the ramp meets anyway, and
+  // is at most three canvas pixels wide once the texture is scaled up.
+  g.fillStyle = colorAtPosition(stops, 0);
+  g.fillRect(0, 0, CONIC_TEXTURE, CONIC_TEXTURE);
   for (let index = 0; index < CONIC_WEDGES; index += 1) {
     // The colour of the middle of the wedge, so the ramp is sampled evenly
     // rather than at one of its ends.
@@ -328,12 +411,16 @@ function ensureConic(layer, state) {
 function paintGradient(g, layer, angle, centre, drift, timeSec, area, state) {
   if (layer.shape === 'conic') {
     const wheel = ensureConic(layer, state);
+    // Wide enough to reach past the far corner from wherever the drift has
+    // taken the centre, so the whole area is covered and nothing has to be
+    // cleared first — see conicSpan.
+    const span = conicSpan(drift);
     g.save();
     g.translate(centre.x, centre.y);
     g.rotate((angle * Math.PI) / 180);
     g.imageSmoothingEnabled = true;
     g.imageSmoothingQuality = 'high';
-    g.drawImage(wheel, -CONIC_SPAN / 2, -CONIC_SPAN / 2, CONIC_SPAN, CONIC_SPAN);
+    g.drawImage(wheel, -span / 2, -span / 2, span, span);
     g.restore();
     return;
   }

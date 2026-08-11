@@ -39,6 +39,24 @@ export function meanDifference(a, b) {
   return sum / a.length;
 }
 
+/**
+ * The share of the frame that is pure black, 0..1.
+ *
+ * Pure black is what the renderer fills the frame with before any layer draws
+ * on it (`ctx.fillStyle = '#000'` in createRenderer), so a pixel that is still
+ * exactly 0,0,0 is a pixel no layer covered. That makes this the measurement
+ * for "did the shape reach the whole canvas" — exactly, not approximately: a
+ * layer whose own darkest colour is #000000 would count here too, which is why
+ * the checks that use it are drawn in colours that are nowhere near it.
+ */
+export function blackShare(pixels) {
+  let black = 0;
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i] === 0 && pixels[i + 1] === 0 && pixels[i + 2] === 0) black += 1;
+  }
+  return black / (pixels.length / 4);
+}
+
 /** True when the colour is within tolerance of the expected one. */
 export function isColour(actual, expected, tolerance = 12) {
   return Math.abs(actual.r - expected[0]) <= tolerance

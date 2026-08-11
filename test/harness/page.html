@@ -24,13 +24,28 @@
     return { width: canvas.width, height: canvas.height, pixels: btoa(binary) };
   }
 
+  const resolveUrl = (asset) => (asset.data ? `data:${asset.mime};base64,${asset.data}` : asset.file);
+
   window.__run = async function (job) {
     const { createRenderer, loadAssets, normalizeDocument } = window.SignalForgeEngine;
     const { doc } = normalizeDocument(job.doc);
-    const assets = await loadAssets(doc, {
-      resolveUrl: (asset) => (asset.data ? `data:${asset.mime};base64,${asset.data}` : asset.file)
-    });
+    const assets = await loadAssets(doc, { resolveUrl });
     const renderer = createRenderer();
+
+    // `before`: documents drawn on THIS renderer first, so what is measured
+    // afterwards is what a live app shows rather than what a cold start shows.
+    // Every layer keeps its scratch state for as long as its id exists (see
+    // stateFor in src/engine/engine.js), so a cache built while drawing one of
+    // these is still there for the frame that is kept — which is the only way
+    // to catch a cache that hands back a stale picture after a setting moved.
+    // Without it every job here begins from an empty cache, the one state
+    // nobody using the app is ever in.
+    for (const earlier of job.before || []) {
+      const prior = normalizeDocument(earlier.doc).doc;
+      const priorAssets = await loadAssets(prior, { resolveUrl });
+      renderer.render(ctx, prior, priorAssets, earlier.timeSec || 0);
+    }
+
     // Render twice so any lazily built scratch buffers exist for the measured frame.
     renderer.render(ctx, doc, assets, job.timeSec);
     renderer.render(ctx, doc, assets, job.timeSec);

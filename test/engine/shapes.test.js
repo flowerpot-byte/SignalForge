@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runJobs } from '../harness/render.js';
-import { pixelAt, isColour, maxDifference, meanBrightness } from '../harness/pixels.js';
+import { pixelAt, isColour, maxDifference, meanBrightness, blackShare } from '../harness/pixels.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, GRADIENT_SHAPES, DEFAULT_BANDS,
   MIN_BANDS, MAX_BANDS, normalizeDocument, colorAtPosition
@@ -226,6 +226,94 @@ test('more bands means the conic sweeps the ramp more than once around', async (
   const [oneNear, oneFar] = [sample(one, 30), sample(one, 150)];
   assert.ok(!isColour(oneFar, [oneNear.r, oneNear.g, oneNear.b], 30),
     'with one band they must differ');
+});
+
+// The conic is the one shape drawn from a CACHED picture, so it is the one
+// shape that can go on showing a setting nobody has any more. Every check above
+// renders on a renderer of its own, which is the one state the app is never in:
+// the window keeps a single renderer alive across every frame and every edit.
+// So this one moves a stop on a renderer that has ALREADY drawn a wheel, which
+// is what a person dragging the Position slider does.
+test('moving a stop repaints the conic on a renderer that has already drawn one', async () => {
+  const wheel = (at) => shapeDoc({
+    shape: 'conic', bands: 1, angle: 0,
+    stops: [{ at: 0, color: A }, { at, color: B }, { at: 100, color: A }]
+  });
+
+  const [fiftyFresh, twentyFresh, twentyAfterFifty] = await runJobs([
+    { name: 'fifty-fresh', kind: 'engine', timeSec: 0, doc: wheel(50) },
+    { name: 'twenty-fresh', kind: 'engine', timeSec: 0, doc: wheel(20) },
+    {
+      name: 'twenty-after-fifty', kind: 'engine', timeSec: 0,
+      doc: wheel(20),
+      before: [{ doc: wheel(50), timeSec: 0 }]
+    }
+  ]);
+
+  // It moved at all: the two positions are different pictures on a cold start.
+  assert.ok(maxDifference(fiftyFresh.pixels, twentyFresh.pixels) > 0,
+    'the two stop positions must draw different wheels, or this proves nothing');
+
+  // And the live renderer draws the SAME different picture — not merely a
+  // changed one. Byte for byte: the wheel is a function of the stops, so having
+  // drawn an earlier one may not leave a trace of it.
+  assert.equal(maxDifference(twentyAfterFifty.pixels, twentyFresh.pixels), 0,
+    'a conic drawn after another one must match a conic drawn on a fresh renderer');
+  assert.ok(maxDifference(twentyAfterFifty.pixels, fiftyFresh.pixels) > 0,
+    'the wheel is still the one built for the old stop position');
+});
+
+// A conic centred on the middle of the canvas only has to cover a turning
+// square; a DRIFTING one has to cover it from wherever the centre has wandered
+// to. It did not, and the corner it missed was left as the renderer's own black
+// (up to 11 % of the frame). Measured across the drift range rather than at one
+// setting, because the gap opens gradually with the amount.
+test('a drifting conic covers the whole canvas, at every strength and moment', async () => {
+  const moments = [0, 1.3, 2.9, 4.7, 6.1, 8.3, 11.9, 15.5];
+  const jobs = [];
+  for (const amount of [40, 70, 100]) {
+    for (const angle of [0, 45]) {
+      for (const timeSec of moments) {
+        jobs.push({
+          name: `conic-drift-${amount}-${angle}-${timeSec}`,
+          kind: 'engine',
+          timeSec,
+          doc: shapeDoc({
+            shape: 'conic', bands: 3, angle,
+            motions: [{ kind: 'drift', speed: 70, amount }]
+          })
+        });
+      }
+    }
+  }
+
+  for (const frame of await runJobs(jobs)) {
+    assert.equal(blackShare(frame.pixels), 0,
+      `${frame.name} left ${(blackShare(frame.pixels) * 100).toFixed(2)} % of the canvas uncovered`);
+  }
+});
+
+// The same fault on the warp path shows up differently and is worse: the source
+// buffer a warp samples is never cleared, so an area the wheel does not cover
+// keeps whatever the PREVIOUS frame put there. That cannot be seen as black —
+// it is seen as a frame that depends on its own history, which is what this
+// compares away.
+test('a drifting, warping conic draws the same frame however it got there', async () => {
+  const doc = shapeDoc({
+    shape: 'conic', bands: 3, angle: 0,
+    motions: [{ kind: 'drift', speed: 70, amount: 100 }, { kind: 'warp', speed: 60, amount: 100 }]
+  });
+  const [fresh, afterHistory] = await runJobs([
+    { name: 'fresh', kind: 'engine', timeSec: 9.4, doc },
+    {
+      name: 'after-history', kind: 'engine', timeSec: 9.4, doc,
+      // Frames whose centres sit elsewhere entirely, so anything left standing
+      // in the buffer from them would be in the measured frame's corners.
+      before: [0.4, 2.2, 5.8, 7.1].map((timeSec) => ({ doc, timeSec }))
+    }
+  ]);
+  assert.equal(maxDifference(fresh.pixels, afterHistory.pixels), 0,
+    'the frame depends on which frames were drawn before it');
 });
 
 // ------------------------------------------------------- nothing went missing
