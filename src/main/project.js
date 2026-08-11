@@ -69,33 +69,53 @@ export function parseProject(text) {
     );
   }
 
-  const { document } = parsed;
+  return documentFromFile(parsed.document, {
+    notADocument: 'this project file carries no document.',
+    embeddedOnly:
+      'this project carries an image that is not embedded in the file (it names a '
+      + 'file instead), which a SignalForge project may not do — only embedded images are allowed.'
+  });
+}
+
+/**
+ * Turn something read out of a FILE into a document, or refuse it.
+ *
+ * The one gate every foreign document passes through, whatever file it came
+ * out of: a saved project above, and an exported effect the library reopens
+ * (src/main/effect-document.js). It is one function and not two on purpose —
+ * the rule it enforces is a security rule, this project has been bitten five
+ * times by second copies of a rule, and a second copy of THIS one would be a
+ * second copy of the check that keeps a foreign file from naming a path.
+ *
+ * Only the two sentences differ between the callers, because only the noun
+ * differs: what is refused, and why, is identical.
+ *
+ * A file-shaped asset is refused rather than sanitised. normalizeDocument (see
+ * src/engine/document.js) legitimately keeps `file`-shaped assets for the
+ * export path (bin/sfexport.js writes effects whose images sit beside the
+ * .html as sibling files, and test/engine/boundary.test.js plus
+ * test/export/parity.test.js depend on that staying true). A file somebody
+ * OPENS is a different guarantee: it is self-contained because every asset's
+ * bytes are embedded as `data`. An asset carrying `file` instead — or
+ * *alongside* `data`, which normalizeAsset would silently prefer `data` over
+ * and drop, hiding the smuggled string from everything downstream — would have
+ * the renderer's image loader try to resolve an attacker-chosen path or URL the
+ * moment the file is opened. Rejected before normalizeDocument ever sees it, so
+ * nothing past this point has to reason about an asset naming anything outside
+ * the file it arrived in.
+ *
+ * @returns {{ doc: object, problems: string[] }}
+ */
+export function documentFromFile(document, { notADocument, embeddedOnly }) {
   if (document === null || typeof document !== 'object' || Array.isArray(document)) {
-    throw new Error('this project file carries no document.');
+    throw new Error(notADocument);
   }
 
-  // A project-file rule, not an engine one: normalizeDocument (see
-  // src/engine/document.js) legitimately keeps `file`-shaped assets for the
-  // export path (bin/sfexport.js writes effects whose images sit beside the
-  // .html as sibling files, and test/engine/boundary.test.js plus
-  // test/export/parity.test.js depend on that staying true). A *project*
-  // file is a different guarantee: the doc comment above promises it is
-  // self-contained because every asset's bytes are embedded as `data`. An
-  // asset carrying `file` instead — or *alongside* `data`, which
-  // normalizeAsset would silently prefer `data` over and drop, hiding the
-  // smuggled string from everything downstream — would have the renderer's
-  // image loader try to resolve an attacker-chosen path or URL the moment
-  // the project is opened. Reject before normalizeDocument ever sees it, so
-  // nothing past this point has to reason about a project asset naming
-  // anything outside the file.
   const rawAssets = document.assets;
   if (rawAssets !== null && typeof rawAssets === 'object' && !Array.isArray(rawAssets)) {
     for (const asset of Object.values(rawAssets)) {
       if (asset !== null && typeof asset === 'object' && !Array.isArray(asset) && 'file' in asset) {
-        throw new Error(
-          'this project carries an image that is not embedded in the file (it names a '
-          + 'file instead), which a SignalForge project may not do — only embedded images are allowed.'
-        );
+        throw new Error(embeddedOnly);
       }
     }
   }

@@ -6,6 +6,22 @@
 export const CANVAS_WIDTH = 320;
 export const CANVAS_HEIGHT = 200;
 
+/**
+ * The shape number every normalized document carries.
+ *
+ * It was written straight into normalizeDocument's output and nowhere else,
+ * which was enough while nothing ever READ it back. Something does now: an
+ * exported effect carries its normalized document inside itself, and the app
+ * can open one again (src/main/effect-document.js) — so "was this made by a
+ * SignalForge that knew more than this one does" is a question that has to be
+ * answerable against a number rather than against a comment. Bump it only when
+ * an older SignalForge could no longer make sense of a newer document; every
+ * field normalizeDocument can already fill in, clamp or substitute is NOT a
+ * change to this number, because such a document opens and says what it
+ * corrected.
+ */
+export const DOCUMENT_VERSION = 1;
+
 /** Document blend name -> canvas globalCompositeOperation. */
 export const BLEND_MODES = Object.freeze({
   normal: 'source-over',
@@ -524,7 +540,7 @@ export function normalizeDocument(raw) {
   for (const [id, value] of Object.entries(assetsInput)) assets[id] = normalizeAsset(value);
 
   const doc = {
-    version: 1,
+    version: DOCUMENT_VERSION,
     name: str(input.name, '').trim() || 'Untitled',
     description: str(input.description, ''),
     publisher: str(input.publisher, ''),

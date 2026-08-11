@@ -5,6 +5,19 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, normalizeDocument, isValidIdentifier } fro
 
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
 
+/**
+ * The id of the script block the finished effect carries its document in.
+ *
+ * Written here and read back by src/main/effect-document.js, which is what
+ * makes an exported effect openable again — the effects folder is the app's
+ * library, and this block is the whole reason a file in it is more than a
+ * finished artefact. One constant rather than the same string typed in two
+ * files: an effect whose document could not be found again would not fail
+ * loudly, it would simply stop being reopenable, and nothing but a test would
+ * ever notice.
+ */
+export const DOCUMENT_SCRIPT_ID = 'sf-document';
+
 function attribute(value) {
   return String(value)
     .replace(/&/g, '&amp;')
@@ -56,7 +69,7 @@ function bootstrap(controls) {
   var SF = window.SignalForgeEngine;
   var canvas = document.getElementById('exCanvas');
   var ctx = canvas.getContext('2d');
-  var raw = JSON.parse(document.getElementById('sf-document').textContent);
+  var raw = JSON.parse(document.getElementById('${DOCUMENT_SCRIPT_ID}').textContent);
   var base = SF.normalizeDocument(raw).doc;
   var renderer = SF.createRenderer();
   var assets = null;
@@ -272,7 +285,7 @@ ${metas}
   <canvas id="exCanvas" width="${CANVAS_WIDTH}" height="${CANVAS_HEIGHT}"></canvas>
 </body>
 
-<script id="sf-document" type="application/json">${jsonBlock(doc)}</script>
+<script id="${DOCUMENT_SCRIPT_ID}" type="application/json">${jsonBlock(doc)}</script>
 <script>${engineSource}</script>
 <script>${bootstrap(doc.controls)}
 </script>
