@@ -547,7 +547,19 @@ async function boot() {
     // descriptions of it.
     conic: { type: 'gradient', shape: 'conic' },
     stripes: { type: 'gradient', shape: 'stripes' },
-    waves: { type: 'gradient', shape: 'waves' }
+    waves: { type: 'gradient', shape: 'waves' },
+    // The four figures. They name their figure and nothing else, exactly as
+    // the five above name their shape: the colour, the size, the position, the
+    // ring's thickness and the star's point count are all left out so that
+    // normalizeDocument fills them in (DEFAULT_SHAPE_SIZE and its neighbours in
+    // src/engine/document.js). That is what keeps the tile's picture and the
+    // effect the tile makes the same data rather than two descriptions of it —
+    // and it is what keeps this file free of every colour, which is the rule
+    // test/app/color-literals.test.js enforces over this whole tree.
+    circle: { type: 'shape', figure: 'circle' },
+    ring: { type: 'shape', figure: 'ring' },
+    star: { type: 'shape', figure: 'star' },
+    heart: { type: 'shape', figure: 'heart' }
   });
 
   /**

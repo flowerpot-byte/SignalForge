@@ -128,7 +128,39 @@ export const TILES = Object.freeze([
   Object.freeze({ key: 'radial', labelKey: 'gallery.radial', glyph: null, starts: 'radial' }),
   Object.freeze({ key: 'conic', labelKey: 'gallery.conic', glyph: null, starts: 'conic' }),
   Object.freeze({ key: 'stripes', labelKey: 'gallery.stripes', glyph: null, starts: 'stripes' }),
-  Object.freeze({ key: 'waves', labelKey: 'gallery.waves', glyph: null, starts: 'waves' })
+  Object.freeze({ key: 'waves', labelKey: 'gallery.waves', glyph: null, starts: 'waves' }),
+  // ------------------------------------------------------------------------
+  // THE FOUR FIGURES: FOUR TILES, NOT ONE "FORM" TILE WITH A DROPDOWN
+  // ------------------------------------------------------------------------
+  //
+  // One tile with the figure as the first settings card was the tidier-looking
+  // option and it is the wrong one, for a reason that is structural rather than
+  // aesthetic: THE RULE OF THIS SHELF IS THAT A TILE DRAWS WHAT PRESSING IT
+  // PRODUCES. A single "Form" tile can only ever draw one figure, so three of
+  // the four would be invisible until after the press — the shelf would be
+  // advertising less than it holds, and the one thing this file has never done
+  // is show a picture that is not the effect.
+  //
+  // The precedent settles the rest of it. `linear`, `radial`, `conic`,
+  // `stripes` and `waves` are five values of ONE field of ONE layer type, and
+  // they are five tiles. A figure is the same kind of thing — a field of the
+  // shape layer — so it gets the same treatment, and somebody reading the shelf
+  // learns one rule instead of two. Collapsing the figures into one tile while
+  // the gradient shapes stayed spread out would be two grammars on one shelf,
+  // which is the junk drawer this strip has been warned against becoming twice
+  // over (see the note above about verbs and nouns).
+  //
+  // WHAT IT COSTS, MEASURED RATHER THAN GUESSED: eleven tiles instead of seven,
+  // so the rail scrolls at the window's smallest supported size where seven sat
+  // in one row. That was already true of the library shelf beside it, the rail
+  // has scrolled since the day it was built, and the numbers are in
+  // work/shape-layer-shots/notes.json — one row, no wrap, no tile shorter than
+  // the others, scrolled by hand and photographed. A shelf that scrolls is a
+  // smaller cost than a tile that lies.
+  Object.freeze({ key: 'circle', labelKey: 'gallery.circle', glyph: null, starts: 'circle' }),
+  Object.freeze({ key: 'ring', labelKey: 'gallery.ring', glyph: null, starts: 'ring' }),
+  Object.freeze({ key: 'star', labelKey: 'gallery.star', glyph: null, starts: 'star' }),
+  Object.freeze({ key: 'heart', labelKey: 'gallery.heart', glyph: null, starts: 'heart' })
 ]);
 
 /**

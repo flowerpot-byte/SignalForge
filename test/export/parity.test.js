@@ -90,6 +90,52 @@ const DOC = {
       opacity: 0.3, blend: 'screen',
       stops: [{ at: 10, color: '#12233a' }, { at: 90, color: '#8844ff' }],
       motions: [{ kind: 'none' }]
+    },
+    // -----------------------------------------------------------------------
+    // ONE OF EVERY FIGURE, AND WHY ALL FOUR RATHER THAN ONE
+    // -----------------------------------------------------------------------
+    //
+    // The four figures are not four settings of one drawing: they are four
+    // different sets of canvas calls, and each has its own way of coming out
+    // differently on the two paths.
+    //
+    //   circle  one arc. The control, and the cheapest thing that could fail.
+    //   ring    two arcs wound opposite ways, so the middle is TRANSPARENT.
+    //           This is the only layer in this document whose own interior
+    //           lets what is under it through, so it is the only one that
+    //           would catch the two paths compositing a hole differently.
+    //   star    the first layer type in this engine that caches GEOMETRY (the
+    //           unit vertices, keyed on the point count) rather than a
+    //           picture. A cache that one day outlived its key would show up
+    //           here and, for this layer type, nowhere else.
+    //   heart   four bezierCurveTo, which nothing else in this project draws
+    //           and which the corpus records exactly one host effect using.
+    //
+    // Deliberately overlapping and off-centre, at awkward sizes, so an edge
+    // landing half a pixel differently shows up as a difference rather than
+    // falling on a symmetry that hides it.
+    {
+      id: 'a8', type: 'shape', figure: 'circle', size: 37,
+      position: { x: 23, y: 41 }, color: '#ff8800', opacity: 0.55, blend: 'screen',
+      motions: [{ kind: 'none' }]
+    },
+    {
+      id: 'a9', type: 'shape', figure: 'ring', size: 58, thickness: 31,
+      position: { x: 71, y: 33 }, color: '#22ffcc', opacity: 0.6, blend: 'screen',
+      motions: [{ kind: 'none' }]
+    },
+    {
+      id: 'a10', type: 'shape', figure: 'star', points: 7, size: 44,
+      position: { x: 39, y: 72 }, color: '#ffee00', opacity: 0.5, blend: 'lighten',
+      // A spin that is standing still — the same trick the conic above uses,
+      // and here it also drives the geometry cache: the vertices are built, the
+      // rotate is decided against, and both paths must do both.
+      motions: [{ kind: 'spin', speed: 0, amount: 100 }]
+    },
+    {
+      id: 'a11', type: 'shape', figure: 'heart', size: 51,
+      position: { x: 79, y: 68 }, color: '#ff2277', opacity: 0.45, blend: 'screen',
+      motions: [{ kind: 'none' }]
     }
   ],
   controls: []
@@ -183,12 +229,32 @@ const TRAIL_DOC = {
   // 320 x 200 repaints every pixel and hides its own wake completely. Something
   // has to let the past through: an opacity below 1 here, or an additive blend,
   // or (once there are any) particles that only cover part of the canvas.
-  layers: [{
-    id: 'a1', type: 'gradient', shape: 'stripes', bands: 4, angle: 113,
-    opacity: 0.45,
-    stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#0b1020' }],
-    motions: [{ kind: 'drift', speed: 55, amount: 90 }]
-  }],
+  //
+  // AND THE SECOND LAYER IS THE ONE THAT WAS BEING WAITED FOR. The note above
+  // was written when the only way to see a wake was to hold a layer's opacity
+  // down, and it names the missing piece — something that only covers part of
+  // the canvas. A drifting figure is exactly that, at full opacity: it leaves
+  // every pixel it is not on untouched, so its wake is the real thing rather
+  // than a half-transparent ramp showing through itself. It is here because a
+  // wake accumulated over thirty frames is the harshest comparison in this file
+  // — one pixel out on frame 3 is still there, compounded, on frame 30 — and
+  // the layer type that finally makes wakes worth having should be under it.
+  layers: [
+    {
+      id: 'a1', type: 'gradient', shape: 'stripes', bands: 4, angle: 113,
+      opacity: 0.45,
+      stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#0b1020' }],
+      motions: [{ kind: 'drift', speed: 55, amount: 90 }]
+    },
+    {
+      id: 'a2', type: 'shape', figure: 'star', points: 5, size: 26,
+      position: { x: 50, y: 50 }, color: '#ffee88', blend: 'screen',
+      motions: [
+        { kind: 'drift', speed: 62, amount: 85 },
+        { kind: 'spin', speed: 48, amount: 70 }
+      ]
+    }
+  ],
   controls: []
 };
 

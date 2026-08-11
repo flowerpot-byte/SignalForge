@@ -6,9 +6,11 @@ import assert from 'node:assert/strict';
 import { mountGallery, TILES } from '../../app/renderer/components/gallery.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, DEFAULT_SOLID_COLOR, DEFAULT_GRADIENT_STOPS,
+  SHAPE_FIGURES, DEFAULT_SHAPE_SIZE, DEFAULT_STAR_POINTS, DEFAULT_SHAPE_THICKNESS,
   normalizeDocument, clamp
 } from '../../src/engine/document.js';
 import { createRenderer } from '../../src/engine/engine.js';
+import { STAR_INNER_RATIO } from '../../src/engine/layers/shape.js';
 import '../../src/engine/index.js';
 
 /**
@@ -60,7 +62,19 @@ function recordingContext(calls) {
     beginPath() { calls.push({ op: 'beginPath' }); },
     closePath() { calls.push({ op: 'closePath' }); },
     moveTo(x, y) { calls.push({ op: 'moveTo', x, y }); },
-    arc(x, y, r, from, to) { calls.push({ op: 'arc', x, y, r, from, to }); },
+    // The two the shape layer needs on top of the ones the sweep already used.
+    // `lineTo` walks a star's points; `bezierCurveTo` draws a heart, and the
+    // engine uses it rather than approximating the curve out of arcs because
+    // docs/effekt-inventur.md, section A15, records exactly one occurrence of it
+    // in 31 host effects — which is the only evidence there is that the host's
+    // canvas has it, and it is evidence.
+    lineTo(x, y) { calls.push({ op: 'lineTo', x, y }); },
+    bezierCurveTo(...points) { calls.push({ op: 'bezierCurveTo', points }); },
+    // `arc` is recorded WITH its anticlockwise flag, which the sweep never
+    // passed and the ring depends on: a ring is an outer circle and an inner
+    // one wound the other way, and a fake that dropped the flag would record
+    // two identical circles and call a filled disc a ring.
+    arc(x, y, r, from, to, anti) { calls.push({ op: 'arc', x, y, r, from, to, anti }); },
     fill() { calls.push({ op: 'fill' }); },
     drawImage(source, ...rest) { calls.push({ op: 'drawImage', source, rest }); },
     createLinearGradient(x0, y0, x1, y1) {
@@ -143,10 +157,14 @@ function mountWith(starterDocument) {
 
 /** What main.js's own starterDocument hands over, in one place for this file. */
 const SHAPE_STARTERS = ['linear', 'radial', 'conic', 'stripes', 'waves'];
+const FIGURE_STARTERS = [...SHAPE_FIGURES];
 const STARTERS = {
   solid: { layers: [{ id: 'fill', type: 'solid', motions: [] }] },
   ...Object.fromEntries(SHAPE_STARTERS.map((shape) => [
     shape, { layers: [{ id: 'fill', type: 'gradient', shape, motions: [] }] }
+  ])),
+  ...Object.fromEntries(FIGURE_STARTERS.map((figure) => [
+    figure, { layers: [{ id: 'fill', type: 'shape', figure, motions: [] }] }
   ]))
 };
 const defaults = (kind) => STARTERS[kind] ?? null;
@@ -155,7 +173,8 @@ const defaults = (kind) => STARTERS[kind] ?? null;
 
 test('every starting tile draws on a canvas of the engine\'s own size', () => {
   const { drawings } = mountWith(defaults);
-  assert.deepEqual(Object.keys(drawings).sort(), [...SHAPE_STARTERS, 'solid'].sort());
+  assert.deepEqual(Object.keys(drawings).sort(),
+    [...SHAPE_STARTERS, ...FIGURE_STARTERS, 'solid'].sort());
   for (const [kind, canvas] of Object.entries(drawings)) {
     assert.equal(canvas.width, CANVAS_WIDTH, `${kind} draws at the wrong width`);
     assert.equal(canvas.height, CANVAS_HEIGHT, `${kind} draws at the wrong height`);
@@ -207,6 +226,9 @@ test('a tile paints what the document says, not a colour of its own', () => {
   // agrees with the default today" into "the tile cannot disagree".
   const other = (kind) => {
     if (kind === 'solid') return { layers: [{ id: 'fill', type: 'solid', color: '#123456' }] };
+    if (SHAPE_FIGURES.includes(kind)) {
+      return { layers: [{ id: 'fill', type: 'shape', figure: kind, color: '#654321' }] };
+    }
     return {
       layers: [{
         id: 'fill',
@@ -225,6 +247,14 @@ test('a tile paints what the document says, not a colour of its own', () => {
   for (const kind of ['linear', 'radial']) {
     const ramp = drawings[kind].calls.find((call) => call.op === 'linear' || call.op === 'radial');
     assert.deepEqual(ramp.stops, [{ at: 0, color: '#010203' }, { at: 1, color: '#0a0b0c' }]);
+  }
+
+  // And the figures the same way round: the fill they set is the one the
+  // document carries, never a colour this file or that one chose.
+  for (const kind of SHAPE_FIGURES) {
+    const set = drawings[kind].calls.filter((call) => call.op === 'fillStyle').map((c) => c.value);
+    assert.equal(set.at(-1), '#654321', `the ${kind} tile paints a colour of its own`);
+    assert.notEqual(set.at(-1), DEFAULT_SOLID_COLOR);
   }
 });
 
@@ -281,6 +311,90 @@ test('the conic tile sweeps wedges into a picture and paints it turned', () => {
   // out of calls canvas has always had.
   assert.equal(typeof recordingContext([]).createConicGradient, 'undefined',
     'this fake offers no createConicGradient, so the engine cannot be using one');
+});
+
+// ------------------------------------------------------- the four figure tiles
+
+/**
+ * Each figure tile is checked against what the FIGURE is, not against "it drew
+ * something". A tile whose canvas received one arc is a tile that drew a
+ * circle, whatever the label under it says — and four tiles that all drew a
+ * circle is exactly the failure a single "Form" tile with a dropdown was
+ * rejected for (see the note in app/renderer/components/gallery.js).
+ */
+
+test('the circle tile draws one arc, at the size and place the engine defaults to', () => {
+  const { drawings } = mountWith(defaults);
+  const arcs = drawings.circle.calls.filter((call) => call.op === 'arc');
+  assert.equal(arcs.length, 1, 'a circle is one arc and nothing else');
+  // The engine's own size contract: `size` is the diameter of the circle the
+  // figure sits in, as a percent of the canvas height. Read from the default
+  // rather than written out, so retuning it moves the tile with it.
+  assert.equal(arcs[0].r, (DEFAULT_SHAPE_SIZE / 100) * CANVAS_HEIGHT / 2);
+  // Drawn about the origin and moved there, which is what lets a spin turn a
+  // figure about its own middle.
+  assert.deepEqual([arcs[0].x, arcs[0].y], [0, 0]);
+  const move = drawings.circle.calls.find((call) => call.op === 'translate');
+  assert.deepEqual([move.x, move.y], [CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2]);
+  // And it never fills the canvas — the whole reason this layer type exists.
+  const covers = drawings.circle.calls.filter((call) =>
+    call.op === 'fillRect' && call.width === CANVAS_WIDTH && call.height === CANVAS_HEIGHT);
+  assert.equal(covers.length, 1, 'only the renderer\'s own clear may cover the canvas');
+});
+
+test('the ring tile draws two arcs wound opposite ways, which is what makes the hole', () => {
+  const { drawings } = mountWith(defaults);
+  const arcs = drawings.ring.calls.filter((call) => call.op === 'arc');
+  assert.equal(arcs.length, 2, 'a ring is an outer circle and an inner one');
+  const outer = (DEFAULT_SHAPE_SIZE / 100) * CANVAS_HEIGHT / 2;
+  assert.equal(arcs[0].r, outer);
+  assert.equal(arcs[1].r, outer * (1 - DEFAULT_SHAPE_THICKNESS / 100));
+  // THE FLAG IS THE FEATURE. Two circles wound the same way under the non-zero
+  // rule are a filled disc; wound opposite ways they cancel where they overlap,
+  // and the middle comes out transparent. Nothing else in the recorded calls
+  // distinguishes a ring from a disc.
+  assert.equal(arcs[0].anti, false);
+  assert.equal(arcs[1].anti, true);
+  // Deliberately not a fill rule and deliberately not a stroke: no stroke call
+  // is made at all, so a ring cannot be sitting half a wall outside its radius.
+  assert.equal(drawings.ring.calls.filter((call) => call.op === 'stroke').length, 0);
+});
+
+test('the star tile walks two vertices per point, in and out between two radii', () => {
+  const { drawings } = mountWith(defaults);
+  const calls = drawings.star.calls;
+  const moves = calls.filter((call) => call.op === 'moveTo');
+  const lines = calls.filter((call) => call.op === 'lineTo');
+  // One moveTo to start, then a lineTo for every remaining vertex: a star of
+  // n points has 2n vertices, outer and inner alternating.
+  assert.equal(moves.length + lines.length, DEFAULT_STAR_POINTS * 2);
+  assert.equal(calls.filter((call) => call.op === 'arc').length, 0, 'a star has no arcs in it');
+
+  const outer = (DEFAULT_SHAPE_SIZE / 100) * CANVAS_HEIGHT / 2;
+  const radii = [...moves, ...lines].map((v) => Math.hypot(v.x, v.y)).sort((a, b) => a - b);
+  // Exactly two distances from the middle, and the inner one is half the outer
+  // — `Vibe`'s own ratio, which is what makes a five-pointed star read as one.
+  assert.ok(Math.abs(radii.at(-1) - outer) < 1e-9, 'the points do not reach the outer radius');
+  assert.ok(Math.abs(radii[0] - outer * STAR_INNER_RATIO) < 1e-9,
+    'the notches do not dive to the inner radius');
+  // The first vertex is straight up, so a star does not open lying on its side.
+  assert.ok(Math.abs(moves[0].x) < 1e-9 && moves[0].y < 0,
+    'the first point of a star must be at the top');
+});
+
+test('the heart tile draws four bezier curves and nothing else', () => {
+  const { drawings } = mountWith(defaults);
+  const curves = drawings.heart.calls.filter((call) => call.op === 'bezierCurveTo');
+  assert.equal(curves.length, 4, 'a heart is two lobes and two bottom curves');
+  assert.equal(drawings.heart.calls.filter((call) => call.op === 'arc').length, 0);
+  // Every x that appears has its own negative somewhere in the set, which is
+  // the whole of what "symmetric" means for this path. Checked here as well as
+  // in the engine's own tests because this is the tile somebody LOOKS at.
+  const xs = curves.flatMap((call) => [call.points[0], call.points[2], call.points[4]]);
+  for (const x of xs) {
+    assert.ok(xs.some((other) => Math.abs(other + x) < 1e-9),
+      `the heart has a control point at x = ${x} with no mirror image`);
+  }
 });
 
 // ------------------------------------------------------------- the fourth tile

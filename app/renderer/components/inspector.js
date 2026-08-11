@@ -11,7 +11,8 @@
 // the browser as a plain ES module just as it does in node:test, where this
 // file is imported with no DOM whatsoever.
 import {
-  FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
+  FIT_MODES, GRADIENT_SHAPES, SHAPE_FIGURES,
+  MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
 } from '../../../src/engine/document.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
 import { createField, createMotions, createStops } from './field.js';
@@ -57,6 +58,16 @@ const RANGES = Object.freeze({
   hueShift: withStep(CONTROL_RANGES.hueShift),
   hueCycle: withStep(CONTROL_RANGES.hueCycle),
   trail: withStep(CONTROL_RANGES.trail),
+  // The shape layer's five numbers. Two of the names differ from the
+  // document's, exactly as `speed`/`amount` do: the exported controls are
+  // called posX and posY because their `property` becomes a global in the
+  // finished effect and `x` is not a name to claim there (see CONTROL_RANGES),
+  // while the document simply calls them position.x and position.y.
+  size: withStep(CONTROL_RANGES.size),
+  positionX: withStep(CONTROL_RANGES.posX),
+  positionY: withStep(CONTROL_RANGES.posY),
+  thickness: withStep(CONTROL_RANGES.thickness),
+  points: withStep(CONTROL_RANGES.points),
   // The one range in this table the exported effect does not also offer, and
   // src/export/effect-controls.js says why at length: a stop position needs a
   // gradient to be seen against, and SignalRGB's panel has none.
@@ -169,7 +180,11 @@ function entryIndexOf(path, list) {
  * name would go blank exactly as the first would.
  */
 function motionKindsWide(layer) {
-  const offered = motionKindsFor(layer.type);
+  // The figure matters for one layer type and is ignored for the other three
+  // — a star may spin and a circle may not (see motionKindsFor). Passed
+  // unconditionally rather than behind a type test, so this stays one line and
+  // the question of which types care stays in the engine, where it is answered.
+  const offered = motionKindsFor(layer.type, layer.figure);
   const extra = layer.motions
     .map((motion) => motion.kind)
     .filter((kind, index, all) => !offered.includes(kind) && all.indexOf(kind) === index);
@@ -273,6 +288,52 @@ export function describeInspector(doc, layerId) {
         });
       }
     });
+  }
+
+  // A figure: what it is, what colour, how big, where — and then the one extra
+  // number the chosen figure actually reads.
+  //
+  // THE SAME RULE AS THE GRADIENT'S ANGLE AND BANDS, APPLIED THE SAME WAY. This
+  // column's whole discipline is that a control which is there can be used, so
+  // a control that provably cannot change a pixel for the figure currently
+  // chosen is not drawn at all: a thickness means nothing to a star, a point
+  // count means nothing to a heart. The EXPORTED effect keeps both whatever the
+  // figure (src/export/effect-controls.js says why at length), and the two are
+  // not in conflict — over there the figure can be switched from the same panel
+  // with nothing to redraw the list, here the figure dropdown is two rows up
+  // and this column rebuilds the moment it changes.
+  if (layer && layer.type === 'shape') {
+    fields.push({
+      path: `${at}.figure`, type: 'select', section: 'fill',
+      labelKey: 'inspector.figure', values: [...SHAPE_FIGURES]
+    });
+    fields.push({
+      path: `${at}.color`, type: 'color', section: 'fill', labelKey: 'inspector.colour'
+    });
+    fields.push({
+      path: `${at}.size`, type: 'number', section: 'fill',
+      labelKey: 'inspector.size', ...RANGES.size
+    });
+    fields.push({
+      path: `${at}.position.x`, type: 'number', section: 'fill',
+      labelKey: 'inspector.positionX', ...RANGES.positionX
+    });
+    fields.push({
+      path: `${at}.position.y`, type: 'number', section: 'fill',
+      labelKey: 'inspector.positionY', ...RANGES.positionY
+    });
+    if (layer.figure === 'ring') {
+      fields.push({
+        path: `${at}.thickness`, type: 'number', section: 'fill',
+        labelKey: 'inspector.thickness', ...RANGES.thickness
+      });
+    }
+    if (layer.figure === 'star') {
+      fields.push({
+        path: `${at}.points`, type: 'number', section: 'fill',
+        labelKey: 'inspector.points', ...RANGES.points
+      });
+    }
   }
 
   if (layer && layer.type === 'image') {

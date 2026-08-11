@@ -88,7 +88,18 @@ test('every slider offers exactly the range the matching exported control offers
     }).doc, 'g1'),
     ...describeInspector(normalizeDocument({
       layers: [{ id: 'g2', type: 'gradient', shape: 'stripes', motions: [{ kind: 'warp' }] }]
-    }).doc, 'g2')
+    }).doc, 'g2'),
+    // ...and two figures, for the same reason there are two gradients: a ring
+    // is the only figure offered a thickness and a star the only one offered a
+    // point count, so one shape layer would leave two of the shared table's
+    // entries unaccounted for and the closing assertion would go red for a
+    // control that is perfectly well offered.
+    ...describeInspector(normalizeDocument({
+      layers: [{ id: 's1', type: 'shape', figure: 'ring', motions: [{ kind: 'drift' }] }]
+    }).doc, 's1'),
+    ...describeInspector(normalizeDocument({
+      layers: [{ id: 's2', type: 'shape', figure: 'star', motions: [{ kind: 'spin' }] }]
+    }).doc, 's2')
   ];
   const pairs = [
     ['layers.0.motions.0.speed', 'tempo'],
@@ -102,7 +113,17 @@ test('every slider offers exactly the range the matching exported control offers
     ['layers.0.stops.0.at', 'stop'],
     ['hueShift', 'hueShift'],
     ['hueCycle', 'hueCycle'],
-    ['trail', 'trail']
+    ['trail', 'trail'],
+    // The shape layer's five. Two of them are the crossing this whole test
+    // exists to catch: the exported controls are called posX and posY (a
+    // control's property becomes a global in the finished effect, and `x` is
+    // not a name to claim there), while the document calls the same two things
+    // position.x and position.y. Nothing but this pairing keeps those aligned.
+    ['layers.0.size', 'size'],
+    ['layers.0.position.x', 'posX'],
+    ['layers.0.position.y', 'posY'],
+    ['layers.0.thickness', 'thickness'],
+    ['layers.0.points', 'points']
   ];
 
   for (const [path, property] of pairs) {

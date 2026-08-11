@@ -9,12 +9,36 @@ import {
 import { nextStopPosition } from '../../app/renderer/components/field.js';
 import { TILES } from '../../app/renderer/components/gallery.js';
 import {
-  normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS, MOTION_KINDS,
+  normalizeDocument, GRADIENT_SHAPES, SHAPE_FIGURES, SOLID_MOTION_KINDS, MOTION_KINDS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS
 } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 
 const docOf = (layer) => normalizeDocument({ layers: [{ id: 'a1', ...layer }] }).doc;
+
+/**
+ * One layer of every type this column can be asked about, and every variant of
+ * a type whose fields DEPEND on one of its own settings.
+ *
+ * There is one of these because there were four copies of it, written out
+ * inline in four loops, and they had drifted: two of them knew about the
+ * gradient's radial variant and two did not, so the checks that mattered most
+ * for `bands` walked straight past it. A new layer type or a new figure added
+ * here is covered by every check below at once, which is the only arrangement
+ * that cannot go quietly out of date.
+ *
+ * The figures are all four rather than one, because the shape layer's field
+ * list genuinely differs between them: a ring is offered a thickness and a star
+ * a point count, and neither is offered to the other two.
+ */
+const LAYER_TYPES = Object.freeze([
+  { type: 'solid' },
+  { type: 'gradient' },
+  ...GRADIENT_SHAPES.map((shape) => ({ type: 'gradient', shape })),
+  ...SHAPE_FIGURES.map((figure) => ({ type: 'shape', figure })),
+  { type: 'image', asset: 'q' }
+]);
+
 const fieldsOf = (layer) => describeInspector(docOf(layer), 'a1');
 const pathsOf = (layer) => fieldsOf(layer).map((field) => field.path);
 
@@ -104,7 +128,7 @@ test('the stop list addresses the layer and carries the two limits', () => {
 });
 
 test('every field of a colour layer says which section it is in, and each has a heading', () => {
-  for (const layer of [{ type: 'solid' }, { type: 'gradient' }]) {
+  for (const layer of LAYER_TYPES) {
     for (const field of fieldsOf(layer)) {
       assert.ok(Object.hasOwn(SECTION_TITLES, field.section),
         `${field.path} is in the unknown section "${field.section}"`);
@@ -113,7 +137,7 @@ test('every field of a colour layer says which section it is in, and each has a 
 });
 
 test('a section is never left and returned to, for a colour layer either', () => {
-  for (const layer of [{ type: 'solid' }, { type: 'gradient' }]) {
+  for (const layer of LAYER_TYPES) {
     const runs = [];
     for (const field of fieldsOf(layer)) {
       if (runs[runs.length - 1] !== field.section) runs.push(field.section);
@@ -126,8 +150,7 @@ test('a section is never left and returned to, for a colour layer either', () =>
 // create a branch that is not already there — so a field whose path does not
 // exist in the document is a control that silently does nothing.
 test('every path the column offers is one the document really has', () => {
-  for (const layer of [{ type: 'solid' }, { type: 'gradient' },
-    { type: 'gradient', shape: 'radial' }, { type: 'image', asset: 'q' }]) {
+  for (const layer of LAYER_TYPES) {
     for (const field of fieldsOf(layer)) {
       if (field.type === 'motions' || field.type === 'stops') continue;
       const doc = docOf(layer);
@@ -182,7 +205,7 @@ test('no colour slider offers a value the engine would clamp away, whatever the 
  */
 test('every section the column can build has both a heading word and a glyph', () => {
   const sections = new Set();
-  for (const layer of [{ type: 'solid' }, { type: 'gradient' }, { type: 'image', asset: 'q' }]) {
+  for (const layer of LAYER_TYPES) {
     for (const field of fieldsOf(layer)) sections.add(field.section);
   }
   // Every layer type this app has must contribute something, or the loop above
@@ -213,13 +236,18 @@ test('no section is headed that nothing ever builds', () => {
 // ---------------------------------------------------------- the gallery
 
 test('every tile in the starting gallery does something', () => {
-  assert.equal(TILES.length, 7);
+  // WHAT IS ASSERTED AND WHAT IS DELIBERATELY NOT. There used to be a literal
+  // 7 here and a literal list of the six starting kinds beside it, and both
+  // went stale the moment a tile was added — which is the third guard in this
+  // project to rot by counting (see the note in test/engine/boundary.test.js).
+  // So the RULE is asserted instead: exactly one tile opens a file dialog, every
+  // other tile starts something, and no two start the same thing. A count of
+  // tiles is not a property of a correct shelf; those three are.
   const picture = TILES.filter((tile) => tile.starts === null);
   assert.equal(picture.length, 1, 'exactly one tile opens a file dialog');
-  assert.deepEqual(
-    TILES.filter((tile) => tile.starts).map((tile) => tile.starts),
-    ['solid', 'linear', 'radial', 'conic', 'stripes', 'waves']
-  );
+  const started = TILES.filter((tile) => tile.starts).map((tile) => tile.starts);
+  assert.equal(started.length, TILES.length - 1, 'every other tile must start something');
+  assert.equal(new Set(started).size, started.length, 'two tiles start the same effect');
 });
 
 test('every gradient shape the engine can draw has a tile that starts one', () => {
@@ -230,6 +258,20 @@ test('every gradient shape the engine can draw has a tile that starts one', () =
   const started = new Set(TILES.map((tile) => tile.starts).filter(Boolean));
   for (const shape of GRADIENT_SHAPES) {
     assert.ok(started.has(shape), `no tile starts a ${shape} gradient`);
+  }
+});
+
+test('every figure the engine can draw has a tile that starts one', () => {
+  // The same rule, from the same reasoning, for the layer type that arrived
+  // after it — and this is also the check that keeps the shelf's decision
+  // honest. One "Form" tile with a Figure dropdown behind it would fail here,
+  // which is the point: three of the four figures would then be reachable only
+  // by starting a fourth and changing a setting, and the tile would be showing
+  // a picture of one figure while standing for four (see the long note in
+  // app/renderer/components/gallery.js).
+  const started = new Set(TILES.map((tile) => tile.starts).filter(Boolean));
+  for (const figure of SHAPE_FIGURES) {
+    assert.ok(started.has(figure), `no tile starts a ${figure}`);
   }
 });
 

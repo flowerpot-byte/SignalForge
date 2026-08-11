@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { runElectron } from '../harness/spawn-electron.js';
+import { TILES } from '../../app/renderer/components/gallery.js';
 
 const require_ = createRequire(import.meta.url);
 const root = dirname(dirname(dirname(fileURLToPath(import.meta.url))));
@@ -58,9 +59,14 @@ test('an effect that has been exported can be found and opened again', async (t)
     );
   });
 
-  await t.test('the seven ways to start an effect are untouched by it', () => {
-    assert.deepEqual(report.startingTiles,
-      ['picture', 'solid', 'linear', 'radial', 'conic', 'stripes', 'waves']);
+  await t.test('every way to start an effect is untouched by it', () => {
+    // Read out of TILES rather than written out here. This subtest is about the
+    // LIBRARY: what it has to say is that adding a second shelf did not disturb
+    // the first one, and a list copied by hand answers that question by going
+    // red every time a tile is added, which is the opposite of what it is for.
+    // (There were seven when this was written and there are eleven now, and the
+    // shelf gaining four figures is not something the library shelf broke.)
+    assert.deepEqual(report.startingTiles, TILES.map((tile) => tile.key));
   });
 
   await t.test('pressing the other heading swaps the shelves', () => {

@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_BANDS, MAX_BANDS,
-  MAX_HUE_SHIFT, MAX_TRAIL, motionKindsFor, normalizeDocument
+  MAX_HUE_SHIFT, MAX_TRAIL, motionKindsFor, normalizeDocument,
+  SHAPE_FIGURES, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE,
+  MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS, MIN_STAR_POINTS, MAX_STAR_POINTS
 } from '../engine/document.js';
 
 /**
@@ -50,6 +52,10 @@ import {
  *   angle        <- gradient angle   clamp 0..360   offered 0..360
  *   bands        <- gradient bands   clamp 1..24    offered 1..24
  *   stop         <- stops[].at       clamp 0..100   offered 0..100
+ *   size         <- shape size       clamp 1..200   offered 1..200
+ *   posX / posY  <- shape position   clamp 0..100   offered 0..100
+ *   thickness    <- shape thickness  clamp 1..100   offered 1..100
+ *   points       <- shape points     clamp 3..12    offered 3..12
  *   hueShift     <- hueShift         clamp 0..360   offered 0..360
  *   hueCycle     <- hueCycle         clamp 0..100   offered 0..100 (0 is off, not slow)
  *   trail        <- trail            clamp 0..100   offered 0..100 (0 is off, not short)
@@ -94,6 +100,30 @@ export const CONTROL_RANGES = Object.freeze({
   // normalizeDocument rather than trusting these two numbers.
   bands: Object.freeze({ min: MIN_BANDS, max: MAX_BANDS }),
   stop: Object.freeze({ min: 0, max: 100 }),
+  // How big the figure is, as a percent of the canvas height — see
+  // MIN_SHAPE_SIZE in src/engine/document.js for why the ceiling is 200 and
+  // not 100, and why the floor is 1 rather than 0.
+  size: Object.freeze({ min: MIN_SHAPE_SIZE, max: MAX_SHAPE_SIZE }),
+  // Where the figure sits, as a percent of each edge. Both ends are real
+  // places to be — 0 puts the middle of the figure on the edge and most of it
+  // off the canvas, which is a thing to want (an arc of colour coming in from
+  // the side) and not a mistake to guard against.
+  //
+  // NAMED posX AND posY, NOT x AND y. Every control's `property` becomes a
+  // global in the exported effect (see build-effect.js, which splices it
+  // straight into the bootstrap), and a global called `x` in a page that also
+  // holds the whole engine bundle is a name asking for a collision. The two
+  // sliders SignalRGB shows are still called "Position X" and "Position Y",
+  // so nobody outside this file meets the longer name.
+  posX: Object.freeze({ min: 0, max: 100 }),
+  posY: Object.freeze({ min: 0, max: 100 }),
+  // The ring's wall, as a percent of its own outer radius. 100 is a filled
+  // disc rather than an error, so the range runs continuously into the circle.
+  thickness: Object.freeze({ min: MIN_SHAPE_THICKNESS, max: MAX_SHAPE_THICKNESS }),
+  // How many points the star has. Whole numbers only, and the engine's clamp
+  // says the same thing — test/export/effect-controls.test.js reads both ends
+  // out of normalizeDocument rather than trusting these two.
+  points: Object.freeze({ min: MIN_STAR_POINTS, max: MAX_STAR_POINTS }),
   // Where the colour wheel is parked, in degrees. The full circle is offered
   // because the full circle is what there is — unlike `tempo`, whose floor is
   // 1 because zero is not a speed, every number here is a real place to be.
@@ -188,6 +218,18 @@ export function effectControls(doc, layerId) {
    * and warp on a uniform field provably cannot change a pixel (see
    * src/engine/layers/solid.js). Offering them would put two options in
    * somebody's SignalRGB panel that do nothing whatsoever when chosen.
+   *
+   * On a SHAPE layer the same question has an answer that depends on the
+   * figure, which is why the layer's own figure is handed over: a spin is the
+   * whole point of a star and invisible on a circle. What it CANNOT do is
+   * follow the Figure dropdown afterwards — this list is baked once, at export,
+   * and somebody who switches a circle to a star inside SignalRGB keeps the
+   * circle's shorter Motion list. That is the honest trade and it is the one
+   * this project already makes for the picture layer's fit; the alternative is
+   * a dropdown offering a motion that does nothing for the figure showing.
+   * Which way round to be wrong is decided by which is recoverable: a missing
+   * option is fixed by exporting again from the app, where the whole list is
+   * live; a dead option is a control somebody drags and blames themselves for.
    */
   const motionControls = () => {
     const motion = layer.motions?.[0];
@@ -196,7 +238,7 @@ export function effectControls(doc, layerId) {
     // way, never the document's own value. A hand-edited project can carry a
     // warp on a solid layer, and a dropdown whose default is not one of its
     // own options leaves SignalRGB to decide what that means.
-    const offered = motionKindsFor(layer.type);
+    const offered = motionKindsFor(layer.type, layer.figure);
     const kinds = offered.includes(motion.kind) ? offered : [...offered, motion.kind];
     controls.push(
       dropdown('motion', 'Modus', 'Motion', kinds, motion.kind, `${layerId}.motions.0.kind`),
@@ -243,6 +285,31 @@ export function effectControls(doc, layerId) {
       // appeared for some shapes would leave somebody who switched with no way
       // to set the one thing those shapes are about.
       slider('bands', 'Baender', 'Bands', layer.bands, `${layerId}.bands`)
+    );
+    motionControls();
+  }
+
+  // A figure. Colour first for the same reason a gradient's is — the colour IS
+  // the effect and everything else is applied to it — then what the figure is,
+  // then where and how big, then how it moves.
+  //
+  // EVERY GEOMETRY FIELD IS OFFERED WHATEVER THE FIGURE IS, including the two
+  // only one figure reads. That is the decision `angle` and `bands` already
+  // made on a gradient (their notes are a few lines up) and it is made here for
+  // the same reason: the Figure dropdown is in this very panel, so a thickness
+  // that only appeared while "ring" was chosen would leave somebody who
+  // switched to the ring with no way to set the one thing a ring is about. The
+  // cost is two sliders that do nothing for three figures out of four; the cost
+  // of the alternative is a dead end.
+  if (layer && layer.type === 'shape') {
+    controls.push(
+      colour('color', 'Farbe', 'Colour', layer.color, `${layerId}.color`),
+      dropdown('figure', 'Figur', 'Figure', SHAPE_FIGURES, layer.figure, `${layerId}.figure`),
+      slider('size', 'Groesse', 'Size', layer.size, `${layerId}.size`),
+      slider('posX', 'Position X', 'Position X', layer.position.x, `${layerId}.position.x`),
+      slider('posY', 'Position Y', 'Position Y', layer.position.y, `${layerId}.position.y`),
+      slider('thickness', 'Randstaerke', 'Thickness', layer.thickness, `${layerId}.thickness`),
+      slider('points', 'Zacken', 'Points', layer.points, `${layerId}.points`)
     );
     motionControls();
   }
