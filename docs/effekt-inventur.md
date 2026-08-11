@@ -337,19 +337,25 @@ exportierte Datei dieselben Pixel zeigen. Eine Hash-Funktion über den Partikel-
 | Technik (A) | Heute | Bemerkung |
 |---|---|---|
 | A3 Vollflächiger Verlauf, linear/radial, wandernd | **Ja, ganz** | `Gradient Wave` ist unsere `stripes`-Form mit `drift`; `Black Ice` ist `linear` ohne Bewegung |
-| A4 Farbrotation | **Nein** | fehlt komplett — keine Bewegung dreht den Farbton |
+| A4 Farbrotation | **Ja, ganz** (seit 11.08., siehe C3) | Dokumentfelder `hueShift` (0–360) und `hueCycle` (Tempo, 0 = aus) im gemeinsamen Pixel-Durchgang |
 | A9 Atmen/Pulsieren | **Ja, ganz** | `breathe` und `pulse`; `Solid Color` ist Farbfläche + `breathe` |
 | A7 Wischbewegung | **Fast** | `drift` auf `linear`/`stripes` schwingt hin und her statt in eine Richtung zu marschieren — die Bewegung ist da, der harte Wisch mit stehenbleibender Farbe nicht |
 | A8 Regenbogen-Spalten | **Ja, mit Umweg** | `stripes` mit vier Stopps und 24 Wiederholungen kommt nah; ein echter 360°-Regenbogen bräuchte mehr als 4 Stopps oder A4 |
 | A11 Verzerrtes Bild | **Ja, ganz** | `warp` ist genau dieselbe Puffer-Mathematik (`src/engine/layers/warp-buffer.js`) |
 | A1 Partikelsystem | **Nein** | Ebenentyp fehlt. Mit gesätem Zufall aber **machbar**, weil die Bewegung linear in `t` ist |
-| A2 Nachzieh-Schleier | **Nein** | `render()` löscht jedes Bild auf Schwarz. Mit Aufwand machbar, kostet aber die „Bild = Funktion von t"-Eigenschaft |
+| A2 Nachzieh-Schleier | **Ja, mit einer Einschränkung** (seit 11.08., siehe C2) | Dokumentfeld `trail` (0 = aus = wie bisher). Sichtbar nur dort, wo eine Ebene die Fläche **nicht** deckend übermalt — also bei Deckkraft < 1, bei `atmen`/`pulsieren` oder (später) bei Partikeln |
 | A5 Figuren (Kreis/Ring/Stern/Herz) | **Nein** | Ebenentyp fehlt. Rein zeichnerisch, keine Hürde |
 | A6 Kachelraster | **Nein** | Ebenentyp oder Verlaufsform fehlt. Phase je Zelle aus gesätem Zufall |
 | A10 Text | **Nein** | Schriftrendering im Wirt ungeprüft |
 | A12 Ton- und Bildschirmreaktion | **Nein — und unter unseren Zusagen unmöglich** | siehe C8 |
 | A13 Tastendruck | **Nein** | technisch möglich (Wirt ruft `onCanvasTapped`), aber unvorschaubar |
 | A14 Rückruf bei Reglerwechsel | **Nein, brauchen wir aber nicht** | wir lesen die Regler in jedem Bild neu (`readControls`) |
+
+**Nachtrag 11.08.2026:** Zwei Zeilen dieser Tabelle sind seither erledigt — A4 (Farbrotation)
+ganz, A2 (Nachzieh-Schleier) mit einer Einschränkung, die bei C2 ausbuchstabiert ist. Die
+Zusammenrechnung darunter ist die von vor diesem Bau und wird bewusst nicht überschrieben:
+beide Bausteine zeigen ihren vollen Wert erst mit den Partikeln (C1), und bis dahin wäre eine
+höhere Zahl hier eine Behauptung statt einer Messung.
 
 **Zusammengerechnet:** Von 31 Effekten sind heute **etwa 6** ohne Abstriche nachbaubar
 (`Solid Color`, `Good Night!`, `Rainbow` näherungsweise, `Black Ice` ohne Tastendruck,
@@ -405,6 +411,25 @@ der Zeitachse springen und dasselbe Bild sehen. Der Paritätstest muss dann von 
 laufen statt Einzelbilder zu vergleichen. Das ist der Preis, und er ist bezahlbar — aber er
 gehört vor dem Bau in den Testplan, nicht danach.
 
+**Nachtrag 11.08.2026 — gebaut.** Dokumentfeld `trail` 0–100, Standard 0. Die Deckkraft
+des Schleiers ist **gemessen** statt geraten (`work/veil-probe.cjs`): Chromium bringt einen
+Pixel bei jeder geprüften Deckkraft bis 0,01 **exakt auf 0** herunter, es bleibt also kein
+Rest stehen — die Befürchtung, dass ein 8-Bit-Multiplikat bei kleinen Werten hängenbleibt,
+hat sich nicht bestätigt. Deshalb ist die Skala geometrisch von 0,5 (Nachglühen 8 Bilder)
+bis 0,02 (116 Bilder ≈ 3,9 s) gespannt. Die Ebenen werden dabei in eine eigene, unsichtbare
+Fläche gemalt und erst danach kopiert und eingefärbt — sonst würde Helligkeit und Farbdrehung
+bei jedem Bild erneut auf den Nachzieh-Rest angewandt und der liefe binnen einer Sekunde ins
+Weiße. Die Parität ist wie angekündigt umgestellt: Einzelbild-Vergleich für Dokumente ohne
+Schleier, Bildfolge ab Bild 0 für Dokumente mit (`test/export/parity.test.js`).
+
+**Die Einschränkung, die vorher niemand ausgesprochen hatte:** Der Schleier liegt **unter**
+dem, was gerade gezeichnet wird — genau wie im Bestand. Eine Ebene, die alle 320 × 200 Pixel
+deckend übermalt, verdeckt damit ihr eigenes Nachziehen vollständig. Ein Verlauf tut genau
+das. Sichtbar wird der Schleier heute also nur mit `atmen`/`pulsieren` (beide senken die
+Deckkraft der Ebene), mit einem Bild in `Einpassen`, oder mit einer Ebenen-Deckkraft unter 1
+— und die ist in der Einstellungsspalte gar nicht angeboten. Der eigentliche Nutznießer ist
+**C1, die Partikel**: die decken die Fläche nie.
+
 ### C3. Farbrotation als Bewegung — der billigste Gewinn der Liste
 
 **Was:** Bewegungsart `hue` (oder ein Dokument-Feld „Farbdrehung" mit Tempo). Der Farbton der
@@ -422,6 +447,17 @@ es teurer und nur dann nötig, wenn zwei Ebenen unterschiedlich schnell drehen s
 **Aufwand:** klein bis mittel (die Farbumrechnung gibt es schon in `src/engine/color.js`).
 
 **Grenze:** keine. Rein rechnerisch, zeitabhängig, deterministisch.
+
+**Nachtrag 11.08.2026 — gebaut, als Dokumentfeld wie hier vorgeschlagen.** Zwei Felder statt
+einem, weil der Bestand zwei braucht: `hueShift` (0–360, wo das Farbrad steht) und `hueCycle`
+(Tempo 0–100, 0 = steht still). Gerechnet wird **nicht** mit `hexToHSL` je Pixel, sondern mit
+einer 3 × 3-Drehung um die Grau-Achse — drei Koeffizienten, neun Multiplikationen, im ohnehin
+schon laufenden Durchgang. Bewusst nicht die Matrix, die CSS `hue-rotate` benutzt: die dreht
+um die Luma-Achse und ist erklärtermaßen eine Näherung (Rot bei 120° wird dort ein dunkles
+Grün). Die Grau-Achsen-Drehung trifft bei 120° und 240° exakt den Kanaltausch, und Grau bleibt
+bitgenau Grau. Gemessen: 0,405 ms/Bild allein (1,2 % eines Kerns), 0,180 ms zusätzlich, wenn
+der Durchgang wegen Helligkeit ohnehin schon läuft; ein unberührtes Dokument zahlt weiterhin
+0,010 ms, weil der ganze Durchgang übersprungen wird.
 
 ### C4. Formebene — Kreis, Ring, Stern, Herz, Vieleck
 
