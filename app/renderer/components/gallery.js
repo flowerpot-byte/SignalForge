@@ -151,12 +151,12 @@ export const TILES = Object.freeze([
   // over (see the note above about verbs and nouns).
   //
   // WHAT IT COSTS, MEASURED RATHER THAN GUESSED: eleven tiles instead of seven,
-  // so the rail scrolls at the window's smallest supported size where seven sat
-  // in one row. That was already true of the library shelf beside it, the rail
-  // has scrolled since the day it was built, and the numbers are in
-  // work/shape-layer-shots/notes.json — one row, no wrap, no tile shorter than
-  // the others, scrolled by hand and photographed. A shelf that scrolls is a
-  // smaller cost than a tile that lies.
+  // so the rail scrolls at the window's smallest supported size -- exactly as
+  // it already did at seven. The recorded measurement (582px client width,
+  // work/shape-layer-shots/notes.json) shows about three tiles in view, not
+  // seven; seven never sat in one row either. The rail has scrolled since the
+  // day it was built, one row and no wrap, scrolled by hand and photographed.
+  // A shelf that scrolls is a smaller cost than a tile that lies.
   Object.freeze({ key: 'circle', labelKey: 'gallery.circle', glyph: null, starts: 'circle' }),
   Object.freeze({ key: 'ring', labelKey: 'gallery.ring', glyph: null, starts: 'ring' }),
   Object.freeze({ key: 'star', labelKey: 'gallery.star', glyph: null, starts: 'star' }),
