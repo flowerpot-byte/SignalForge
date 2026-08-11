@@ -68,6 +68,36 @@ test('an effect that has been exported can be found and opened again', async (t)
     assert.deepEqual(report.afterSwitching.selected, ['gallery-tab-library']);
   });
 
+  /**
+   * And it LOOKS swapped, measured off the window rather than off a screenshot.
+   *
+   * The first photograph of this row showed both headings underlined, which was
+   * not a fault in the window: a window nobody is showing composites nothing, so
+   * a CSS transition started by a click freezes part-way and is photographed
+   * there. The transition is gone (a heading that swaps a shelf must not fade,
+   * and this row is pressed far too often for one), and this is what keeps it
+   * gone — a transition creeping back leaves one of these two underlines
+   * somewhere between the accent and nothing.
+   */
+  await t.test('exactly one heading is painted as the one showing, in both states', () => {
+    for (const [state, paint] of [['at rest', report.tabPaintAtRest], ['on the library', report.tabPaintOnLibrary]]) {
+      const on = paint.filter((tab) => tab.selected === 'true');
+      assert.equal(on.length, 1, `${state}: exactly one tab may claim to be showing`);
+      const off = paint.filter((tab) => tab.selected === 'false');
+      assert.match(on[0].underline, /^rgb\(/, `${state}: the showing one carries a solid underline`);
+      for (const tab of off) {
+        assert.equal(
+          tab.underline,
+          'rgba(0, 0, 0, 0)',
+          `${state}: ${tab.id} must carry no underline at all, not a faded one`
+        );
+        assert.notEqual(tab.colour, on[0].colour, `${state}: and it must not be as bright as the one showing`);
+      }
+    }
+    // The two states really are different paint, not the same picture twice.
+    assert.notDeepEqual(report.tabPaintAtRest, report.tabPaintOnLibrary);
+  });
+
   await t.test('an effect exported from the window appears as a tile, newest first', () => {
     assert.match(report.exportedA, /Tempo A\.html/);
     assert.match(report.exportedB, /Tempo B\.html/);
