@@ -24,6 +24,26 @@ import { existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { SINGLE_INSTANCE_TEST_ENV } from '../../src/main/single-instance.js';
 import { windowDisplay } from '../../app/main.js';
+import { guardHarness } from '../harness/driver.js';
+
+/**
+ * The one harness with no ending of its own.
+ *
+ * Every other Electron entry in this project does its work and leaves. The
+ * winning instance here deliberately does not: it holds the lock and waits to
+ * be killed by test/app/single-instance.test.js, which is the only way to
+ * prove a SECOND launch is refused. That makes it the likeliest thing in the
+ * suite to be orphaned — if the test process dies (a cancelled run, a killed
+ * shell), nothing is left that would ever end this one, and it sits there with
+ * a window nobody can see until somebody notices it in the task manager.
+ *
+ * So it gets an outer bound of its own. The test's own waits add up to about
+ * 80 s in the worst case (four 20 s stages); 120 s is comfortably past that
+ * and comfortably short of "for ever". The exit code does not matter here —
+ * the test kills this process and never reads it — but the message does, so
+ * that a run cut short this way says why.
+ */
+guardHarness('single-instance-harness', { watchdogMs: 120_000 });
 
 // Never on screen. This harness is spawned twice by `npm test` and the winning
 // instance used to put a real window in front of whoever was using the

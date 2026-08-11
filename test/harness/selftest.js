@@ -41,7 +41,7 @@ import { prepareImageFile } from '../../src/main/prepare-image.js';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { folderDialog, projectDialogs } from '../../app/main.js';
-import { driver, wait } from './driver.js';
+import { driver, runHarness, wait } from './driver.js';
 import { harnessSandbox } from './sandbox.js';
 
 /** Pictures only if a human asked for them; see SF_SELFTEST_SHOTS above. */
@@ -491,71 +491,69 @@ async function selfTestExport(win, folder) {
   return out;
 }
 
-app.whenReady().then(async () => {
-  try {
-    // app/main.js's own whenReady handler is registered first (its module body
-    // ran at import time) and runs to completion before this one, so the
-    // window it opens is already there.
-    const win = BrowserWindow.getAllWindows()[0];
-    if (!win) throw new Error('app/main.js did not open a window');
+// runHarness, not a bare app.whenReady().then(): every way out of the block
+// below — a throw, a rejected promise, a wait that never ends — has to end
+// this Electron process, and one that finished its work has to leave rather
+// than sit there holding a window nobody can see. See test/harness/driver.js.
+runHarness('self-test', async () => {
+  // app/main.js's own whenReady handler is registered first (its module body
+  // ran at import time) and runs to completion before this one, so the
+  // window it opens is already there.
+  const win = BrowserWindow.getAllWindows()[0];
+  if (!win) throw new Error('app/main.js did not open a window');
 
-    // Boot check for the test suite: prove the window came up, that the
-    // renderer has the bridge but no Node, and that the navigation/popup
-    // guards actually hold, then quit.
-    if (win.webContents.isLoading()) {
-      await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
-    }
-    const report = await win.webContents.executeJavaScript(
-      `({ windowOpened: true, bridge: typeof window.sf === 'object',
-          nodeInRenderer: typeof require === 'function' || typeof process === 'object' })`
-    );
-
-    // Read back rather than assumed: the background colour is taken out of
-    // tokens.css (see backgroundFromTokens in app/main.js), and a read that
-    // quietly found nothing would show up only as a white flash somebody
-    // happened to notice on startup.
-    report.windowBackground = win.getBackgroundColor();
-
-    const urlBeforeNav = win.webContents.getURL();
-    win.webContents
-      .executeJavaScript(`location.href = 'https://example.invalid/blocked'`)
-      .catch(() => {});
-    await wait(300);
-    report.navigationBlocked = win.webContents.getURL() === urlBeforeNav;
-
-    const windowCountBefore = BrowserWindow.getAllWindows().length;
-    const openReturnedNull = await win.webContents.executeJavaScript(
-      `window.open('https://example.invalid/popup') === null`
-    );
-    report.popupBlocked =
-      openReturnedNull === true && BrowserWindow.getAllWindows().length === windowCountBefore;
-
-    // Finding-2 regression guard: a File object a renderer script forges
-    // itself (as opposed to one that came from a real OS drop) has no disk
-    // backing, so webUtils.getPathForFile resolves it to '' in the
-    // preload. Prove that reaches the user as the ordinary visible-error
-    // shape, not a silent no-op, an unhandled rejection, or — if the ''
-    // guard in sf:importImage ever regressed — an actual filesystem read.
-    const forgedImportResult = await win.webContents.executeJavaScript(
-      `window.sf.importImage(new File([], 'forged.png'))`
-    );
-    report.forgedFileImportRejected =
-      forgedImportResult != null &&
-      forgedImportResult.ok === false &&
-      typeof forgedImportResult.message === 'string' &&
-      forgedImportResult.message.length > 0;
-
-    Object.assign(report, await selfTestFirstRun(win, effectsFolder));
-    Object.assign(report, await selfTestSettingsGate(win));
-    Object.assign(report, await selfTestProjects(win));
-    Object.assign(report, await selfTestExport(win, effectsFolder));
-
-    if (DRIVING.shotsDir) process.stdout.write(`self-test screenshots: ${DRIVING.shotsDir}\n`);
-    process.stdout.write(`self-test effects folder: ${effectsFolder}\n`);
-    process.stdout.write(JSON.stringify(report) + '\n');
-    app.quit();
-  } catch (err) {
-    console.error('self-test failed:', err);
-    app.exit(1);
+  // Boot check for the test suite: prove the window came up, that the
+  // renderer has the bridge but no Node, and that the navigation/popup
+  // guards actually hold, then quit.
+  if (win.webContents.isLoading()) {
+    await new Promise((resolve) => win.webContents.once('did-finish-load', resolve));
   }
+  const report = await win.webContents.executeJavaScript(
+    `({ windowOpened: true, bridge: typeof window.sf === 'object',
+        nodeInRenderer: typeof require === 'function' || typeof process === 'object' })`
+  );
+
+  // Read back rather than assumed: the background colour is taken out of
+  // tokens.css (see backgroundFromTokens in app/main.js), and a read that
+  // quietly found nothing would show up only as a white flash somebody
+  // happened to notice on startup.
+  report.windowBackground = win.getBackgroundColor();
+
+  const urlBeforeNav = win.webContents.getURL();
+  win.webContents
+    .executeJavaScript(`location.href = 'https://example.invalid/blocked'`)
+    .catch(() => {});
+  await wait(300);
+  report.navigationBlocked = win.webContents.getURL() === urlBeforeNav;
+
+  const windowCountBefore = BrowserWindow.getAllWindows().length;
+  const openReturnedNull = await win.webContents.executeJavaScript(
+    `window.open('https://example.invalid/popup') === null`
+  );
+  report.popupBlocked =
+    openReturnedNull === true && BrowserWindow.getAllWindows().length === windowCountBefore;
+
+  // Finding-2 regression guard: a File object a renderer script forges
+  // itself (as opposed to one that came from a real OS drop) has no disk
+  // backing, so webUtils.getPathForFile resolves it to '' in the
+  // preload. Prove that reaches the user as the ordinary visible-error
+  // shape, not a silent no-op, an unhandled rejection, or — if the ''
+  // guard in sf:importImage ever regressed — an actual filesystem read.
+  const forgedImportResult = await win.webContents.executeJavaScript(
+    `window.sf.importImage(new File([], 'forged.png'))`
+  );
+  report.forgedFileImportRejected =
+    forgedImportResult != null &&
+    forgedImportResult.ok === false &&
+    typeof forgedImportResult.message === 'string' &&
+    forgedImportResult.message.length > 0;
+
+  Object.assign(report, await selfTestFirstRun(win, effectsFolder));
+  Object.assign(report, await selfTestSettingsGate(win));
+  Object.assign(report, await selfTestProjects(win));
+  Object.assign(report, await selfTestExport(win, effectsFolder));
+
+  if (DRIVING.shotsDir) process.stdout.write(`self-test screenshots: ${DRIVING.shotsDir}\n`);
+  process.stdout.write(`self-test effects folder: ${effectsFolder}\n`);
+  process.stdout.write(JSON.stringify(report) + '\n');
 });

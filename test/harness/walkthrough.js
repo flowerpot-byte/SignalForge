@@ -60,7 +60,7 @@ import { writeFileSync, readFileSync, mkdirSync, existsSync, readdirSync } from 
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
 import { projectDialogs, folderDialog } from '../../app/main.js';
-import { driver, wait } from './driver.js';
+import { driver, runHarness, wait } from './driver.js';
 
 const OUT = process.env.SF_WALK_OUT;
 const PHASE = process.env.SF_WALK_PHASE === '2' ? 2 : 1;
@@ -939,7 +939,20 @@ async function phaseTwo(win, state) {
 
 // ---------------------------------------------------------------------------
 
-app.whenReady().then(async () => {
+// The two throws below used to sit OUTSIDE the try, and that was this file's
+// share of the leak: an unhandled promise rejection does not end an Electron
+// main process the way it ends `node script.js` — it prints
+// UnhandledPromiseRejectionWarning and the process runs on forever with its
+// window still open. Either of them fired and nobody would ever have got the
+// machine's memory back. runHarness catches everything and leaves in a
+// `finally`; see test/harness/driver.js.
+//
+// The bound is generous and, unlike the others, not measured in this round:
+// running this harness puts a real window on the screen (it waits for real
+// animation frames, which a hidden window never produces), and this round was
+// not allowed to do that. Ten minutes is not a claim about how long it takes.
+// It is only the difference between "too long" and "forever".
+runHarness('walkthrough', async () => {
   const win = BrowserWindow.getAllWindows()[0];
   if (!win) throw new Error('app/main.js did not open a window');
 
@@ -986,5 +999,8 @@ app.whenReady().then(async () => {
 
   writeFileSync(join(OUT, `report-${PHASE}.json`), JSON.stringify(report, null, 2), 'utf8');
   process.stdout.write(`walkthrough phase ${PHASE}: ${report.ok ? 'finished' : 'FAILED'}\n`);
-  app.exit(report.ok ? 0 : 1);
-});
+  // Returned, not exited: runHarness leaves with this code. A walkthrough that
+  // failed still has to say so with a non-zero code — a harness that always
+  // exited 0 would turn a red run green, which is far worse than a leak.
+  return report.ok ? 0 : 1;
+}, { watchdogMs: 600_000 });

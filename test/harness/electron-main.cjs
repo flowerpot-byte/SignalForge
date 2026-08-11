@@ -126,10 +126,34 @@ async function main() {
   }
 
   fs.writeFileSync(outFile, JSON.stringify(results), 'utf8');
-  app.quit();
 }
 
-app.whenReady().then(main).catch((error) => {
-  fs.writeFileSync(outFile, JSON.stringify({ error: String(error && error.stack || error) }), 'utf8');
-  app.exit(1);
-});
+/**
+ * Ending, whatever happens.
+ *
+ * The guard is the shared one in test/harness/driver.js: a watchdog, handlers
+ * for uncaughtException and unhandledRejection, and app.exit() rather than
+ * app.quit() (a request any close handler may refuse). It is reached through
+ * a dynamic import because this file is CommonJS and that one is not — a
+ * second copy of the guard here is exactly the duplication this project keeps
+ * being bitten by.
+ *
+ * The bound comes from render.js through SF_HARNESS_WATCHDOG_MS, always a few
+ * seconds under the timeout the parent is prepared to wait, so a wedged run
+ * ends itself with a reason instead of being cut down without one.
+ */
+(async () => {
+  const { guardHarness } = await import('./driver.js');
+  const leave = guardHarness('render harness');
+  try {
+    await app.whenReady();
+    await main();
+  } catch (error) {
+    fs.writeFileSync(outFile, JSON.stringify({ error: String((error && error.stack) || error) }), 'utf8');
+    leave.cancelWatchdog();
+    leave(1);
+    return;
+  }
+  leave.cancelWatchdog();
+  leave(0);
+})();

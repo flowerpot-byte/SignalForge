@@ -45,7 +45,7 @@ import { join, resolve } from 'node:path';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { projectDialogs, folderDialog } from '../../app/main.js';
-import { driver, wait } from './driver.js';
+import { driver, runHarness, wait } from './driver.js';
 import { harnessSandbox } from './sandbox.js';
 
 // The throwaway directory, the sandbox around the effects folder, and the one
@@ -274,15 +274,12 @@ async function main() {
   };
   await shot('12-crop-dragged-1to1');
   process.stdout.write(`${JSON.stringify(notes)}\n`);
-  app.exit(0);
 }
 
-app.whenReady().then(() => {
-  // app/main.js's own whenReady handler runs first and has already created the
-  // window (see the comment there on registration order), so there is one to
-  // find.
-  main().catch((err) => {
-    process.stderr.write(`${err && err.stack ? err.stack : err}\n`);
-    app.exit(1);
-  });
-});
+// app/main.js's own whenReady handler runs first and has already created the
+// window (see the comment there on registration order), so there is one to
+// find. runHarness (test/harness/driver.js) is what makes sure this process
+// leaves afterwards, whether main() finished, threw or wedged — a picture
+// harness that stayed resident with a window nobody can see is how three
+// Electron processes came to sit on this machine for six hours.
+runHarness('shots', main);

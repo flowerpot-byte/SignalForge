@@ -62,7 +62,7 @@ import { join } from 'node:path';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { projectDialogs, discardDialog, DISCARD_ANSWERS } from '../../app/main.js';
-import { driver, wait } from './driver.js';
+import { driver, runHarness, wait } from './driver.js';
 import { harnessSandbox } from './sandbox.js';
 
 /**
@@ -183,7 +183,15 @@ discardDialog.ask = async (_win, options) => {
   return { response: DISCARD_ANSWERS.indexOf(discardAnswer), checkboxChecked: false };
 };
 
-app.whenReady().then(async () => {
+// The slowest harness there is: 36.4 s measured, and its parent
+// (test/app/unsaved-changes.test.js) allows 90 s. 75 s is twice what it takes
+// and fifteen seconds inside what the parent will wait, so a run that wedges
+// says WHICH harness wedged instead of being cut down without a word.
+// SF_UNSAVED_REAL deliberately stands still for ninety seconds waiting to be
+// photographed, so that mode gets its own, larger bound.
+const WATCHDOG_MS = REAL_DIALOG ? 180_000 : 75_000;
+
+runHarness('unsaved-changes harness', async () => {
   const report = {};
   try {
     const win = BrowserWindow.getAllWindows()[0];
@@ -744,16 +752,17 @@ app.whenReady().then(async () => {
       process.stdout.write('the real question is open, photograph it now (90s)\n');
       await wait(90_000);
       process.stdout.write(`${JSON.stringify(report)}\n`);
-      app.exit(0);
-      return;
+      return 0;
     }
 
     if (SHOTS) process.stdout.write(`unsaved-changes screenshots: ${SHOTS}\n`);
     process.stdout.write(`${JSON.stringify(report)}\n`);
-    app.quit();
+    return 0;
   } catch (err) {
-    console.error('unsaved-changes harness failed:', err);
+    // Re-thrown, not swallowed: runHarness turns it into a non-zero exit and
+    // prints the stack. This catch exists only to keep the half-finished
+    // report, which is what usually says which step went wrong.
     console.error('report so far:', JSON.stringify(report));
-    app.exit(1);
+    throw err;
   }
-});
+}, { watchdogMs: WATCHDOG_MS });

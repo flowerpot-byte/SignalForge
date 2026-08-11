@@ -29,7 +29,7 @@ import { join, resolve } from 'node:path';
 import { serializeProject } from '../../src/main/project.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { projectDialogs, folderDialog, discardDialog } from '../../app/main.js';
-import { driver, wait } from './driver.js';
+import { driver, runHarness, wait } from './driver.js';
 import { harnessSandbox } from './sandbox.js';
 
 // The throwaway directory, the sandbox around the effects folder, and the one
@@ -255,12 +255,7 @@ async function main() {
 
   process.stdout.write(`${JSON.stringify(notes, null, 2)}\n`);
   writeFileSync(join(OUT, 'notes.json'), JSON.stringify(notes, null, 2), 'utf8');
-  app.exit(0);
 }
 
-app.whenReady().then(() => {
-  main().catch((err) => {
-    process.stderr.write(`${err && err.stack ? err.stack : err}\n`);
-    app.exit(1);
-  });
-});
+// runHarness ends this process however main() ends — see test/harness/driver.js.
+runHarness('gradient-shots', main);
