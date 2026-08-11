@@ -72,10 +72,22 @@ const GLYPHS = Object.freeze({
     ['path', { d: 'M8 1.6c2.6 3 4.2 5.1 4.2 7.1a4.2 4.2 0 0 1-8.4 0c0-2 1.6-4.1 4.2-7.1z' }],
     ['path', { d: 'M5.9 9.2a2.1 2.1 0 0 0 2.1 2.1' }]
   ],
-  /** Settings: a dial with four ticks — a gear without the teeth. */
+  /**
+   * Settings: a gear — a hub, the body around it, and eight teeth outside that.
+   *
+   * It was a hub and eight ticks with no body, described here as "a gear
+   * without the teeth", and it was fine for as long as it had the word
+   * "Einstellungen" beside it in the left column. It has no word beside it any
+   * more (see components/footer.js: the way into the app's settings is now a
+   * glyph button in the transport bar), and standing alone that drawing is a
+   * SUN — which in an app whose settings column has a brightness slider in it
+   * is not an ambiguity worth keeping. The ring is the whole difference
+   * between a sun and a gear, so the ring is there now.
+   */
   settings: [
-    ['circle', { cx: 8, cy: 8, r: 3 }],
-    ['path', { d: 'M8 1.5V3M8 13v1.5M1.5 8H3M13 8h1.5M3.4 3.4 4.5 4.5M11.5 11.5l1.1 1.1M12.6 3.4 11.5 4.5M4.5 11.5l-1.1 1.1' }]
+    ['circle', { cx: 8, cy: 8, r: 4.7 }],
+    ['circle', { cx: 8, cy: 8, r: 1.6 }],
+    ['path', { d: 'M8 1.7v1.6M8 12.7v1.6M1.7 8h1.6M12.7 8h1.6M3.55 3.55l1.15 1.15M11.3 11.3l1.15 1.15M12.45 3.55L11.3 4.7M4.7 11.3l-1.15 1.15' }]
   ],
   /** Add. */
   plus: [['path', { d: 'M8 3.5v9M3.5 8h9' }]],
