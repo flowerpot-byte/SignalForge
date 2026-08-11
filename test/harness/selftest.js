@@ -181,6 +181,19 @@ async function selfTestFirstRun(win, folder) {
     // Where the tabs are. One tablist, in the strip that has two shelves; a
     // second one anywhere else is a pattern this window has said no to twice.
     tablistIds: [...document.querySelectorAll('[role="tablist"]')].map((list) => list.id),
+    // How many tabs claim to be the one showing. Exactly one is the whole
+    // meaning of the pattern: two selected tabs is the state a photograph
+    // caught this strip in once (both headings underlined), and zero is a
+    // tablist that never says where you are. halfStatedTabs above only asks
+    // whether each tab has the attribute AT ALL — it would pass with every tab
+    // saying "true", which is precisely the shape that was seen.
+    selectedTabs: [...document.querySelectorAll('[role="tab"][aria-selected="true"]')].map((tab) => tab.id),
+    // And the two tabs must point at two DIFFERENT panels. Two tabs whose
+    // aria-controls named the same element would satisfy every check above —
+    // each is stated, each names a real tabpanel, both sit in the one tablist —
+    // while being one shelf wearing two headings.
+    tabPanelIds: [...document.querySelectorAll('[role="tab"]')]
+      .map((tab) => tab.getAttribute('aria-controls')),
     settingsToggleName: document.getElementById('footer-settings').getAttribute('aria-label'),
     settingsTogglePressed: document.getElementById('footer-settings').getAttribute('aria-pressed'),
     settingsTabStop: document.getElementById('footer-settings').tabIndex >= 0

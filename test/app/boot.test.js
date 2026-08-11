@@ -189,6 +189,35 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   );
   assert.equal(landmarks.tabs, 2, 'the strip has two shelves, so it has two tabs');
   assert.equal(landmarks.tabpanels, 2, 'and each of them shows one');
+  /**
+   * Two holes the four checks above could not see, closed.
+   *
+   * halfStatedTabs only asks whether each tab has an aria-selected at all, so a
+   * strip where BOTH tabs said "true" passed it — and that is not a made-up
+   * shape: a photograph caught this very strip with both headings underlined
+   * once (a CSS transition frozen mid-way in a window nobody was compositing).
+   * "Exactly one" is what the pattern actually means, and zero — a tablist that
+   * never says where you are — fails it too.
+   *
+   * And two tabs are allowed to name the same panel by everything above: each
+   * would be stated, each would control a real tabpanel, both would sit in the
+   * one tablist. That is one shelf wearing two headings, which is the junk
+   * drawer this strip has already been talked out of twice.
+   */
+  assert.equal(
+    landmarks.selectedTabs.length,
+    1,
+    `exactly one tab may say it is showing, and it was [${landmarks.selectedTabs.join(', ')}]`
+  );
+  assert.equal(
+    new Set(landmarks.tabPanelIds).size,
+    2,
+    'the two tabs must point at two different panels, or they are one shelf with two headings'
+  );
+  assert.ok(
+    landmarks.tabPanelIds.every((id) => id),
+    'and a tab that names no panel at all is not a tab'
+  );
   assert.ok(
     landmarks.settingsToggleName,
     'the settings toggle is a glyph with no word beside it, so its accessible name is the only thing announcing it'
