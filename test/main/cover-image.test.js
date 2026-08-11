@@ -244,23 +244,46 @@ test('the cover window refuses to navigate and refuses to open windows', async (
  * full-bleed layer a doubled render looks identical to a single one, because
  * the redraw simply covers its own veil.
  */
-test('a trailing document\'s cover is a single cold render, not a doubled one', async (t) => {
+/**
+ * BOTH WAKES, because since 12.08.2026 there are two of them and the cold-frame
+ * rule has to hold for each.
+ *
+ * A document with a background renders through a different buffer entirely
+ * (renderOverBackground in src/engine/engine.js): a transparent wake canvas
+ * whose alpha the engine attenuates itself rather than a veil the compositor
+ * lays over an opaque one. A cold single render leaves that canvas empty, so
+ * the tile is exactly the picture the effect shows on its first paint; a
+ * doubled render puts the first call's foreground into it and composites it
+ * back a second time, which is a double exposure of the figure over the
+ * background. The falsifying half below is what says those two really are far
+ * enough apart to tell one from the other.
+ */
+const COVER_TRAIL_CASES = [
+  ['no background', null],
+  ['over a background', { id: 'behind', type: 'solid', color: '#20106a', motions: [] }]
+];
+
+for (const [coverLabel, behind] of COVER_TRAIL_CASES) {
+test(`a trailing document's cover (${coverLabel}) is a single cold render, not a doubled one`, async (t) => {
   const dir = mkdtempSync(join(tmpdir(), 'signalforge-cover-trail-'));
   const outDir = join(dir, 'Effects');
   const projectFile = join(dir, 'project.json');
 
   const trailDoc = {
-    name: 'Cover Trail Test',
+    name: `Cover Trail Test ${behind ? 'B' : 'A'}`,
     // trail 100 (the weakest veil, TRAIL_WEAKEST_VEIL) and a low layer opacity
     // are both deliberate: a doubled render's second call barely darkens the
     // first call's frame before drawing over it again, so the two draws land
     // almost like a double exposure -- the case where a doubled render is
     // FURTHEST from a single one, not closest.
     trail: 100,
-    layers: [{
-      id: 'fig', type: 'shape', figure: 'circle', color: '#ff0066',
-      size: 80, opacity: 0.3, motions: []
-    }]
+    layers: [
+      ...(behind ? [behind] : []),
+      {
+        id: 'fig', type: 'shape', figure: 'circle', color: '#ff0066',
+        size: 80, opacity: 0.3, motions: []
+      }
+    ]
   };
   writeFileSync(projectFile, JSON.stringify(trailDoc), 'utf8');
 
@@ -269,7 +292,7 @@ test('a trailing document\'s cover is a single cold render, not a doubled one', 
       cli, '--project', projectFile, '--out', outDir
     ], { encoding: 'utf8', cwd: root });
 
-    const coverPng = join(outDir, 'Cover Trail Test.png');
+    const coverPng = join(outDir, `${trailDoc.name}.png`);
     assert.ok(existsSync(coverPng), `${coverPng} is missing`);
 
     const [cover, single, doubled] = await runJobs([
@@ -302,6 +325,7 @@ test('a trailing document\'s cover is a single cold render, not a doubled one', 
     rmSync(dir, { recursive: true, force: true });
   }
 });
+}
 
 /**
  * Two real exports, and the question this whole feature turns on: is the file
