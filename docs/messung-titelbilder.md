@@ -1,5 +1,12 @@
 # Messung: Titelbilder für Effekte — und ein Blick auf WebP
 
+> **Ergebnis vom 11.08.2026: die Nachbardatei-Hypothese ist BELEGT.** Max hat in SignalRGBs eigener
+> Effektliste nachgesehen: `SF Probe Mit Bild` zeigte dort die magentafarbene Kachel mit dem weißen
+> „SF" — genau das Bild aus `SF Probe Mit Bild.png`. Damit ist die Frage, die dieses Dokument
+> gestellt hat, beantwortet; der Text darunter bleibt unverändert als Protokoll der Indizienlage
+> stehen, die zu der Probe geführt hat. Was jetzt gilt, steht in Abschnitt 2 unter
+> **„Belegt seit 11.08.2026"**. Die Probedateien sind wieder entfernt.
+
 **Geprüft am:** 10.08.2026 · Rein lesend, am laufenden System von Max, ohne SignalRGB zu starten
 oder zu bedienen. Kein Sondiereffekt wurde installiert; die beiden Dateien in
 `C:\Users\Max\Documents\WhirlwindFX\Effects` (`MaxAmbient.html`, `SF Bergabend.html`) wurden nur
@@ -24,9 +31,10 @@ Dokumentenlage. Der Unterschied zu einer echten Probe steht unten bei jedem Punk
 Die stärkste vorhandene Spur — SignalRGBs **eigene, mitgelieferte** Effekte auf Max' Rechner —
 zeigt ein klares Muster: **eine PNG-Datei mit genau demselben Dateinamen wie die HTML-Datei, im
 selben Ordner.** Kein `<meta>`-Tag, kein `<link>`, kein JSON-Feld in der HTML-Datei verweist darauf.
-Das ist aber an eingebauten Effekten beobachtet, nicht an einem selbst hochgeladenen Effekt im
-Ordner `Documents\WhirlwindFX\Effects` — dorthin reicht die Beobachtung nicht direkt, sie ist
-**wahrscheinlich**, nicht **belegt**. Eine einzige Probe würde den Unterschied klären (siehe unten).
+Das war am 10.08.2026 an eingebauten Effekten beobachtet, nicht an einem selbst abgelegten Effekt im
+Ordner `Documents\WhirlwindFX\Effects` — dorthin reichte die Beobachtung nicht direkt, sie war
+**wahrscheinlich**, nicht **belegt**. Die dafür vorgeschlagene Probe wurde durchgeführt und **hat
+die Regel bestätigt** (11.08.2026, siehe Kasten oben und Abschnitt 2).
 
 Nebenbefund, der eigentlich zur Video-/CEF-Frage aus `erkenntnisse-signalrgb-motor.md` gehört: In
 zwei mitgelieferten SignalRGB-Effekten steht im Quellcode wörtlich **„Ultralight"** als Name der
@@ -68,7 +76,52 @@ lokal abgelegte Dateien tut. Abschnitt 2 befasst sich nur noch mit diesem Weg.
 
 ## 2. Der lokale Effects-Ordner: Titelbild als gleichnamige Nachbardatei
 
-### Belegt
+### Belegt seit 11.08.2026 — die Probe ist gelaufen
+
+**Die Regel gilt auch für selbst abgelegte Effekte: eine PNG-Datei mit demselben Grundnamen wie die
+`.html`, im selben Ordner, wird von SignalRGB als Kachelbild des Effekts angezeigt.**
+
+Woraus das folgt — die Beweiskette, Schritt für Schritt:
+
+1. Am 10.08.2026 wurden drei Wegwerf-Dateien in `C:\Users\Max\Documents\WhirlwindFX\Effects` gelegt
+   (Protokoll: `work/titelbild-probe.md`): `SF Probe Mit Bild.html` **plus** `SF Probe Mit Bild.png`
+   (512 × 288, vollflächig Magenta mit riesigem weißem „SF" — in einer Liste unverwechselbar), und
+   `SF Probe Ohne Bild.html` **ohne** Bilddatei. Beide HTML-Dateien mit `bin/sfexport.js` gebaut,
+   also echte SignalForge-Exporte. Die zwei vorher vorhandenen Dateien blieben unverändert
+   (SHA-256-Vergleich davor/danach identisch, Hashes stehen im Protokoll).
+2. Am 11.08.2026 hat **Max selbst** SignalRGB geöffnet und in dessen eigener Effektliste
+   nachgesehen. Sein Befund, mit Bildschirmfoto der Liste: der Effekt `SF Probe Mit Bild` trägt dort
+   die magentafarbene Kachel mit dem weißen „SF" — also genau das Bild aus der Nachbardatei, in
+   einer Reihe mit den normalen Effektkacheln daneben.
+3. Damit ist ausgeschlossen, was am 10.08. offen bleiben musste: dass die Bildzuordnung nur für
+   SignalRGBs **eingebaute** Effekte gilt (fest verdrahtete Ressourcen-IDs im Programmcode) und der
+   Ordner-Scanner für Nutzerdateien gar keine lokalen Bilder unterstützt. Das Bild kann hier aus
+   nichts anderem stammen als aus der Nachbardatei: es lag ausschließlich dort, es gibt keinen
+   Marktplatz-Eintrag für diesen Effekt, und in der HTML-Datei steht kein einziger Verweis darauf
+   (`bin/sfexport.js` schreibt keinen).
+
+Die Beweisart ist damit eine andere als am 10.08.: nicht mehr Indizien aus gelesenen Dateien,
+sondern eine Probe mit vorher festgelegtem, eindeutig unterscheidbarem Erwartungsbild, angesehen
+im echten Programm auf dem Zielsystem — dieselbe Methode wie beim Video-Test in
+`erkenntnisse-signalrgb-motor.md`.
+
+**Aufräumen:** Die drei Probedateien sind wieder entfernt; der Ordner enthält nur noch Max' eigene
+Dateien (per Verzeichnisauflistung geprüft). Nichts von der Probe bleibt liegen.
+
+**Was die Probe NICHT beantwortet hat**, und deshalb weiter offen bleibt:
+
+- Was `SF Probe Ohne Bild` in der Liste zeigte. Max hat den bestätigenden Fall berichtet, nicht den
+  Vergleichsfall; die Forumsaussage „no thumbnail, just a gradient one" bleibt also unbestätigte
+  Forumsmeinung. Für den Bau ist das ohne Folgen: Was ohne Bild passiert, ist genau der Zustand,
+  in dem SignalForge bis jetzt ausgeliefert hat.
+- Ob ein **ausgetauschtes** Bild sofort erscheint oder erst nach einem Neustart von SignalRGB. Die
+  Probedateien waren neu, nicht ersetzt. Für Max heißt das praktisch: erscheint nach einem erneuten
+  Export das alte Bild, hilft ein Neustart von SignalRGB.
+- Groß-/Kleinschreibung, andere Bildformate (`.jpg`, `.webp`) und die Frage, ob ein bestimmtes
+  Seitenverhältnis erwartet wird. Die Probe lief mit 512 × 288 — deshalb schreibt SignalForge jetzt
+  genau diese Größe (siehe Abschnitt 5), statt eine ungeprüfte zu erfinden.
+
+### Belegt (Stand 10.08.2026, Indizienlage vor der Probe)
 
 SignalRGB 2.5.74 ist auf Max' Rechner installiert unter
 `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\` (Registry-Eintrag
@@ -139,7 +192,7 @@ Fehlen einen Platzhalter zeigt — passt zur Nachbardatei-Hypothese, beweist abe
 ausgerechnet der Dateiname der Schlüssel ist (es könnte z. B. auch am fehlenden Marktplatz-Eintrag
 liegen, unabhängig vom Dateinamen).
 
-### Ungeklärt
+### Ungeklärt (Stand 10.08.2026 — der erste Absatz ist seit 11.08.2026 erledigt)
 
 **Die entscheidende Lücke:** Alle harten Belege stammen aus SignalRGBs eigenen, fest eingebauten
 Effekten (`Signal-x64\Effects\...`) — nicht aus dem vom Nutzer gefüllten Ordner
@@ -166,7 +219,7 @@ Ebenfalls offen:
 - Ob überhaupt ein generischer Verlauf angezeigt wird, wenn ein Bild fehlt, oder etwas anderes (die
   einzige Quelle dafür ist der eine Forumsbeitrag).
 
-**Probe, die das klären würde** (Stand 10.08.2026: ausgeführt, siehe Nachtrag unten):
+**Probe, die das klären würde** (ausgeführt; Ergebnis oben unter „Belegt seit 11.08.2026"):
 
 Zwei Wegwerf-Dateipaare kurz in `Documents\WhirlwindFX\Effects` legen, in SignalRGBs Effektliste
 nachsehen, danach sofort wieder löschen:
@@ -188,9 +241,12 @@ jetzt in `Documents\WhirlwindFX\Effects` — `SF Probe Mit Bild.html` + `SF Prob
 (512×288, magentafarben mit großem weißem „SF") und `SF Probe Ohne Bild.html` ohne Bilddatei —,
 beide mit `bin/sfexport.js` gebaut. SignalRGB wurde dabei nicht gestartet oder bedient; die beiden
 vorhandenen Dateien (`MaxAmbient.html`, `SF Bergabend.html`) sind unverändert (Hash-Vergleich
-davor/danach identisch). Die Probe wartet auf Max' Blick in SignalRGBs eigene Effektliste — Details
-in `work/titelbild-probe.md`. Das Ergebnis (Nachbardatei-Hypothese bestätigt oder widerlegt) ist
-noch offen und wird hier nachgetragen, sobald Max berichtet hat.
+davor/danach identisch). Die Probe wartete auf Max' Blick in SignalRGBs eigene Effektliste — Details
+in `work/titelbild-probe.md`.
+
+**Nachtrag 11.08.2026:** Max hat nachgesehen. Die magentafarbene „SF"-Kachel stand in seiner echten
+Effektliste; die Nachbardatei-Hypothese ist damit **bestätigt** (ausführlich oben unter „Belegt seit
+11.08.2026"). Die drei Probedateien wurden danach wieder entfernt.
 
 ---
 
