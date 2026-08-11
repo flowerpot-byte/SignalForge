@@ -128,3 +128,94 @@ test('a foreground that covers the canvas is offered nothing to hide behind it',
 test('the kinds a background may be are exactly the two that cover the canvas, plus none', () => {
   assert.deepEqual([...BACKGROUND_KINDS], ['none', 'solid', 'gradient']);
 });
+
+// ===========================================================================
+// A FIRST LAYER THAT IS NOT A BACKGROUND
+// ===========================================================================
+//
+// The window can only ever build one of two shapes — one layer, or a
+// background under a foreground — but a project file is JSON and a person may
+// write one by hand. The shape that catches this out is a two-layer document
+// whose FIRST layer is a picture: `backgroundKindOf` says "none", so the
+// combobox reads "Keiner", and until 12.08.2026 the WRITING half disagreed
+// with the reading half. It asked `backgroundOf` instead, which answers "the
+// first layer of any document with two or more" whatever type that layer is —
+// so choosing "Farbfläche" rewrote the picture's own layer into a colour, and
+// choosing "Keiner" (the entry that was already selected, and therefore the
+// easiest thing in the world to click) deleted the picture outright.
+//
+// The rule now: a first layer that is not a background KIND is not a
+// background, for writing as much as for reading. Insert in front of it,
+// never over it, and refuse to remove what was never there.
+
+/** The reviewer's fixture: a picture fitted inside the canvas, with a star on it. */
+const containAndStar = () => layersOf([
+  { id: 'picture', type: 'image', fit: 'contain', asset: 'q' },
+  { id: 'star', type: 'shape', figure: 'star' }
+]);
+
+test('a first layer that is no background is read as none, so nothing claims to be one', () => {
+  assert.equal(backgroundKindOf(containAndStar()), 'none');
+});
+
+test('adding a background to a document whose first layer is a picture INSERTS it', () => {
+  const before = containAndStar();
+  const after = withBackgroundKind(before, 'solid');
+
+  assert.equal(after.length, 3, 'the picture must still be there');
+  assert.equal(after[0].type, 'solid');
+  assert.equal(after[1].id, 'picture', 'the picture keeps its place and its type');
+  assert.equal(after[1].type, 'image');
+  assert.equal(after[1].fit, 'contain');
+  assert.equal(foregroundOf(after).id, 'star', 'and the star is still the foreground');
+});
+
+test('removing a background that is only a picture refuses, rather than deleting the picture', () => {
+  const before = containAndStar();
+  assert.deepEqual(withBackgroundKind(before, 'none'), before);
+});
+
+// ===========================================================================
+// AN ID THAT IS ALREADY TAKEN
+// ===========================================================================
+//
+// A hand-written document is allowed to have called its only layer
+// "background". normalizeDocument settles a collision by keeping the FIRST
+// layer's id and renaming the later one — and a background is inserted at the
+// front, so left alone it would keep "background" for itself and rename the
+// user's layer to "background-2" underneath them. That is the wrong way round:
+// the user's layer id is the thing other parts of this app hold on to across a
+// change (the crop's preview.setLayerOffset(id), an exported control's bind
+// path), and the new layer is the one nothing has heard of yet.
+//
+// So the new layer takes the suffix, by the same rule and in the same spelling
+// normalizeDocument would have used.
+
+test('a new background gives way on its own name rather than renaming the user\'s layer', () => {
+  const before = layersOf([{ id: BACKGROUND_LAYER_ID, type: 'particles' }]);
+  const { doc, problems } = normalizeDocument({ layers: withBackgroundKind(before, 'solid') });
+
+  assert.equal(doc.layers.length, 2);
+  assert.equal(foregroundOf(doc.layers).id, BACKGROUND_LAYER_ID,
+    'the layer that was already there keeps the id it was saved under');
+  assert.equal(doc.layers[0].id, `${BACKGROUND_LAYER_ID}-2`);
+  assert.deepEqual(problems, [],
+    'and normalizeDocument has no collision left to complain about');
+});
+
+test('the suffix keeps climbing while the names are taken', () => {
+  const before = layersOf([
+    { id: `${BACKGROUND_LAYER_ID}-2`, type: 'solid' },
+    { id: BACKGROUND_LAYER_ID, type: 'particles' }
+  ]);
+  // The first layer here IS a background kind, so this one switches rather than
+  // inserts — take it off first, then put a fresh one on.
+  const bare = withBackgroundKind(before, 'none');
+  assert.equal(bare.length, 1);
+  const after = withBackgroundKind(bare, 'gradient');
+  assert.equal(after[0].id, `${BACKGROUND_LAYER_ID}-2`, 'only "background" itself was taken');
+
+  const crowded = layersOf([{ id: BACKGROUND_LAYER_ID, type: 'image', fit: 'contain' },
+    { id: `${BACKGROUND_LAYER_ID}-2`, type: 'shape' }]);
+  assert.equal(withBackgroundKind(crowded, 'solid')[0].id, `${BACKGROUND_LAYER_ID}-3`);
+});

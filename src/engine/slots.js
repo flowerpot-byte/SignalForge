@@ -50,6 +50,31 @@
  * layers.1...), and its crop, its offset and its exported bindings never named
  * a number in the first place.
  *
+ * ===========================================================================
+ * TWO SLOTS, AND WHAT HAPPENS TO A THIRD LAYER — SAID OUT LOUD
+ * ===========================================================================
+ *
+ * There are exactly two NAMES here, `backgroundOf` and `foregroundOf`, and
+ * between them there is no name for anything else. A document with three or
+ * more layers is therefore not refused, not repaired and not hidden — it
+ * RENDERS in full, because the engine has always drawn `doc.layers` in order
+ * and still does, background first, everything else on top of it — but the
+ * settings column can only describe the two ends of it. A middle layer gets no
+ * card, no slider and no colour well: it is drawn, it is saved, it survives an
+ * export and a round trip untouched, and there is no way to change it from
+ * inside the window.
+ *
+ * That is a limit and not an accident, and it is the honest shape of "two
+ * slots, not a layer system". The alternative — describing every layer — is a
+ * layer list, which is Bauplan 3, and building half of it here would leave the
+ * app with a column that can edit three layers and a document model that still
+ * only has two words for where a layer can be.
+ *
+ * The window cannot produce such a document on its own: a project file written
+ * by hand can, and so can adding a background to a two-layer document whose
+ * first layer is a picture (see withBackgroundKind below, which inserts rather
+ * than rewrites). Both then have a middle layer, and both keep it.
+ *
  * Pure arithmetic over a plain array, no DOM and no Node, so the window, the
  * exporter and node:test all read the same answers.
  */
@@ -57,12 +82,23 @@
 /**
  * The id a background is proposed under when one is added.
  *
- * PROPOSED, not guaranteed — and nothing may look a background up by it.
- * normalizeDocument renames a duplicate id (a hand-written document is allowed
- * to have called its only layer "background"), so the id that comes back out
- * can be "background-2". The slot is the position; this constant only decides
- * what the layer is CALLED, which matters because these documents are saved as
- * JSON and read by people.
+ * PROPOSED, not guaranteed — and nothing may look a background up by it. A
+ * hand-written document is allowed to have called its only layer "background",
+ * and then the new one is called "background-2" instead (see freeId below).
+ * The slot is the position; this constant only decides what the layer is
+ * CALLED, which matters because these documents are saved as JSON and read by
+ * people.
+ *
+ * WHICH OF THE TWO GIVES WAY, AND WHY IT IS THIS ONE. Left to itself
+ * normalizeDocument would settle the collision the other way round: it keeps
+ * the FIRST layer's id and renames the later one, a background is inserted at
+ * the front, so the NEW layer would keep "background" and the layer that was
+ * already there would silently become "background-2". That is the wrong way
+ * round. An id is what this app holds on to across a change — the crop calls
+ * preview.setLayerOffset(id), an exported control's bind path is
+ * "<layerId>.stops.0.color" — so renaming a layer somebody already has is a
+ * change with consequences, while renaming one nothing has heard of yet has
+ * none. The new layer therefore takes the suffix.
  */
 export const BACKGROUND_LAYER_ID = 'background';
 
@@ -110,6 +146,22 @@ export function backgroundKindOf(layers) {
 }
 
 /**
+ * A name for the new background that is not already taken.
+ *
+ * Deliberately the same rule and the same spelling normalizeDocument uses for a
+ * duplicate id ("<id>-2", climbing) so that a document written by this file and
+ * a document repaired by that one cannot end up with two different conventions
+ * for the same situation.
+ */
+function freeId(layers) {
+  const taken = new Set(layers.map((layer) => (layer && typeof layer === 'object' ? layer.id : null)));
+  if (!taken.has(BACKGROUND_LAYER_ID)) return BACKGROUND_LAYER_ID;
+  let n = 2;
+  while (taken.has(`${BACKGROUND_LAYER_ID}-${n}`)) n += 1;
+  return `${BACKGROUND_LAYER_ID}-${n}`;
+}
+
+/**
  * The same layers with the background set to `kind`.
  *
  * Hands back a new array and never touches the one it was given: the caller
@@ -130,22 +182,42 @@ export function backgroundKindOf(layers) {
  * A document with no layers at all gets nothing: the first layer of an empty
  * document would be the FOREGROUND by the rule above, so "add a background"
  * with nothing to put it behind is not a thing to do.
+ *
+ * WHAT COUNTS AS "THERE IS ALREADY ONE" — and it is backgroundKindOf and NOT
+ * backgroundOf, which is a distinction worth a paragraph because getting it
+ * wrong was a real bug.
+ *
+ * backgroundOf answers a question about POSITION: the first layer of any
+ * document with two or more, whatever it happens to be. backgroundKindOf asks
+ * the narrower one this function needs — is the first layer something the
+ * combobox can actually SHOW? The window can only build documents where those
+ * two agree, but a project file is JSON and a person may write one by hand: a
+ * picture fitted inside the canvas with a figure on it is two layers whose
+ * first is an `image`, and the combobox reads that as "Keiner" because `image`
+ * is not one of BACKGROUND_KINDS.
+ *
+ * Writing has to agree with reading, or the control lies. Asking backgroundOf
+ * meant "Farbfläche" REWROTE that picture's layer into a colour and "Keiner" —
+ * the entry already selected, so the easiest thing in the world to click by
+ * accident — DELETED it. Now a first layer that is not a background kind is not
+ * a background: a new one is inserted in front of it, and removing one that was
+ * never there does nothing at all.
  */
 export function withBackgroundKind(layers, kind) {
   const list = Array.isArray(layers) ? [...layers] : [];
   if (list.length === 0) return list;
-  const existing = backgroundOf(list);
+  const hasBackground = backgroundKindOf(list) !== 'none';
 
   if (kind === 'none') {
-    return existing ? list.slice(1) : list;
+    return hasBackground ? list.slice(1) : list;
   }
   if (!BACKGROUND_KINDS.includes(kind)) return list;
 
-  if (existing) {
-    list[0] = { ...existing, type: kind };
+  if (hasBackground) {
+    list[0] = { ...list[0], type: kind };
     return list;
   }
-  return [{ id: BACKGROUND_LAYER_ID, type: kind, motions: [] }, ...list];
+  return [{ id: freeId(list), type: kind, motions: [] }, ...list];
 }
 
 /**
