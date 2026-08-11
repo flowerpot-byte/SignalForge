@@ -124,7 +124,9 @@ test('unknown layer fit falls back to cover and is reported', () => {
 });
 
 test('unknown motion kind is dropped, not substituted, and is reported', () => {
-  const { doc, problems } = normalizeDocument({ layers: [{ id: 'x', type: 'image', motion: { kind: 'spin' } }] });
+  // "somersault" and not "spin": spin is a motion this engine has, and a test
+  // whose example of "unknown" quietly becomes known stops testing anything.
+  const { doc, problems } = normalizeDocument({ layers: [{ id: 'x', type: 'image', motion: { kind: 'somersault' } }] });
   assert.deepEqual(doc.layers[0].motions, []);
   assert.equal(problems.length, 1);
   assert.match(problems[0], /motion/);

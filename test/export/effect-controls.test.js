@@ -8,7 +8,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { effectControls } from '../../src/export/effect-controls.js';
 import { buildEffectHtml } from '../../src/export/build-effect.js';
-import { normalizeDocument, MOTION_KINDS, FIT_MODES } from '../../src/engine/document.js';
+import {
+  normalizeDocument, MOTION_KINDS, IMAGE_MOTION_KINDS, GRADIENT_MOTION_KINDS,
+  GRADIENT_SHAPES, FIT_MODES
+} from '../../src/engine/document.js';
 import { resolveBindingPath } from '../../src/engine/bind.js';
 import { runJobs } from '../harness/render.js';
 import { meanDifference, maxDifference, meanBrightness } from '../harness/pixels.js';
@@ -85,8 +88,12 @@ test('every binding resolves against the document, so no control is dead on arri
 
 test('the comboboxes offer exactly the engine\'s own value lists', () => {
   const byProperty = Object.fromEntries(effectControls(docWith(), 'a1').map((c) => [c.property, c]));
-  assert.deepEqual(byProperty.motion.values, [...MOTION_KINDS]);
+  // A picture layer, so the Motion dropdown is the picture's own list — every
+  // kind but spin, which a photograph cannot perform inside its own frame.
+  assert.deepEqual(byProperty.motion.values, [...IMAGE_MOTION_KINDS]);
   assert.deepEqual(byProperty.fit.values, [...FIT_MODES]);
+  assert.ok(IMAGE_MOTION_KINDS.every((kind) => MOTION_KINDS.includes(kind)),
+    'the offer must be a subset of what the document accepts');
 });
 
 test('the colour controls span exactly what normalizeDocument accepts', () => {
@@ -96,6 +103,33 @@ test('the colour controls span exactly what normalizeDocument accepts', () => {
     assert.equal(byProperty[field].min, min, `${field} control min must match the engine's clamp`);
     assert.equal(byProperty[field].max, max, `${field} control max must match the engine's clamp`);
   }
+});
+
+test('the gradient controls span exactly what normalizeDocument accepts', () => {
+  // The same rule as the colour controls above, for the two ranges that live
+  // on a LAYER rather than on the document: discovered by asking
+  // normalizeDocument what it keeps, never by copying CONTROL_RANGES' numbers
+  // into this file. A widened engine clamp with a forgotten control range
+  // fails right here.
+  const clampLayerRange = (field) => ({
+    min: normalizeDocument({ layers: [{ id: 'a1', type: 'gradient', [field]: -1e6 }] }).doc.layers[0][field],
+    max: normalizeDocument({ layers: [{ id: 'a1', type: 'gradient', [field]: 1e6 }] }).doc.layers[0][field]
+  });
+  const controls = effectControls(docWith({}, { type: 'gradient' }), 'a1');
+  const byProperty = Object.fromEntries(controls.map((c) => [c.property, c]));
+
+  for (const field of ['angle', 'bands']) {
+    const { min, max } = clampLayerRange(field);
+    assert.equal(byProperty[field].min, min, `the ${field} control min must match the engine's clamp`);
+    assert.equal(byProperty[field].max, max, `the ${field} control max must match the engine's clamp`);
+  }
+
+  // And the shape dropdown offers every shape the engine can draw, so a new
+  // one cannot be added to the engine and left out of the finished effect.
+  assert.deepEqual(byProperty.shape.values, [...GRADIENT_SHAPES]);
+  // A gradient is the one layer type with structure at every angle, so it is
+  // offered every motion there is.
+  assert.deepEqual(byProperty.motion.values, [...GRADIENT_MOTION_KINDS]);
 });
 
 test('the defaults are the document\'s own values, not fixed numbers', () => {

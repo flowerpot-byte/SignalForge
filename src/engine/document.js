@@ -32,7 +32,18 @@ export const BLEND_MODES = Object.freeze({
 });
 
 export const FIT_MODES = Object.freeze(['cover', 'stretch', 'contain']);
-export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe']);
+
+/**
+ * Every motion the document accepts. Which of them a given layer type is
+ * OFFERED is a narrower question — see motionKindsFor below.
+ *
+ * Appended to rather than reordered: an effect exported before "spin" and
+ * "pulse" existed carries its own Motion combobox with the first four values
+ * baked into it, and the order here is the order that dropdown is built in.
+ * Keeping the old four where they were means a person's list does not
+ * reshuffle itself under them when they update.
+ */
+export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'spin', 'pulse']);
 export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combobox']);
 
 /**
@@ -57,7 +68,34 @@ export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combo
  *     for free (see src/export/effect-controls.js). Somebody who exported a
  *     linear gradient can try the radial one without going back to the app.
  */
-export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial']);
+export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial', 'conic', 'stripes', 'waves']);
+
+/**
+ * How many times the ramp repeats across a shape that repeats.
+ *
+ * Live on three of the five shapes and dead on two, and that is a property of
+ * the shapes rather than an oversight: "linear" and "radial" ARE one traversal
+ * of the ramp by definition, so there is nothing for a repeat count to do
+ * there. It is stored on every gradient all the same, for the same reason
+ * `angle` is (see the note beside the angle control in
+ * src/export/effect-controls.js): the shape can be switched from SignalRGB's
+ * own panel at any moment, and a field that only exists while a particular
+ * shape is chosen would be a dead end the moment somebody switched to one that
+ * needs it.
+ *
+ * Whole repeats only. Half a band is not a thing the ramp can be built out of
+ * — the generated colour stops step from one repeat to the next — and a
+ * fractional count would put a truncated band against the canvas edge on one
+ * side only, which reads as a rendering fault rather than as a setting.
+ *
+ * The ceiling is what the engine can still DRAW cleanly, not a taste: at 24
+ * repeats of a four-colour ramp a stripes layer already generates 192 colour
+ * stops per frame, and the bands are 13 canvas pixels wide before the LED
+ * sampling ever gets to them.
+ */
+export const MIN_BANDS = 1;
+export const MAX_BANDS = 24;
+export const DEFAULT_BANDS = 6;
 
 /**
  * Which motions a layer type can actually be seen to perform.
@@ -65,19 +103,43 @@ export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial']);
  * A uniform field of one colour is invariant under both displacement motions:
  * drift slides it and warp bends it, and in both cases every pixel it moves
  * has exactly the colour of the pixel it replaced. So a solid layer offers
- * "breathe" and nothing else — that is not a limitation of the renderer, it
- * is what "one colour everywhere" means. A drift entry stored on a solid
- * layer by hand is kept rather than dropped (the data is the user's), it
- * simply renders as nothing, exactly like a "none" entry.
+ * the two motions that work on opacity and nothing else — that is not a
+ * limitation of the renderer, it is what "one colour everywhere" means. A
+ * drift entry stored on a solid layer by hand is kept rather than dropped
+ * (the data is the user's), it simply renders as nothing, exactly like a
+ * "none" entry.
  *
- * A gradient is not uniform, so all three are real on it — see
- * src/engine/layers/gradient.js.
+ * SPIN IS THE SECOND MOTION THAT IS NOT OFFERED EVERYWHERE, AND WHY
+ *
+ * Spin turns the whole field about the middle of the canvas.
+ *
+ *  - On a solid colour it is invariant for exactly the reason drift is: every
+ *    pixel it moves is replaced by a pixel of the same colour.
+ *  - On a PICTURE it is not invariant — and it is still not offered. A
+ *    320 x 200 rectangle turned about its centre only stays covered if the
+ *    picture inside it is first zoomed until its shorter side spans the
+ *    canvas diagonal: sqrt(320^2 + 200^2) / 200 = 1.885, so 1 - 1/1.885^2 =
+ *    72 % of the chosen crop would have to be thrown away before the first
+ *    frame, and everything the crop drag is for would be undone by turning
+ *    the motion on. The alternative — letting it turn and showing the corners
+ *    — puts black wedges over the LEDs four times a turn. Neither is a thing
+ *    to offer; a picture that should rotate is a picture that should be
+ *    rotated before it is imported.
+ *  - On a gradient it is exactly right, because a gradient has no edges: it
+ *    is painted across the whole canvas at whatever angle it is asked for, so
+ *    turning it costs nothing and hides nothing.
+ *
+ * The two lists are therefore no longer "solid, and everything else".
  */
-export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe']);
+export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
+export const IMAGE_MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'pulse']);
+export const GRADIENT_MOTION_KINDS = MOTION_KINDS;
 
 /** The motion kinds worth offering for a layer of this type. */
 export function motionKindsFor(type) {
-  return type === 'solid' ? SOLID_MOTION_KINDS : MOTION_KINDS;
+  if (type === 'solid') return SOLID_MOTION_KINDS;
+  if (type === 'image') return IMAGE_MOTION_KINDS;
+  return GRADIENT_MOTION_KINDS;
 }
 
 /** Fewest and most colour stops a gradient may carry. */
@@ -452,6 +514,10 @@ function normalizeLayer(raw, index, usedIds, problems) {
       // wrapped: the control is a slider with two ends, and a document that
       // says 400 is more likely to be a mistake than an intent to mean 40.
       angle: clamp(num(input.angle, 0), 0, 360),
+      // Whole repeats of the ramp — see MIN_BANDS above. Rounded rather than
+      // truncated so that a document carrying 4.7 lands on the nearer whole
+      // number instead of always downwards.
+      bands: clamp(Math.round(num(input.bands, DEFAULT_BANDS)), MIN_BANDS, MAX_BANDS),
       stops: normalizeStops(input.stops, id, problems),
       motions: normalizeMotions(input, id, problems)
     };

@@ -58,7 +58,10 @@ test('the generated effect exposes motion and fit combobox controls with the eng
 
     // The engine's own value lists (MOTION_KINDS / FIT_MODES), not a second,
     // hand-copied list that could drift out of sync with them.
-    assert.match(html, /<meta property="motion" label="Motion" type="combobox" values="none,warp,drift,breathe" default="warp"/);
+    // A picture layer is offered every motion but spin — a photograph cannot be
+    // turned inside its own frame without showing its corners or being cropped
+    // to a fraction of itself (see IMAGE_MOTION_KINDS in src/engine/document.js).
+    assert.match(html, /<meta property="motion" label="Motion" type="combobox" values="none,warp,drift,breathe,pulse" default="warp"/);
     assert.match(html, /<meta property="fit" label="Fit" type="combobox" values="cover,stretch,contain" default="cover"/);
 
     // Both bindings must reach the layer, so a control change actually moves something.

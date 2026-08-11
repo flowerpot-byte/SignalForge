@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { describeInspector, widenToInclude, SECTION_TITLES } from '../../app/renderer/components/inspector.js';
 import {
-  normalizeDocument, FIT_MODES, MOTION_KINDS, SOLID_MOTION_KINDS
+  normalizeDocument, FIT_MODES, MOTION_KINDS, SOLID_MOTION_KINDS, IMAGE_MOTION_KINDS
 } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 import { CONTROL_RANGES } from '../../src/export/effect-controls.js';
@@ -116,7 +116,8 @@ test('every slider offers exactly the range the matching exported control offers
 test('the dropdowns offer exactly the values the engine accepts', () => {
   const fields = describeInspector(docWith({ motions: [{ kind: 'warp' }] }), 'a1');
   assert.deepEqual(fields.find((f) => f.path === 'layers.0.fit').values, [...FIT_MODES]);
-  assert.deepEqual(fields.find((f) => f.type === 'motions').values, [...MOTION_KINDS]);
+  // A picture layer: every motion but spin — see IMAGE_MOTION_KINDS.
+  assert.deepEqual(fields.find((f) => f.type === 'motions').values, [...IMAGE_MOTION_KINDS]);
 });
 
 test('a solid layer is offered only the motions a flat colour can perform', () => {

@@ -17,10 +17,16 @@ export {
   FIT_MODES,
   MOTION_KINDS,
   SOLID_MOTION_KINDS,
+  IMAGE_MOTION_KINDS,
+  GRADIENT_MOTION_KINDS,
   motionKindsFor,
   GRADIENT_SHAPES,
+  MIN_BANDS,
+  MAX_BANDS,
+  DEFAULT_BANDS,
   MIN_GRADIENT_STOPS,
   MAX_GRADIENT_STOPS,
+  colorAtPosition,
   DEFAULT_SOLID_COLOR,
   DEFAULT_GRADIENT_STOPS,
   CONTROL_TYPES,
@@ -36,5 +42,8 @@ export { LAYER_RENDERERS, registerLayer } from './layers/index.js';
 export { computeSourceRect } from './util/fit.js';
 export { createWarpField, WARP_PEAK_FACTOR } from './motion/warp.js';
 export { speedToRate } from './motion/speed.js';
+export { breatheFactor, motionPhase } from './motion/breathe.js';
+export { pulseFactor } from './motion/pulse.js';
+export { spinDegrees, spinRadians } from './motion/spin.js';
 export { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from './bind.js';
 export { prepareImageAsset } from './asset-import.js';

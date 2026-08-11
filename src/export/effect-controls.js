@@ -2,7 +2,8 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
-  MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, motionKindsFor, normalizeDocument
+  MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_BANDS, MAX_BANDS,
+  motionKindsFor, normalizeDocument
 } from '../engine/document.js';
 
 /**
@@ -47,6 +48,7 @@ import {
  *   greenMagenta <- greenMagenta     clamp -100..100 offered -100..100
  *   blueYellow   <- blueYellow       clamp -100..100 offered -100..100
  *   angle        <- gradient angle   clamp 0..360   offered 0..360
+ *   bands        <- gradient bands   clamp 1..24    offered 1..24
  *   stop         <- stops[].at       clamp 0..100   offered 0..100
  *
  * `stop` is the one entry here the exported effect does NOT offer, and it is
@@ -83,6 +85,11 @@ export const CONTROL_RANGES = Object.freeze({
   greenMagenta: Object.freeze({ min: -100, max: 100 }),
   blueYellow: Object.freeze({ min: -100, max: 100 }),
   angle: Object.freeze({ min: 0, max: 360 }),
+  // Whole repeats of the ramp. Its floor is 1 and not 0 because zero repeats
+  // is not a picture — the engine's own clamp says the same thing, and
+  // test/export/effect-controls.test.js reads both ends of this range out of
+  // normalizeDocument rather than trusting these two numbers.
+  bands: Object.freeze({ min: MIN_BANDS, max: MAX_BANDS }),
   stop: Object.freeze({ min: 0, max: 100 })
 });
 
@@ -211,7 +218,14 @@ export function effectControls(doc, layerId) {
       // finding no way to turn the ramp. The angle is remembered rather than
       // conditional; the cost is one slider that does nothing while radial is
       // chosen, against a dead end if it were left out.
-      slider('angle', 'Winkel', 'Angle', layer.angle, `${layerId}.angle`)
+      slider('angle', 'Winkel', 'Angle', layer.angle, `${layerId}.angle`),
+      // Offered whatever the shape is, for exactly the reason the angle is:
+      // "linear" and "radial" have nothing for a repeat count to do, but the
+      // Shape dropdown right above it can be switched to stripes, waves or the
+      // conic at any moment from this very panel, and a band count that only
+      // appeared for some shapes would leave somebody who switched with no way
+      // to set the one thing those shapes are about.
+      slider('bands', 'Baender', 'Bands', layer.bands, `${layerId}.bands`)
     );
     motionControls();
   }

@@ -52,7 +52,7 @@ test('a gradient effect offers one colour per stop, the shape, the angle and the
   }), 'a1');
   assert.deepEqual(
     effectControls(doc, 'a1').map((control) => control.property),
-    ['color1', 'color2', 'color3', 'shape', 'angle', 'motion', 'tempo', 'strength',
+    ['color1', 'color2', 'color3', 'shape', 'angle', 'bands', 'motion', 'tempo', 'strength',
       'brightness', 'saturation', 'greenMagenta', 'blueYellow']
   );
 });

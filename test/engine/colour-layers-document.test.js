@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import {
   normalizeDocument, normalizeColor, motionKindsFor, colorAtPosition,
   DEFAULT_SOLID_COLOR, DEFAULT_GRADIENT_STOPS,
-  MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, MOTION_KINDS, SOLID_MOTION_KINDS
+  MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, MOTION_KINDS, SOLID_MOTION_KINDS, IMAGE_MOTION_KINDS
 } from '../../src/engine/document.js';
 
 const layerOf = (raw) => normalizeDocument({ layers: [raw] }).doc.layers[0];
@@ -53,14 +53,20 @@ test('a solid layer keeps the colour it was given', () => {
   assert.equal(layerOf({ id: 'a1', type: 'solid', color: '#12AB34' }).color, '#12ab34');
 });
 
-test('a solid layer offers only the motion a flat colour can actually perform', () => {
+test('a solid layer offers only the motions a flat colour can actually perform', () => {
   assert.deepEqual([...motionKindsFor('solid')], [...SOLID_MOTION_KINDS]);
+  // The two that work on opacity alone, and none of the three that move pixels.
   assert.ok(SOLID_MOTION_KINDS.includes('breathe'));
-  assert.ok(!SOLID_MOTION_KINDS.includes('drift'));
-  assert.ok(!SOLID_MOTION_KINDS.includes('warp'));
-  // Everything else gets the full list.
+  assert.ok(SOLID_MOTION_KINDS.includes('pulse'));
+  for (const moves of ['drift', 'warp', 'spin']) {
+    assert.ok(!SOLID_MOTION_KINDS.includes(moves), `a flat colour cannot be seen to ${moves}`);
+  }
+  // A gradient has structure at every angle, so it gets the whole list.
   assert.deepEqual([...motionKindsFor('gradient')], [...MOTION_KINDS]);
-  assert.deepEqual([...motionKindsFor('image')], [...MOTION_KINDS]);
+  // A picture gets everything but spin — see IMAGE_MOTION_KINDS for the
+  // arithmetic on how much of a crop turning one would cost.
+  assert.deepEqual([...motionKindsFor('image')], [...IMAGE_MOTION_KINDS]);
+  assert.ok(!IMAGE_MOTION_KINDS.includes('spin'));
 });
 
 test('a drift stored on a solid layer by hand is kept, not thrown away', () => {

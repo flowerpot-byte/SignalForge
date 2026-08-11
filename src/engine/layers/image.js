@@ -5,6 +5,7 @@ import { CANVAS_WIDTH, CANVAS_HEIGHT, clamp } from '../document.js';
 import { computeSourceRect } from '../util/fit.js';
 import { speedToRate } from '../motion/speed.js';
 import { breatheFactor, motionPhase } from '../motion/breathe.js';
+import { pulseFactor } from '../motion/pulse.js';
 import { WARP_SPEED_SCALE } from '../motion/warp.js';
 import {
   BUFFER_WIDTH, BUFFER_HEIGHT, BUFFER_PAD, MAX_AMPLITUDE, drawWarped
@@ -41,21 +42,32 @@ export function render(ctx, layer, asset, timeSec, state) {
   if (!asset || !asset.element) return;
 
   // Each motion kind acts on a different stage of the draw (drift moves the
-  // sampling window, warp distorts while sampling, breathe scales opacity),
-  // so they compose regardless of order. The application order below is
-  // therefore fixed by kind, deliberately NOT by the order layer.motions
-  // lists them in — otherwise the same three entries would render
-  // differently depending on how the user happened to sort them, which
-  // would be a surprising, undocumented dependency on list order.
+  // sampling window, warp distorts while sampling, pulse and breathe scale
+  // opacity), so they compose regardless of order. The application order below
+  // is therefore fixed by kind, deliberately NOT by the order layer.motions
+  // lists them in — otherwise the same entries would render differently
+  // depending on how the user happened to sort them, which would be a
+  // surprising, undocumented dependency on list order.
+  //
+  // The whole-project order is spin -> drift -> warp -> pulse -> breathe (it
+  // is written out in full in src/engine/layers/gradient.js). Spin is missing
+  // from this file on purpose and not by omission: a picture cannot be turned
+  // inside its own frame without either showing its corners or being cropped
+  // to 28 % of what the user chose, so it is not offered on this layer type at
+  // all — see IMAGE_MOTION_KINDS in src/engine/document.js. A spin entry that
+  // reaches here anyway (a hand-edited project) renders as nothing, exactly
+  // like a "none" entry, which is the same treatment a drift gets on a solid.
   const motions = Array.isArray(layer.motions) ? layer.motions : [];
   const drift = motions.find((m) => m.kind === 'drift') ?? null;
   const warp = motions.find((m) => m.kind === 'warp') ?? null;
+  const pulse = motions.find((m) => m.kind === 'pulse') ?? null;
   const breathe = motions.find((m) => m.kind === 'breathe') ?? null;
 
   const previousAlpha = ctx.globalAlpha;
-  if (breathe) {
-    ctx.globalAlpha = clamp(previousAlpha * breatheFactor(breathe, timeSec), 0, 1);
-  }
+  let alpha = previousAlpha;
+  if (pulse) alpha *= pulseFactor(pulse, timeSec);
+  if (breathe) alpha *= breatheFactor(breathe, timeSec);
+  if (alpha !== previousAlpha) ctx.globalAlpha = clamp(alpha, 0, 1);
 
   if (warp) {
     renderWarped(ctx, layer, asset, timeSec, state, warp, drift);
