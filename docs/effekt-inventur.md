@@ -343,7 +343,7 @@ exportierte Datei dieselben Pixel zeigen. Eine Hash-Funktion über den Partikel-
 | A8 Regenbogen-Spalten | **Ja, mit Umweg** | `stripes` mit vier Stopps und 24 Wiederholungen kommt nah; ein echter 360°-Regenbogen bräuchte mehr als 4 Stopps oder A4 |
 | A11 Verzerrtes Bild | **Ja, ganz** | `warp` ist genau dieselbe Puffer-Mathematik (`src/engine/layers/warp-buffer.js`) |
 | A1 Partikelsystem | **Ja, ganz** (seit 11.08., siehe C1) | Ebenentyp `particles`; geschlossene Formel je Partikel aus gesätem Zufall, vier Muster |
-| A2 Nachzieh-Schleier | **Ja, mit einer Einschränkung** (seit 11.08., siehe C2) | Dokumentfeld `trail` (0 = aus = wie bisher). Sichtbar nur dort, wo eine Ebene die Fläche **nicht** deckend übermalt — also bei Deckkraft < 1, bei `atmen`/`pulsieren` oder (später) bei Partikeln |
+| A2 Nachzieh-Schleier | **Ja, ganz** (seit 12.08., siehe C2) | Dokumentfeld `trail` (0 = aus = wie bisher). Über durchsichtigem Grund ein Schleier nach Schwarz; über einem Hintergrund eine zweite, durchsichtige Spurfläche, die zur **aktuellen** Farbe des Hintergrunds verblasst — mehr als der Bestand kann, dessen Hintergrund stehen muss |
 | A5 Figuren (Kreis/Ring/Stern/Herz) | **Ja, ganz** (seit 11.08., siehe C4) | Ebenentyp `shape`; Kreis, Ring, Stern, Herz auf durchsichtigem Grund |
 | A6 Kachelraster | **Nein** | Ebenentyp oder Verlaufsform fehlt. Phase je Zelle aus gesätem Zufall |
 | A10 Text | **Nein** | Schriftrendering im Wirt ungeprüft |
@@ -489,6 +489,28 @@ Schleier, Bildfolge ab Bild 0 für Dokumente mit (`test/export/parity.test.js`).
 Formebene (C4) gibt es endlich eine Ebene, die die Fläche nicht deckt, und damit ist der
 Schleier das, was er sein soll. Der Absatz darunter bleibt trotzdem stehen: er beschreibt
 richtig, warum der Schleier auf Verläufen und Bildern kaum zu sehen ist, und das gilt weiter.
+
+**Nachtrag 12.08.2026, dritter — und damit ist A2 ganz erledigt.** Der Absatz
+darunter beschrieb bis heute eine zweite, echte Grenze: ein Hintergrund
+übermalt alle 320 × 200 Pixel und verdeckt damit die Spur des Vordergrunds
+vollständig — der Regler tat, mit Hintergrund, nachweislich **nichts** (Differenz
+exakt 0, ein Tag lang so festgenagelt). Gebaut ist jetzt die Trennung, die der
+Bestand gar nicht braucht, weil sein Hintergrund stillsteht: eine **zweite,
+durchsichtige Spurfläche**, die nur den Vordergrund hält, während der Hintergrund
+jedes Bild frisch darunter gezeichnet wird. Ein Geist verblasst damit zur Farbe,
+die der Hintergrund **jetzt** hat, und wo nichts vorbeikam, kommt der Hintergrund
+Byte für Byte unberührt durch — er ist von seiner eigenen Spur ausgenommen, denn
+mit sich selbst geschleiert würde ein bewegter Hintergrund zum Mittelwert der
+letzten hundert Bilder seiner selbst.
+
+Der Bestand veilt in der Hintergrundfarbe (`bgColor + "22"`, Abschnitt A2 oben) —
+das ist derselbe Gedanke, und er funktioniert dort nur, weil `bgColor` eine
+einzige, stehende Farbe ist. Was uns dabei überrascht hat, steht ausführlich in
+`.superpowers/sdd/background-layer-report.md`, Abschnitt 6, und in einem Satz:
+**der Browser kann ein Canvas-Alpha nicht auf 0 multiplizieren** — alle vier Wege
+bleiben bei 25/255 oder 42/255 stehen, weil sie runden statt abzuschneiden. Über
+Schwarz tut Chromiums `source-over` genau das Gegenteil und erreicht exakt 0. Der
+Motor rechnet deshalb an dieser einen Stelle selbst.
 
 **Die Einschränkung, die vorher niemand ausgesprochen hatte:** Der Schleier liegt **unter**
 dem, was gerade gezeichnet wird — genau wie im Bestand. Eine Ebene, die alle 320 × 200 Pixel
