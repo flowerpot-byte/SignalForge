@@ -7,6 +7,13 @@ import { mountInspector } from '../../app/renderer/components/inspector.js';
 import { fillPercent } from '../../app/renderer/components/field.js';
 import { normalizeDocument, colorAtPosition } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
+// Read rather than repeated: these tests check that the painted fill matches
+// the value, which is a statement about the slider, not about where its ends
+// happen to sit. Writing the ends out by hand made this file fail the day the
+// brightness range gained its headroom above 100 -- a true statement about a
+// number that had moved, which is exactly the kind of failure that teaches
+// nobody anything.
+import { CONTROL_RANGES } from '../../src/export/effect-controls.js';
 
 // mountInspector and field.js read `document` and `window.SignalForgeEngine`
 // as plain globals (they run in the renderer), and there is no jsdom in this
@@ -303,7 +310,7 @@ test('the fill custom property tracks the value, driven by an arrow-key-style in
   mountInspector(container, { t, getDocument: docWithMotion, onChange: () => {}, onError: () => {} });
 
   const slider = byId(container, 'sf-brightness');
-  // brightness offers 5..100 (see CONTROL_RANGES); this is the same event a
+  // brightness offers 5..200 (see CONTROL_RANGES); this is the same event a
   // real ArrowLeft/ArrowRight press fires on a range input, distinct from a
   // drag only in how the value got set, not in which event follows it.
   slider.value = '62';
@@ -311,7 +318,7 @@ test('the fill custom property tracks the value, driven by an arrow-key-style in
 
   assert.equal(
     slider.style.properties['--sf-fill'],
-    `${fillPercent({ min: 5, max: 100 }, 62)}%`,
+    `${fillPercent(CONTROL_RANGES.brightness, 62)}%`,
     '--sf-fill must move to match the value an arrow key just set'
   );
 });
@@ -373,7 +380,7 @@ test('the fill custom property is set correctly by a redraw, not only by a live 
   const inspector = mountInspector(container, { t, getDocument: doc, onChange: () => {}, onError: () => {} });
   assert.equal(
     byId(container, 'sf-brightness').style.properties['--sf-fill'],
-    `${fillPercent({ min: 5, max: 100 }, 12)}%`,
+    `${fillPercent(CONTROL_RANGES.brightness, 12)}%`,
     'the first paint must match the first document'
   );
 
@@ -385,7 +392,7 @@ test('the fill custom property is set correctly by a redraw, not only by a live 
 
   assert.equal(
     byId(container, 'sf-brightness').style.properties['--sf-fill'],
-    `${fillPercent({ min: 5, max: 100 }, 91)}%`,
+    `${fillPercent(CONTROL_RANGES.brightness, 91)}%`,
     'a redraw must paint the fill for the NEW value, not leave the old fill standing'
   );
 });

@@ -42,7 +42,7 @@ import {
  *
  *   tempo        <- motions[].speed  clamp 0..100   offered 1..100 (0 is "stopped", not a speed)
  *   strength     <- motions[].amount clamp 0..100   offered 0..100
- *   brightness   <- brightness       clamp 0..100   offered 5..100 (never fully black by accident)
+ *   brightness   <- brightness       clamp 0..200   offered 5..200 (never fully black by accident)
  *   saturation   <- saturation       clamp 0..200   offered 0..200
  *   greenMagenta <- greenMagenta     clamp -100..100 offered -100..100
  *   blueYellow   <- blueYellow       clamp -100..100 offered -100..100
@@ -72,7 +72,13 @@ import {
 export const CONTROL_RANGES = Object.freeze({
   tempo: Object.freeze({ min: 1, max: 100 }),
   strength: Object.freeze({ min: 0, max: 100 }),
-  brightness: Object.freeze({ min: 5, max: 100 }),
+  // 100 is the middle of this range on purpose, and it is the default: a
+  // ceiling of 100 meant the control could only ever darken, which is exactly
+  // what it was reported for. Above 100 brightens (see applyFinish in
+  // src/engine/engine.js). The floor stays at 5 rather than dropping to 0 --
+  // that is a separate, deliberate guard ("never fully black by accident")
+  // and nothing about the missing headroom above 100 touches it.
+  brightness: Object.freeze({ min: 5, max: 200 }),
   saturation: Object.freeze({ min: 0, max: 200 }),
   greenMagenta: Object.freeze({ min: -100, max: 100 }),
   blueYellow: Object.freeze({ min: -100, max: 100 }),
@@ -104,7 +110,7 @@ function colour(property, de, en, value, bind) {
  * usual range cannot reach.
  *
  * The ranges above are on purpose narrower than what normalizeDocument
- * clamps the same field to (brightness 5..100 against a clamp of 0..100). A
+ * clamps the same field to (brightness 5..200 against a clamp of 0..200). A
  * document is under no such obligation: a project file edited by hand can
  * legitimately carry brightness 3. Shipping a control whose default sits
  * outside its own min/max would leave SignalRGB to decide what that means, so

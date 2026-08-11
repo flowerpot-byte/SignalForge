@@ -76,9 +76,37 @@ export async function loadAssets(doc, { resolveUrl, assetTimeoutMs = DEFAULT_ASS
  * default path never reads or writes a single pixel here — this runs about
  * 30 times a second, forever, and a document nobody has touched must pay
  * nothing for it.
+ *
+ * BRIGHTNESS IS A PLAIN LINEAR GAIN, 0..200
+ *
+ * `pixel * brightness / 100`, per channel, alpha untouched. Under 100 it
+ * dims exactly as it always did; over 100 it brightens; at exactly 100 the
+ * factor is exactly 1.0 in binary floating point (100/100), which is why the
+ * skip above is an equality test and not an epsilon — the neutral document
+ * still costs nothing.
+ *
+ * Linear gain rather than a curve (gamma, a soft knee, a tone map) on
+ * purpose. Three reasons, in order of weight:
+ *
+ *  1. It is predictable. 200 means "twice the number", 150 means "half again
+ *     as much", and someone who dimmed to 50 and set 200 lands back where
+ *     they were. Every curve breaks at least one of those.
+ *  2. It is the exact inverse of the dimming half, so the control is one
+ *     continuous thing with 100 in the middle rather than two behaviours
+ *     glued together at the default.
+ *  3. It is free. The multiply is the loop that was already here; nothing
+ *     new runs per pixel, which matters at 30 frames a second on a host
+ *     whose whole canvas is 320 x 200.
+ *
+ * The cost is clipping: a channel already near 255 cannot get brighter, so
+ * pushing hard drags bright colours towards white and can shift their hue.
+ * Uint8ClampedArray clamps that on write by itself — the ceiling is the
+ * format's, not a branch in this loop. That behaviour is the honest one for
+ * a light strip anyway: the LED is at full power and there is nothing above
+ * it.
  */
 function applyFinish(ctx, doc) {
-  const brightness = Number.isFinite(doc.brightness) ? clamp(doc.brightness, 0, 100) / 100 : 1;
+  const brightness = Number.isFinite(doc.brightness) ? clamp(doc.brightness, 0, 200) / 100 : 1;
   const color = {
     saturation: Number.isFinite(doc.saturation) ? clamp(doc.saturation, 0, 200) : 100,
     greenMagenta: Number.isFinite(doc.greenMagenta) ? clamp(doc.greenMagenta, -100, 100) : 0,

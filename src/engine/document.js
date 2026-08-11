@@ -528,10 +528,13 @@ export function normalizeDocument(raw) {
     name: str(input.name, '').trim() || 'Untitled',
     description: str(input.description, ''),
     publisher: str(input.publisher, ''),
-    // Overall output dimmer, 0..100, applied once to the finished frame by
-    // the renderer (see engine.js). 100 = unchanged, matching every
-    // document that predates this field so old previews/exports don't shift.
-    brightness: clamp(num(input.brightness, 100), 0, 100),
+    // Overall output gain, 0..200, applied once to the finished frame by the
+    // renderer (see engine.js). 100 = unchanged, matching every document that
+    // predates this field so old previews/exports don't shift; below 100
+    // dims, above 100 brightens. The ceiling used to be 100, which meant the
+    // control could only ever darken — the same shape saturation already has
+    // (0..200, default 100) is what it has now.
+    brightness: clamp(num(input.brightness, 100), 0, 200),
     // Colour post-processing, applied together with brightness in one pass
     // over the finished frame (see engine.js applyFinish). Defaults match
     // color.js's NEUTRAL_COLOR so a document that predates this field, or

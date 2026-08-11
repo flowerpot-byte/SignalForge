@@ -21,12 +21,29 @@ test('empty input produces a valid empty document', () => {
   assert.deepEqual(problems, []);
 });
 
-test('brightness defaults to 100 (unchanged) and is clamped into 0..100', () => {
+test('brightness defaults to 100 (unchanged) and is clamped into 0..200', () => {
   assert.equal(normalizeDocument({}).doc.brightness, 100);
   assert.equal(normalizeDocument({ brightness: 50 }).doc.brightness, 50);
-  assert.equal(normalizeDocument({ brightness: 500 }).doc.brightness, 100);
+  assert.equal(normalizeDocument({ brightness: 500 }).doc.brightness, 200);
   assert.equal(normalizeDocument({ brightness: -50 }).doc.brightness, 0);
   assert.equal(normalizeDocument({ brightness: 'nonsense' }).doc.brightness, 100);
+});
+
+test('brightness above 100 survives normalisation instead of being clipped back to it', () => {
+  // The whole point of the widened range: the ceiling used to BE the default,
+  // so the control could only darken. A value between 100 and 200 has to reach
+  // the renderer untouched, or the headroom exists on the slider only.
+  assert.equal(normalizeDocument({ brightness: 150 }).doc.brightness, 150);
+  assert.equal(normalizeDocument({ brightness: 200 }).doc.brightness, 200);
+});
+
+test('a document written before the headroom existed normalises exactly as it did', () => {
+  // Backwards compatibility, stated as an assertion rather than as a comment:
+  // every value an older project or an older exported effect can carry sits in
+  // 0..100, and widening the clamp's ceiling must not move any of them.
+  for (const value of [0, 1, 5, 42, 78, 99, 100]) {
+    assert.equal(normalizeDocument({ brightness: value }).doc.brightness, value);
+  }
 });
 
 test('image layer gets full defaults', () => {

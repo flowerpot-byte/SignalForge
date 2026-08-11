@@ -20,6 +20,22 @@ function docWith(brightness) {
   return doc;
 }
 
+// A picture whose channels are nowhere near 255, so "brighter" can be measured
+// without the ceiling swallowing the answer. The quadrant PNG above is made of
+// pure red, green, blue and white -- every one of its channels is either 0 or
+// 255, so at brightness 150 it would come back byte-identical to 100 and prove
+// nothing. This is the same 4x4 shape in four dim greys instead (32/64/96/128).
+const DIM_QUADRANTS = 'iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAAF0lEQVR42mNQAAMHMGBA4SSAQQMYoHAAL0MPAVJGgowAAAAASUVORK5CYII=';
+
+function dimDocWith(brightness) {
+  const doc = {
+    assets: { q: { kind: 'image', mime: 'image/png', data: DIM_QUADRANTS } },
+    layers: [{ type: 'image', asset: 'q', fit: 'stretch' }]
+  };
+  if (brightness !== undefined) doc.brightness = brightness;
+  return doc;
+}
+
 test('document brightness dims the finished frame, and 100 leaves it unchanged', async () => {
   const jobs = [
     { name: 'no-field', kind: 'engine', timeSec: 0, doc: docWith(undefined) },
@@ -40,4 +56,36 @@ test('document brightness dims the finished frame, and 100 leaves it unchanged',
   assert.ok(full > 0, 'the full-brightness frame must actually show something');
   assert.ok(Math.abs(half / full - 0.5) < 0.02, `expected half brightness at 50, got ${half / full}`);
   assert.ok(zero < full * 0.02, `expected brightness 0 to be (near) black, got ${zero} vs ${full}`);
+});
+
+test('brightness above 100 actually brightens, and 100 is byte-identical to no brightness at all', async () => {
+  // The complaint this exists for: 100 used to be the ceiling, so the slider
+  // could only ever darken. Rendered pixels, not arithmetic on paper -- the
+  // value has to survive normalizeDocument, the clamp in applyFinish and the
+  // pixel pass to count.
+  const jobs = [
+    { name: 'none', kind: 'engine', timeSec: 0, doc: dimDocWith(undefined) },
+    { name: 'b100', kind: 'engine', timeSec: 0, doc: dimDocWith(100) },
+    { name: 'b150', kind: 'engine', timeSec: 0, doc: dimDocWith(150) },
+    { name: 'b200', kind: 'engine', timeSec: 0, doc: dimDocWith(200) }
+  ];
+  const byName = Object.fromEntries((await runJobs(jobs)).map((r) => [r.name, r]));
+
+  // 100 must still be the exact no-op it was before the range widened: same
+  // pixels as a document that carries no brightness field at all.
+  assert.equal(meanDifference(byName.none.pixels, byName.b100.pixels), 0);
+
+  const at100 = meanBrightness(byName.b100.pixels);
+  const at150 = meanBrightness(byName.b150.pixels);
+  const at200 = meanBrightness(byName.b200.pixels);
+
+  assert.ok(at100 > 0, 'the reference frame must actually show something');
+  assert.ok(at150 > at100, `150 (${at150}) must be brighter than 100 (${at100})`);
+  assert.ok(at200 > at150, `200 (${at200}) must be brighter than 150 (${at150})`);
+
+  // And brighter by the amount a plain linear gain promises, not by a token
+  // nudge. The test picture's channels top out at 128, so nothing clips even
+  // at 200 and the ratios are exact rather than approximate.
+  assert.ok(Math.abs(at150 / at100 - 1.5) < 0.02, `expected 1.5x at 150, got ${at150 / at100}`);
+  assert.ok(Math.abs(at200 / at100 - 2.0) < 0.02, `expected 2.0x at 200, got ${at200 / at100}`);
 });

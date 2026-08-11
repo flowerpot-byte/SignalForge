@@ -35,7 +35,7 @@ const withStep = (range) => Object.freeze({ ...range, step: 1 });
  * so getting it crossed is not a silent mistake either.
  *
  * Those ranges are on purpose sometimes narrower than what normalizeDocument
- * clamps the same field to (brightness 5..100 against a clamp of 0..100); see
+ * clamps the same field to (brightness 5..200 against a clamp of 0..200); see
  * widenToInclude below for what happens when a document carries a value
  * outside them.
  *
@@ -252,7 +252,7 @@ export function describeInspector(doc, layerId) {
  * misreport, and hand back the field unchanged when it already fits.
  *
  * The ranges above are on purpose narrower than what normalizeDocument
- * clamps the same field to (brightness 5..100 against a clamp of 0..100,
+ * clamps the same field to (brightness 5..200 against a clamp of 0..200,
  * speed 1..100 against 0..100), so the app offers what the exported effect
  * offers. A document is under no such obligation: an effect exported by hand,
  * a project file edited in a text editor, or a future version with wider
