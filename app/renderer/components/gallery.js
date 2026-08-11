@@ -13,17 +13,22 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  * Dragging a file in was the ONLY entrance, which meant somebody who wanted a
  * plain colour or a gradient simply could not begin.
  *
- * All four tiles are real now. The three that were marked "Bald" / "Soon" when
- * this strip was first built were waiting on layer types the engine did not
- * have; it has them (src/engine/layers/solid.js and gradient.js), so the
- * badge, the dashed edge and the `disabled` are gone rather than left standing
- * as decoration. Nothing here decides what a tile MEANS: the picture tile
- * hands over a `File` and the other three hand over their own key, and
+ * Every tile is real. The ones that were marked "Bald" / "Soon" when this
+ * strip was first built were waiting on layer types the engine did not have;
+ * it has them (src/engine/layers/solid.js and gradient.js), so the badge, the
+ * dashed edge and the `disabled` are gone rather than left standing as
+ * decoration. Nothing here decides what a tile MEANS: the picture tile hands
+ * over a `File` and every other tile hands over its own key, and
  * app/renderer/main.js turns that into a document.
+ *
+ * The counts are deliberately not written down in this file. There were three
+ * starting tiles, then four, and there are six now beside the picture one —
+ * and a comment saying "the four tiles" outlives every one of those changes
+ * while quietly becoming false. TILES below is the count.
  *
  * WHAT A TILE SHOWS, AND WHY IT CANNOT LIE
  *
- * Each of the three tiles that start something draws its own output on itself:
+ * Every tile that starts something draws its own output on itself:
  * a real 320 x 200 canvas, the engine's own renderer, frame zero of the very
  * document pressing the tile produces. The document is not described here — it
  * is asked for (`starterDocument(kind)`, defined once in main.js and used by
@@ -54,7 +59,7 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  *
  * The obvious reading of the old note was "more entries in TILES". It was tried
  * and it is wrong, for a reason that only shows up once there is real content
- * in it: the four starting tiles are VERBS (press this and an effect begins)
+ * in it: a starting tile is a VERB (press this and an effect begins)
  * and a library tile is a NOUN (this is an effect that exists). One rail
  * holding both means a shelf whose items answer a click in two different ways,
  * told apart only by position — which is precisely the junk drawer this strip
@@ -75,8 +80,8 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  * not have to find their way past an empty shelf to begin, and the count on the
  * other tab is how somebody with effects learns they are there.
  *
- * WHAT A LIBRARY TILE SHOWS. The same rule as the three starting tiles, from
- * the other end: the picture is the effect. It is either the .png the export
+ * WHAT A LIBRARY TILE SHOWS. The same rule as the starting tiles, from the
+ * other end: the picture is the effect. It is either the .png the export
  * wrote beside the .html — the very file SignalRGB shows in its own list — or,
  * for an effect that has none, the effect's own first frame drawn through the
  * export's own cover pipeline in the main process (see the sf:library:cover
@@ -111,10 +116,10 @@ const ACCEPT = SUPPORTED_IMAGE_EXTENSIONS.join(',');
  *
  * `starts` is the kind of effect the tile begins, and it is what `onStart`
  * receives — the picture tile has none, because it opens a file dialog
- * instead. The keys are the window's own words for the three ways of
- * beginning; what each becomes in the document (a `solid` layer, a `gradient`
- * layer with shape linear or radial) is main.js's business, and deliberately
- * not spelled out here, so this file never has to know the document's shape.
+ * instead. The keys are the window's own words for the ways of beginning;
+ * what each becomes in the document (a `solid` layer, or a `gradient` layer of
+ * one shape or another) is main.js's business, and deliberately not spelled
+ * out here, so this file never has to know the document's shape.
  */
 export const TILES = Object.freeze([
   Object.freeze({ key: 'picture', labelKey: 'gallery.picture', glyph: 'drop', starts: null }),
@@ -135,9 +140,10 @@ export const TILES = Object.freeze([
  * business. Scaling it down in CSS is what a preview is.
  *
  * A renderer of its own per tile, rather than one shared between them: the
- * renderer keeps scratch state per layer id, and all three starting documents
- * name their layer the same thing, so a shared one would hand a gradient the
- * buffers it built for the solid.
+ * renderer keeps scratch state per layer id, and every starting document names
+ * its layer the same thing, so a shared one would hand a gradient the buffers
+ * it built for the solid — or hand one gradient shape the wheel it cached for
+ * another.
  */
 function paintTile(canvas, SF, document_) {
   canvas.width = SF.CANVAS_WIDTH;
@@ -251,15 +257,15 @@ export function mountGallery(container, {
       // It shows the empty stage instead — the same sign, the same sunk
       // surface, the same dashed edge the frame above wears while it is
       // waiting. Deliberately NOT a stand-in photograph and not a pale
-      // version of the other three: it is a picture of the place the file
+      // version of the tiles beside it: it is a picture of the place the file
       // goes, in the window's own vocabulary for exactly that.
       const blank = document.createElement('span');
       blank.className = 'tile-blank';
-      // The three starting tiles carry no glyph at all (their picture is the
-      // effect), so this only draws one where there genuinely is one. Without
-      // the guard, a caller that hands over no documents to draw — a stand-in
-      // DOM in a test — would fall in here for all four tiles and ask the icon
-      // set for a glyph called null.
+      // A starting tile carries no glyph at all (its picture is the effect),
+      // so this only draws one where there genuinely is one. Without the
+      // guard, a caller that hands over no documents to draw — a stand-in DOM
+      // in a test — would fall in here for every tile and ask the icon set for
+      // a glyph called null.
       if (tile.glyph) blank.append(icon(tile.glyph));
       art.append(blank);
     }

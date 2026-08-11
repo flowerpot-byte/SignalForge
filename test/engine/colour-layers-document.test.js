@@ -6,7 +6,8 @@ import assert from 'node:assert/strict';
 import {
   normalizeDocument, normalizeColor, motionKindsFor, colorAtPosition,
   DEFAULT_SOLID_COLOR, DEFAULT_GRADIENT_STOPS,
-  MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, MOTION_KINDS, SOLID_MOTION_KINDS, IMAGE_MOTION_KINDS
+  MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, MOTION_KINDS, SOLID_MOTION_KINDS, IMAGE_MOTION_KINDS,
+  DEFAULT_BANDS
 } from '../../src/engine/document.js';
 
 const layerOf = (raw) => normalizeDocument({ layers: [raw] }).doc.layers[0];
@@ -298,6 +299,61 @@ test('a document from before the colour layers normalises to exactly what it did
       bind: ['a1.motions.0.speed']
     }],
     assets: { picture: { kind: 'image', mime: 'image/jpeg', data: 'AAAA' } }
+  });
+});
+
+// The same promise, made about the layer type the new field actually landed
+// on. The check above is written out in full for an IMAGE layer, which is
+// exactly why it could not have caught `bands` appearing on a gradient: a
+// gradient document was never compared field for field with anything. A project
+// written before the repeating shapes existed carries a gradient with no
+// `bands` in it, and what it must normalise to is written out here in full,
+// `bands` included at its default -- so the next field added to a gradient
+// fails here rather than in somebody's file that stopped opening.
+test('a gradient from before the band count normalises to exactly what it must', () => {
+  const { doc, problems } = normalizeDocument({
+    name: 'Old Ramp',
+    description: 'a gradient from before the repeating shapes',
+    publisher: 'SignalForge',
+    brightness: 90,
+    layers: [{
+      id: 'a1',
+      type: 'gradient',
+      name: 'Gradient',
+      shape: 'radial',
+      angle: 45,
+      opacity: 0.7,
+      blend: 'lighten',
+      stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#00b3ff' }],
+      motions: [{ kind: 'drift', speed: 20, amount: 40 }]
+    }]
+  });
+
+  assert.deepEqual(problems, []);
+  assert.deepEqual(doc, {
+    version: 1,
+    name: 'Old Ramp',
+    description: 'a gradient from before the repeating shapes',
+    publisher: 'SignalForge',
+    brightness: 90,
+    saturation: 100,
+    greenMagenta: 0,
+    blueYellow: 0,
+    layers: [{
+      id: 'a1',
+      type: 'gradient',
+      name: 'Gradient',
+      visible: true,
+      opacity: 0.7,
+      blend: 'lighten',
+      shape: 'radial',
+      angle: 45,
+      bands: DEFAULT_BANDS,
+      stops: [{ at: 0, color: '#ff0066' }, { at: 100, color: '#00b3ff' }],
+      motions: [{ kind: 'drift', speed: 20, amount: 40 }]
+    }],
+    controls: [],
+    assets: {}
   });
 });
 

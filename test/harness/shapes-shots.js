@@ -108,11 +108,40 @@ async function main() {
   })()`);
   await shot('01-shelf-1040x700');
 
-  // Scrolled to the far end, so the three new tiles are photographed as well
-  // as counted.
-  await d.js(`(() => { const r = document.getElementById('gallery-rail'); r.scrollLeft = r.scrollWidth; })(), true`);
+  // Scrolled to the far end with a REAL wheel, so the tiles past the edge are
+  // photographed as well as counted — and so what is photographed is a rail a
+  // person could actually have reached.
+  //
+  // It used to be `rail.scrollLeft = rail.scrollWidth`, an assignment, and that
+  // proved nothing about scrolling: assigning scrollLeft moves any element with
+  // room to move, whatever the stylesheet says about overflow, and the picture
+  // beside it would have looked exactly the same on a rail nobody could scroll.
+  // The wheel goes through the same pipeline a mouse does — which is why the
+  // debugger is attached at all — and the numbers on either side of it are what
+  // says the gesture arrived.
+  await win.webContents.debugger.attach('1.3');
+  notes.scroll = { before: await d.js(`document.getElementById('gallery-rail').scrollLeft`) };
+  for (let turn = 0; turn < 12; turn += 1) {
+    const box = await d.box('#gallery-rail');
+    await d.send('Input.dispatchMouseEvent', {
+      type: 'mouseWheel',
+      x: box.cx,
+      y: box.cy,
+      // Sideways on a rail that scrolls sideways. deltaY is sent as well
+      // because a rail may be turning a vertical wheel into a horizontal
+      // scroll, which is what a mouse without a tilt wheel produces.
+      deltaX: 240,
+      deltaY: 240,
+      pointerType: 'mouse'
+    });
+    await wait(40);
+  }
   await wait(200);
-  await shot('02-shelf-scrolled-to-the-new-three');
+  notes.scroll.after = await d.js(`document.getElementById('gallery-rail').scrollLeft`);
+  notes.scroll.end = await d.js(`(() => { const r = document.getElementById('gallery-rail');
+    return r.scrollWidth - r.clientWidth; })()`);
+  notes.scroll.moved = notes.scroll.after > notes.scroll.before;
+  await shot('02-shelf-scrolled-by-a-real-wheel');
 
   /** Start an effect from a tile and wait for the stage to take it. */
   async function start(tile) {

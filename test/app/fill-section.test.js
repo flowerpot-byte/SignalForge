@@ -138,16 +138,30 @@ test('every path the column offers is one the document really has', () => {
   }
 });
 
-test('no colour slider offers a value the engine would clamp away', () => {
-  for (const field of fieldsOf({ type: 'gradient' })) {
-    if (field.type !== 'number') continue;
-    for (const value of [field.min, field.max]) {
-      const doc = docOf({ type: 'gradient' });
-      assert.ok(setByPath(doc, field.path, value), `${field.path} is not a writable path`);
-      assert.equal(getByPath(normalizeDocument(doc).doc, field.path), value,
-        `${field.path} = ${value} does not survive normalizeDocument`);
+// Every shape, and not just the one a fresh gradient happens to be. A default
+// gradient is linear, which is offered no band count at all (see the check
+// above), so a loop over that one layer walked straight past the very control
+// this guarantee was written for: the offered range and the engine's clamp
+// agreeing. `bands` was covered by nothing here until the shapes that carry it
+// were named.
+test('no colour slider offers a value the engine would clamp away, whatever the shape', () => {
+  const seen = new Set();
+  for (const shape of GRADIENT_SHAPES) {
+    const layer = { type: 'gradient', shape };
+    for (const field of fieldsOf(layer)) {
+      if (field.type !== 'number') continue;
+      seen.add(field.path.replace(/^layers\.0\./, ''));
+      for (const value of [field.min, field.max]) {
+        const doc = docOf(layer);
+        assert.ok(setByPath(doc, field.path, value), `${field.path} is not a writable path`);
+        assert.equal(getByPath(normalizeDocument(doc).doc, field.path), value,
+          `${field.path} = ${value} does not survive normalizeDocument on a ${shape} gradient`);
+      }
     }
   }
+  // And the loop above really did reach the control this was widened for,
+  // rather than passing over shapes that all offer the same three sliders.
+  assert.ok(seen.has('bands'), `the band count was never checked; only saw ${[...seen].join(', ')}`);
 });
 
 // --------------------------------------------- every section is headed
