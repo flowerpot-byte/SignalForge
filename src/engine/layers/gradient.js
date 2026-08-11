@@ -46,10 +46,26 @@ import {
  * WHAT MOTIONS DO HERE, AND IN WHICH ORDER
  * ---------------------------------------------------------------------------
  *
+ * THIS IS THE PROJECT'S CANONICAL STATEMENT OF THE ORDER, and it is here rather
+ * than in a document because this is the only layer type that performs all five
+ * — the other three files each say which of them they leave out and why, and
+ * each points back here rather than restating the list. (layers/image.js: no
+ * spin, a picture cannot be turned inside its own frame. layers/solid.js: no
+ * spin, drift or warp, a uniform field is invariant under all three.
+ * layers/shape.js: no warp, the warp buffer is opaque by construction.)
+ *
  * The order is fixed by KIND and never by the order the list happens to be in
  * (the same rule every layer type follows), and it is:
  *
  *      spin -> drift -> warp -> pulse -> breathe
+ *
+ * ONE KIND MEANS SOMETHING DIFFERENT ON ONE LAYER TYPE, and it is written down
+ * in both places so neither can quietly drift. Spin turns the field about the
+ * middle of the CANVAS here, because a gradient has no other centre to turn
+ * about; on a shape layer it turns the figure about ITS OWN centre, because a
+ * figure does have one and its own is what "the star is spinning" means. Its
+ * place in the order is the same on both, and for the same reason: it is the
+ * only motion that changes the geometry the rest are then built on.
  *
  *   spin     turns the whole arrangement about the middle of the canvas. It is
  *            FIRST because it is the only motion that changes the GEOMETRY the

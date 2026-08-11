@@ -344,18 +344,26 @@ exportierte Datei dieselben Pixel zeigen. Eine Hash-Funktion über den Partikel-
 | A11 Verzerrtes Bild | **Ja, ganz** | `warp` ist genau dieselbe Puffer-Mathematik (`src/engine/layers/warp-buffer.js`) |
 | A1 Partikelsystem | **Nein** | Ebenentyp fehlt. Mit gesätem Zufall aber **machbar**, weil die Bewegung linear in `t` ist |
 | A2 Nachzieh-Schleier | **Ja, mit einer Einschränkung** (seit 11.08., siehe C2) | Dokumentfeld `trail` (0 = aus = wie bisher). Sichtbar nur dort, wo eine Ebene die Fläche **nicht** deckend übermalt — also bei Deckkraft < 1, bei `atmen`/`pulsieren` oder (später) bei Partikeln |
-| A5 Figuren (Kreis/Ring/Stern/Herz) | **Nein** | Ebenentyp fehlt. Rein zeichnerisch, keine Hürde |
+| A5 Figuren (Kreis/Ring/Stern/Herz) | **Ja, ganz** (seit 11.08., siehe C4) | Ebenentyp `shape`; Kreis, Ring, Stern, Herz auf durchsichtigem Grund |
 | A6 Kachelraster | **Nein** | Ebenentyp oder Verlaufsform fehlt. Phase je Zelle aus gesätem Zufall |
 | A10 Text | **Nein** | Schriftrendering im Wirt ungeprüft |
 | A12 Ton- und Bildschirmreaktion | **Nein — und unter unseren Zusagen unmöglich** | siehe C8 |
 | A13 Tastendruck | **Nein** | technisch möglich (Wirt ruft `onCanvasTapped`), aber unvorschaubar |
 | A14 Rückruf bei Reglerwechsel | **Nein, brauchen wir aber nicht** | wir lesen die Regler in jedem Bild neu (`readControls`) |
 
-**Nachtrag 11.08.2026:** Zwei Zeilen dieser Tabelle sind seither erledigt — A4 (Farbrotation)
-ganz, A2 (Nachzieh-Schleier) mit einer Einschränkung, die bei C2 ausbuchstabiert ist. Die
-Zusammenrechnung darunter ist die von vor diesem Bau und wird bewusst nicht überschrieben:
-beide Bausteine zeigen ihren vollen Wert erst mit den Partikeln (C1), und bis dahin wäre eine
-höhere Zahl hier eine Behauptung statt einer Messung.
+**Nachtrag 11.08.2026:** Drei Zeilen dieser Tabelle sind seither erledigt — A4 (Farbrotation)
+ganz, A2 (Nachzieh-Schleier) mit einer Einschränkung, die bei C2 ausbuchstabiert ist, und
+A5 (Figuren) ganz. Die Zusammenrechnung darunter ist die von vor diesem Bau und wird bewusst
+nicht überschrieben: der volle Wert der ersten beiden zeigt sich erst mit den Partikeln (C1),
+und bis dahin wäre eine höhere Zahl hier eine Behauptung statt einer Messung.
+
+**Und eine Einschränkung ist mit A5 weggefallen, nicht nur eine Zeile dazugekommen.** Der
+Nachzieh-Schleier (C2) hatte bis dahin nichts, woran er sichtbar werden konnte: jede Ebene,
+die es gab, übermalte alle 320 × 200 deckend und verdeckte damit ihr eigenes Nachziehen. Die
+Formebene übermalt nichts — sie zeichnet eine Figur und lässt jeden Pixel daneben so, wie sie
+ihn vorgefunden hat. Eine wandernde Figur mit Schleier dahinter ist damit das erste, was in
+SignalForge eine Nachzieh-Spur aus dem Grund zeigt, aus dem es sie gibt. Gemessen im echten
+Fenster: mittlere Bildhelligkeit 1,88 ohne Schleier, 3,23 mit (`work/shape-layer-shots/`).
 
 **Zusammengerechnet:** Von 31 Effekten sind heute **etwa 6** ohne Abstriche nachbaubar
 (`Solid Color`, `Good Night!`, `Rainbow` näherungsweise, `Black Ice` ohne Tastendruck,
@@ -422,6 +430,11 @@ bei jedem Bild erneut auf den Nachzieh-Rest angewandt und der liefe binnen einer
 Weiße. Die Parität ist wie angekündigt umgestellt: Einzelbild-Vergleich für Dokumente ohne
 Schleier, Bildfolge ab Bild 0 für Dokumente mit (`test/export/parity.test.js`).
 
+**Nachtrag 11.08.2026, zweiter — die Einschränkung darunter ist aufgehoben.** Mit der
+Formebene (C4) gibt es endlich eine Ebene, die die Fläche nicht deckt, und damit ist der
+Schleier das, was er sein soll. Der Absatz darunter bleibt trotzdem stehen: er beschreibt
+richtig, warum der Schleier auf Verläufen und Bildern kaum zu sehen ist, und das gilt weiter.
+
 **Die Einschränkung, die vorher niemand ausgesprochen hatte:** Der Schleier liegt **unter**
 dem, was gerade gezeichnet wird — genau wie im Bestand. Eine Ebene, die alle 320 × 200 Pixel
 deckend übermalt, verdeckt damit ihr eigenes Nachziehen vollständig. Ein Verlauf tut genau
@@ -473,6 +486,38 @@ Ende — genau wie `Vibe` es macht, kein `shadowBlur` nötig.
 **Aufwand:** mittel. Herz und Stern sind je zehn Zeilen (`Vibe` liefert die Vorlage frei Haus).
 
 **Grenze:** keine.
+
+**Nachtrag 11.08.2026 — gebaut, mit drei Abweichungen von diesem Entwurf und einer Zugabe.**
+
+Gebaut ist der Ebenentyp `shape` mit `figure` (Kreis / Ring / Stern / Herz), `color`, `size`
+(Prozent der Bildhöhe), `position` (x/y in Prozent), `thickness` (Ringwand in Prozent des
+eigenen Radius) und `points` (Zacken, 3–12). Vier Kacheln in der Startleiste, eine je Figur.
+
+1. **Kein Vieleck.** Ein Vieleck ist derselbe Streckenzug wie der Stern mit
+   `innerRadius = outerRadius`, also kein eigener Baustein, sondern ein zweiter Regler am
+   Stern — und dessen ganze Spanne hieße „immer noch ein Stern". Es ist weggelassen, nicht
+   vergessen; wer es will, bekommt es als Verhältnis-Regler am Stern, nicht als fünfte Figur.
+2. **Keine weiche Kante.** Der Entwurf schlug sie als Radialverlauf mit `transparent` am Ende
+   vor, so wie `Vibe` es macht. Sie ist nicht gebaut, weil sie mit dem gebauten Ergebnis
+   zusammenstößt: eine weiche Kante ist eine Füllung mit Verlauf, und eine Figur, die als
+   Verlauf gefüllt wird, hat keine Farbe mehr, die SignalRGBs eigenes Farbfeld ändern kann.
+   Das ist eine eigene Entscheidung und gehört auf die Liste, nicht in diesen Bau geschmuggelt.
+3. **Kein Verlauf als Füllung**, aus demselben Grund.
+4. **Zugabe: `spin` je Figur entschieden.** `motionKindsFor` bekommt ein zweites Argument.
+   Ein Kreis und ein Ring sind um ihren eigenen Mittelpunkt drehsymmetrisch — die Drehung
+   kann kein Pixel ändern — also wird sie dort gar nicht erst angeboten, genau wie beim
+   Farbflächen-Fall. Bei Stern und Herz ist sie der Sinn der Sache.
+
+**Was nicht geht und warum, gemessen:** `warp` wird auf keiner Figur angeboten. `drawWarped`
+(`src/engine/layers/warp-buffer.js`) schreibt bauartbedingt `alpha = 255` in jeden Pixel —
+eine gewarpte Figur wäre also ein deckendes 320 × 200-Rechteck und würde jede Ebene darunter
+und ihr eigenes Nachziehen verdecken. Den Puffer alphafähig zu machen ist ein eigener Bau.
+
+**Kosten, gemessen** (`test/harness/shape-cost.js`, Median über 400 Bilder): jede Figur mit
+jeder angebotenen Bewegung liegt bei 0,00–0,01 ms je Bild, also unter 0,03 % eines Kerns.
+Der teuerste Einzelfall ist ein Stern bei Größe 200 mit 0,09 % (p95 von 20); mit Schleier 70
+dazu 0,57 %. Zum Vergleich steht in derselben Tabelle unverändert der Farbkreis beim Ziehen
+eines Farbstopps mit 15,34 %.
 
 ### C5. Kachelraster mit Phasenversatz
 

@@ -124,6 +124,77 @@ CASES.push({
   motions: [{ kind: 'warp', speed: 60, amount: 100 }]
 });
 
+// ---------------------------------------------------------------------------
+// The figures
+// ---------------------------------------------------------------------------
+//
+// Measured the same way and in the same run as the gradient shapes above, so
+// the two are comparable without anybody having to trust that two harnesses
+// were set up alike.
+//
+// What is worth knowing about a figure's cost is a different question from what
+// is worth knowing about a gradient's. A gradient fills every pixel of the
+// canvas whatever it is set to, so its cost barely moves with its settings; a
+// figure fills only what it covers, so SIZE is the axis that matters and it is
+// the one the rows below sweep. The worst a single shape layer can be asked for
+// is the largest figure with the most geometry in it, which is why the last
+// rows are a twelve-pointed star and a heart at the top of the size range.
+//
+// Warp is absent on purpose and not by oversight: it is offered on no figure at
+// all (see motionKindsFor in src/engine/document.js), because drawWarped writes
+// an opaque alpha into every pixel and would take away the one thing this layer
+// type has. Measuring it would be measuring something nobody can choose.
+const FIGURE_COLOR = '#ff0066';
+const figureCase = (name, layer) => CASES.push({
+  name,
+  layer: { id: 'fill', type: 'shape', color: FIGURE_COLOR, motions: [], ...layer }
+});
+
+// Each figure standing still at the default size, so the figure's own cost is
+// separated from the motion's and from the size's.
+for (const figure of ['circle', 'ring', 'star', 'heart']) {
+  figureCase(`${figure} (still)`, { figure, size: 50 });
+}
+// Each figure with each motion it is OFFERED, one at a time. Spin is on the
+// list for the star and the heart only, which is the whole point of that list.
+for (const figure of ['circle', 'ring', 'star', 'heart']) {
+  const kinds = figure === 'star' || figure === 'heart'
+    ? ['drift', 'spin', 'pulse', 'breathe']
+    : ['drift', 'pulse', 'breathe'];
+  for (const kind of kinds) {
+    figureCase(`${figure} + ${kind}`, {
+      figure, size: 50, motions: [{ kind, speed: 60, amount: 80 }]
+    });
+  }
+}
+// The size sweep, on the figure with the most outline to rasterise.
+for (const size of [1, 100, 200]) {
+  figureCase(`star at size ${size}`, { figure: 'star', size, points: 5 });
+}
+// The worst a single shape layer can be asked for: the biggest figure, the most
+// points there are, and a motion that turns it so nothing about it can be
+// cached across frames.
+figureCase('star, size 200, 12 points + spin', {
+  figure: 'star', size: 200, points: 12, motions: [{ kind: 'spin', speed: 100, amount: 100 }]
+});
+figureCase('heart, size 200 + drift + spin', {
+  figure: 'heart', size: 200,
+  motions: [{ kind: 'drift', speed: 100, amount: 100 }, { kind: 'spin', speed: 100, amount: 100 }]
+});
+// And the one case that is about the TRAIL rather than about the figure: a
+// wake is the reason this layer type is worth having, and it is not free — the
+// engine composites into a canvas of its own and copies it back on every frame.
+// Nothing else in this table has that switched on, so without this row the
+// combination that people will actually build would be unmeasured.
+CASES.push({
+  name: 'drifting star + trail 70',
+  trail: 70,
+  layer: {
+    id: 'fill', type: 'shape', figure: 'star', size: 50, color: FIGURE_COLOR,
+    motions: [{ kind: 'drift', speed: 70, amount: 100 }]
+  }
+});
+
 const FRAMES = 400;
 
 const MEASURE = `(function (cases, frames) {
@@ -134,8 +205,13 @@ const MEASURE = `(function (cases, frames) {
   var ctx = canvas.getContext('2d', { willReadFrequently: true });
 
   function run(entry) {
-    var raw = { name: 'Cost', layers: [{ id: 'fill', type: 'gradient', shape: entry.shape,
-      bands: entry.bands, stops: entry.stops, angle: 20, motions: entry.motions }] };
+    // A case either names a gradient shape (the original form, kept so every
+    // row measured before the shape layer existed is measured the same way) or
+    // hands over a whole layer of its own. The second form is what let the
+    // figures in without a second harness beside this one.
+    var layer = entry.layer || { id: 'fill', type: 'gradient', shape: entry.shape,
+      bands: entry.bands, stops: entry.stops, angle: 20, motions: entry.motions };
+    var raw = { name: 'Cost', layers: [layer], trail: entry.trail || 0 };
     var doc = SF.normalizeDocument(raw).doc;
     var renderer = SF.createRenderer();
     var assets = new Map();

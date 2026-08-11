@@ -97,8 +97,10 @@ import { driftSwing, DRIFT_CENTRE_REACH } from '../motion/drift.js';
  * ---------------------------------------------------------------------------
  *
  * The order is fixed by KIND and never by the order the list happens to be in
- * — the same rule every layer type in this engine follows (the whole order is
- * written out in layers/gradient.js) — and it is:
+ * — the same rule every layer type in this engine follows. The project's whole
+ * order, and the reasoning behind it, is written out once in
+ * layers/gradient.js, which is the only layer type that performs all five; this
+ * is that order with the one kind this file does not offer taken out of it:
  *
  *      spin -> drift -> pulse -> breathe
  *
