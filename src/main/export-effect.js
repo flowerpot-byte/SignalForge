@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { buildEffectHtml } from '../export/build-effect.js';
 import { effectControls, withLiveMotion } from '../export/effect-controls.js';
 import { normalizeDocument } from '../engine/document.js';
+import { COVER_EXTENSION } from './cover-image.js';
 
 /** The extension SignalRGB looks for. */
 const EFFECT_EXTENSION = 'html';
@@ -67,7 +68,16 @@ export function effectFileName(name) {
  * `io` is injected so the whole thing can be checked against a filesystem
  * that lives in a Map — including the overwrite cases, which are exactly the
  * ones nobody wants to rehearse on a real effects folder. It needs
- * `exists(path)`, `mkdir(folder)`, `writeFile(path, text)` and `size(path)`.
+ * `exists(path)`, `mkdir(folder)`, `writeFile(path, text)`,
+ * `writeBinary(path, bytes)` and `size(path)`. The cover image goes through
+ * that same seam, so no test needs a disk to prove anything about it.
+ *
+ * `renderCover(doc)` hands back the tile picture as bytes, or throws. It is a
+ * parameter rather than an import because drawing it needs a window: the app
+ * passes renderCoverPng (src/main/cover-image.js), which renders here inside
+ * Electron, and a unit test passes something that returns four bytes. Left
+ * out, no cover is written at all — which is what every caller that has no
+ * canvas to offer should do.
  *
  * `folder` is decided by the caller and only by the caller — the detected
  * SignalRGB folder or one the user picked in a main-process dialog. Nothing
@@ -77,17 +87,24 @@ export function effectFileName(name) {
  * already there" is a question to ask the user, not a failure, and the caller
  * has to be able to tell it apart from a genuine write error.
  *
- *   { ok: true,  path, bytes, name }        `name` is the sanitised name actually
- *                                            used for the file, without its extension —
+ *   { ok: true,  path, bytes, name,          `name` is the sanitised name actually
+ *                coverPath, coverMessage }   used for the file, without its extension —
  *                                            the caller needs it to echo back into the
  *                                            name field when the document's own name
  *                                            had to be cleaned up before it could be
- *                                            written
+ *                                            written. `coverPath` is the tile picture
+ *                                            that was written, or null; `coverMessage`
+ *                                            says why there is none, or null. Both are
+ *                                            set: an effect whose tile is missing is
+ *                                            still an exported effect, and the caller
+ *                                            has to be able to say both things at once
  *   { ok: false, reason: 'exists', path }   the file is there and force was not set
  *   { ok: false, reason: 'name' }           nothing usable left in the document's name
  *   { ok: false, reason: 'empty' }          nothing to export yet
  */
-export function exportEffect({ doc, folder, engineSource, lang = 'en', force = false, io }) {
+export async function exportEffect({
+  doc, folder, engineSource, lang = 'en', force = false, io, renderCover = null
+}) {
   if (!folder) throw new Error('exportEffect needs a target folder');
   if (!engineSource) throw new Error('exportEffect needs the engine bundle');
 
@@ -107,20 +124,64 @@ export function exportEffect({ doc, folder, engineSource, lang = 'en', force = f
   if (normalized.layers.length === 0) return { ok: false, reason: 'empty' };
 
   const path = join(folder, `${fileName}.${EFFECT_EXTENSION}`);
+  // The tile picture SignalRGB shows for this effect: same folder, same base
+  // name, different extension — that IS the whole mechanism (proven on Max'
+  // own machine on 11.08.2026, see docs/messung-titelbilder.md). Built from
+  // the same `fileName` as the .html on the line above and never from
+  // anything else, so a document renamed between two exports produces a new
+  // PAIR rather than a new .html beside the old name's picture.
+  const coverPath = join(folder, `${fileName}.${COVER_EXTENSION}`);
 
   // Asked before anything at all is created, so a refusal leaves the
-  // filesystem exactly as it was — no folder, no temp file, nothing.
+  // filesystem exactly as it was — no folder, no temp file, nothing. The
+  // question is asked of the .html alone: it is the effect, the picture is
+  // decoration, and making a leftover .png able to block an export would mean
+  // an effect somebody can no longer save because of a file SignalRGB does not
+  // even list on its own.
   if (io.exists(path) && !force) return { ok: false, reason: 'exists', path };
 
   const layerId = normalized.layers[0].id;
   const prepared = withLiveMotion(normalized, layerId);
-  const html = buildEffectHtml({
-    doc: { ...prepared, controls: effectControls(prepared, layerId) },
-    engineSource,
-    lang
-  });
+  const finished = { ...prepared, controls: effectControls(prepared, layerId) };
+  const html = buildEffectHtml({ doc: finished, engineSource, lang });
+
+  // Drawn from the very document that is about to be written, before either
+  // file exists, so a cover that cannot be drawn costs nothing but its own
+  // absence.
+  let cover = null;
+  let coverMessage = null;
+  if (renderCover) {
+    try {
+      cover = await renderCover(finished);
+    } catch (error) {
+      coverMessage = String(error.message || error);
+    }
+  }
 
   io.mkdir(folder);
+
+  // The picture first, the effect second. SignalRGB watches this folder live
+  // (docs/erkenntnisse-signalrgb-motor.md: a new file appears in its list at
+  // once), so writing the .html last means the effect never exists in that
+  // list for even an instant without its tile. And a picture that cannot be
+  // written must not cost the effect: it is reported, and the export goes on.
+  let coverWritten = null;
+  if (cover) {
+    try {
+      io.writeBinary(coverPath, cover);
+      coverWritten = coverPath;
+    } catch (error) {
+      coverMessage = String(error.message || error);
+    }
+  }
+
   io.writeFile(path, html);
-  return { ok: true, path, bytes: io.size(path), name: fileName };
+  return {
+    ok: true,
+    path,
+    bytes: io.size(path),
+    name: fileName,
+    coverPath: coverWritten,
+    coverMessage
+  };
 }

@@ -2,7 +2,7 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { existsSync, mkdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +10,8 @@ import { buildEffectHtml } from '../src/export/build-effect.js';
 import { effectControls } from '../src/export/effect-controls.js';
 import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
+import { renderCoverPng } from '../src/main/cover-image.js';
+import { writeFileAtomic } from '../src/main/write-file-atomic.js';
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS,
   motionKindsFor, normalizeColor, normalizeDocument
@@ -293,9 +295,36 @@ async function main() {
   }
 
   const html = buildEffectHtml({ doc, engineSource, lang: 'en' });
-  writeFileSync(target, html, 'utf8');
+
+  // The tile picture SignalRGB shows for this effect, beside the effect and
+  // under the same base name (docs/messung-titelbilder.md). Drawn by the same
+  // renderCoverPng the app's export button uses, so both entrances produce the
+  // same tile — but this process is plain Node, so it has to spawn an Electron
+  // to find a canvas at all.
+  //
+  // If that fails — no Electron on this machine, a headless box with no
+  // display, a broken engine bundle — it costs the picture and nothing else.
+  // Saying so out loud beats either silence (a missing tile nobody can
+  // explain) or refusing to export (an effect nobody gets because its
+  // decoration could not be drawn).
+  const coverTarget = join(folder, `${name}.png`);
+  let cover = null;
+  try {
+    cover = await renderCoverPng(doc);
+  } catch (error) {
+    console.error(`No cover image: ${String(error.message || error)}`);
+    console.error('The effect itself is unaffected; SignalRGB will show its usual placeholder tile.');
+  }
+
+  // The picture first, so the effect never appears in SignalRGB's live-watched
+  // folder without its tile — same order as src/main/export-effect.js. Both
+  // through the same atomic write the app uses, for the same reason: this
+  // folder is being watched while it is being written to.
+  if (cover) writeFileAtomic(coverTarget, cover);
+  writeFileAtomic(target, html);
   const kb = (statSync(target).size / 1024).toFixed(1);
   console.log(`Wrote ${target} (${kb} KB)`);
+  if (cover) console.log(`Wrote ${coverTarget} (${(statSync(coverTarget).size / 1024).toFixed(1)} KB)`);
   console.log('If SignalRGB does not list it, restart SignalRGB (see docs/erkenntnisse-signalrgb-motor.md).');
 }
 

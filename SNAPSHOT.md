@@ -43,6 +43,10 @@ Nothing is running in the background. The loopback probe server on port 47821 wa
 - **An own lighting application on top of OpenRGB was considered and deliberately deferred**, at Max' decision on 2026-08-09: he wants a finished effect builder in reasonable time first. Findings and effort estimate are preserved in section 9b of the specification. Do not reopen it unless Max raises it.
 - **Licence GPLv3, code and commits in English, docs in German, interface bilingual.** Name SignalForge chosen by Max after being told it sits close to the SignalRGB trademark.
 
+## Since build plan 2 (11.08.2026)
+
+- **Every export now writes its own tile picture.** `<Name>.png` beside `<Name>.html`, 512 x 288, frame zero of that very document through the real engine bundle — the app's export button and `bin/sfexport.js` both, through one shared renderer (`src/main/cover-image.js`). The mechanism is proven, not assumed: Max saw the probe tile in his own SignalRGB list on 11.08.2026 (`docs/messung-titelbilder.md`). Rendered in a hidden window in the main process; the renderer never sees a path. If the picture cannot be drawn or written, the effect is still exported and the reason is said out loud (`export.noCover`).
+
 ## Since build plan 2 (10.08.2026)
 
 Max said three times that the window looked cheap, then: *"vergiss glass morphism aber designe es genauso wie signal rgb"*, plus too much blank space and missing icons. Also: no way to make an effect without a picture, and he could not find SignalForge in Windows search.
@@ -64,7 +68,7 @@ Max said three times that the window looked cheap, then: *"vergiss glass morphis
 
 1. **His verdict on the design.** He is the criterion; it has been rebuilt four times against his words.
 2. **His own acceptance run** — `docs/abnahme-app.md`, section left blank on purpose. Nobody may fill it in for him.
-3. **The thumbnail probe is still in his effects folder** — `SF Probe Mit Bild.html/.png` and `SF Probe Ohne Bild.html`, placed with his approval. One look at SignalRGB's effect list answers whether custom cover images are possible at all. **Remove all three as soon as he has looked.**
+3. ~~The thumbnail probe~~ — **done, 11.08.2026.** He looked: the magenta "SF" tile rendered in his own effect list, so a PNG with the same base name beside the `.html` IS the mechanism (`docs/messung-titelbilder.md`). All three probe files are removed and every export now writes its own cover image. **Nothing is owed here except one thing: his existing effects have no tile until they are exported again** — `SF Bergabend.html` and the three `Verlauf*.html` predate the feature.
 4. **`appId` is a guess:** `de.maxblu.signalforge`. Settle it before the first real install; it is hard to change afterwards.
 5. **Unmeasured in SignalRGB itself:** `type="color"`, the `shape` combobox, and the two negative-minimum sliders (`greenMagenta`, `blueYellow`, −100..100 — the first of their kind this project ships).
 
@@ -72,4 +76,4 @@ Max said three times that the window looked cheap, then: *"vergiss glass morphis
 
 - **A visible-window pass is owed.** The colour dialog end to end, Tab order through the rebuilt window, the canvas focus ring, the `aria-live` crop announcement with a real screen reader, drag-and-drop, and `test/harness/walkthrough.js` were all left unverified *because opening a window was forbidden*. The full list is in the whole-diff review (`.superpowers/sdd/`). Run it when Max is away from the machine.
 - **Preparing a picture in the packaged layout is settled, not assumed.** A whole-diff review claimed `prepare-image.js`'s default window factory had only ever run from a source checkout; that was **wrong**, and it was checked rather than believed. It now runs from the real `release/win-unpacked/SignalForge.exe` (`app.isPackaged: true`) against its own `app.asar`, with nothing injected, and `test/main/packaged-factory.test.js` packs a real `.asar` and holds it there. First start against a temp Documents folder resolves `detected` when `WhirlwindFX\Effects` exists and `none` when it does not; a packaged export writes a complete, animating effect. What is still untried: the installer itself (Start-menu entry, uninstall, SmartScreen) and a real drag gesture on the packaged app — Chromium will not drag onto a hidden window, and the same import path is covered through the file input.
-- Build plan 3 material: several layers on top of each other, shape layers, video as an image sequence, own cover images.
+- Build plan 3 material: several layers on top of each other, shape layers, video as an image sequence. (Cover images were on this list and are now built — see `docs/messung-titelbilder.md`, section 5.)

@@ -823,7 +823,16 @@ async function boot() {
       // left out: docs/erkenntnisse-signalrgb-motor.md records, measured,
       // that a new file appears in SignalRGB's list at once.
       const kb = (result.bytes / 1024).toFixed(1);
-      showMessage(`${i18n.t('export.done')}: ${result.path} (${kb} KB)`);
+      // The effect is saved either way; the tile picture beside it is the one
+      // part that can fail on its own (it needs a window to draw in). Saying
+      // so is the whole point — a tile that silently did not appear would
+      // leave somebody looking for it in SignalRGB with no idea why.
+      if (result.coverMessage) {
+        showMessage(`${i18n.t('export.done')}: ${result.path} (${kb} KB) — `
+          + `${i18n.t('export.noCover')}: ${result.coverMessage}`, true);
+      } else {
+        showMessage(`${i18n.t('export.done')}: ${result.path} (${kb} KB)`);
+      }
       // The name field must show what actually ended up on disk. When the
       // document's own name held a character effectFileName had to clean up
       // (a "/", a ":", ...), leaving the original text in the field would

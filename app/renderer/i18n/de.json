@@ -78,6 +78,7 @@
   "export.sourceDetected": "erkannt",
   "export.sourceConfigured": "gewählt",
   "export.noFolder": "Kein SignalRGB-Ordner gefunden",
+  "export.noCover": "Titelbild konnte nicht erzeugt werden",
   "export.done": "In SignalRGB gespeichert",
   "export.failed": "Effekt konnte nicht gespeichert werden",
   "export.exists": "Diese Datei gibt es schon. Überschreiben?",

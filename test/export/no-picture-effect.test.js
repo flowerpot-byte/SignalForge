@@ -115,9 +115,9 @@ test('a layer with no motions still gets live motion controls, whatever its type
 
 // ---------------------------------------------------- the app's own export
 
-test('the app\'s export button writes a colour effect through the same shared list', () => {
+test('the app\'s export button writes a colour effect through the same shared list', async () => {
   const written = new Map();
-  const result = exportEffect({
+  const result = await exportEffect({
     doc: { name: 'Just Blue', layers: [{ id: 'a1', type: 'solid', color: '#0000ff' }] },
     folder: 'F',
     engineSource: 'window.SignalForgeEngine = {};',
@@ -125,6 +125,7 @@ test('the app\'s export button writes a colour effect through the same shared li
       exists: () => false,
       mkdir: () => {},
       writeFile: (path, text) => written.set(path, text),
+      writeBinary: (path, bytes) => written.set(path, bytes),
       size: () => 1
     }
   });

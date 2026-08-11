@@ -165,6 +165,15 @@ async function main() {
         return { width: c.width, height: c.height, pixels: btoa(s) };
       })()`);
       results.push({ name: job.name, ...value });
+    } else if (job.kind === 'png') {
+      // Read a picture file back — a cover image an export wrote, decoded on
+      // its own terms so its size and its pixels can both be checked.
+      await win.loadFile(path.join(__dirname, 'page.html'));
+      const dataUrl = `data:image/png;base64,${fs.readFileSync(job.file).toString('base64')}`;
+      const value = await win.webContents.executeJavaScript(
+        `window.__decode(${JSON.stringify(dataUrl)})`
+      );
+      results.push({ name: job.name, ...value });
     } else {
       await win.loadFile(path.join(__dirname, 'page.html'));
       const value = await win.webContents.executeJavaScript(

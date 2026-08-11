@@ -4,9 +4,8 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import {
-  readFileSync, writeFileSync, mkdirSync, renameSync, unlinkSync, existsSync, statSync
-} from 'node:fs';
+import { readFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { writeFileAtomic } from '../src/main/write-file-atomic.js';
 import { homedir } from 'node:os';
 import { createSettings, FALLBACK_LANGUAGE } from '../src/main/settings.js';
 import {
@@ -16,6 +15,7 @@ import { SINGLE_INSTANCE_TEST_ENV } from '../src/main/single-instance.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
 import { exportEffect } from '../src/main/export-effect.js';
+import { renderCoverPng } from '../src/main/cover-image.js';
 import { normalizeDocument } from '../src/engine/document.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -101,28 +101,6 @@ function currentTarget() {
     exists: (p) => existsSync(p),
     ...sandbox()
   });
-}
-
-// Write via a temp file + rename so a crash mid-write can never leave a
-// truncated, unreadable settings.json behind — the rename is atomic, the
-// old file stays intact until the new one is fully on disk.
-function writeFileAtomic(file, text) {
-  const tempFile = `${file}.${process.pid}.tmp`;
-  writeFileSync(tempFile, text, 'utf8');
-  try {
-    renameSync(tempFile, file);
-  } catch (err) {
-    // The temp file is now orphaned garbage in userData — clean it up on a
-    // best-effort basis (it may already be gone, or removal may itself fail)
-    // before re-throwing the original error to the caller.
-    try {
-      unlinkSync(tempFile);
-    } catch {
-      // Nothing more we can do about the leftover temp file; the original
-      // error below is the one that matters to the caller.
-    }
-    throw err;
-  }
 }
 
 /**
@@ -373,6 +351,10 @@ const exportIo = {
   exists: (path) => existsSync(path),
   mkdir: (folder) => mkdirSync(folder, { recursive: true }),
   writeFile: (path, text) => writeFileAtomic(path, text),
+  // The tile picture, through the very same atomic write and for the very
+  // same reason — SignalRGB must never read a half-written PNG out of a
+  // folder it is watching.
+  writeBinary: (path, bytes) => writeFileAtomic(path, bytes),
   size: (path) => statSync(path).size
 };
 
@@ -410,7 +392,14 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
       // silently hand a German user an English effect.
       lang: settings.get('language') || FALLBACK_LANGUAGE,
       force: options?.force === true,
-      io: exportIo
+      io: exportIo,
+      // Drawn here in the main process, in a window nobody sees, from the
+      // document that is being written. Deliberately NOT sent over from the
+      // renderer as bytes: the window's own canvas is scaled for the screen
+      // and its frame is wherever the live preview happens to have got to,
+      // while this is the effect's first frame at the tile's own size. The
+      // renderer stays out of file business entirely, as it must.
+      renderCover: (document_) => renderCoverPng(document_)
     });
   } catch (error) {
     return { ok: false, reason: 'failed', message: String(error.message || error) };

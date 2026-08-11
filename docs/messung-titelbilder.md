@@ -378,7 +378,41 @@ Sondiereffekt und keine Bedienung von SignalRGB ohne Max' ausdrückliche Zustimm
 
 ---
 
-## 5. Folge für den Bau: was `build-effect.js` / `export-effect.js` ändern müssten
+## 5. Folge für den Bau — umgesetzt am 11.08.2026
+
+**Was jetzt gebaut ist** (die Vorhersage darunter ist von 10.08. und stimmte im Wesentlichen):
+
+- Jeder Export schreibt zwei Dateien: `<Name>.html` und `<Name>.png`, beide aus **demselben**
+  bereinigten Grundnamen gebildet (`src/main/export-effect.js`) — ein umbenannter Effekt erzeugt
+  also ein neues **Paar** und nie eine neue HTML neben dem alten Bild.
+- **Welches Bild:** Bild 0 (t = 0) genau dieses Dokuments, gezeichnet vom echten Motor
+  (`dist/engine.bundle.js`, derselbe, der die Vorschau, die Galeriekacheln und den fertigen Effekt
+  antreibt). Kein gemaltes Symbol, keine zweite Zeichenroutine — die Kachel kann also nicht zeigen,
+  was der Effekt nicht tut. t = 0 ist bei einer Bewegung die ehrliche Wahl: es ist das Bild, mit dem
+  der Effekt tatsächlich anfängt, statt eines später herausgesuchten, schmeichelhafteren.
+- **Größe:** 512 × 288, genau die Größe aus dieser Messung und aus der bestätigten Probe. Gezeichnet
+  wird bei den echten 320 × 200 der Zeichenfläche und dann auf Kachelgröße vergrößert — größer
+  zeichnen ginge nicht, ohne zu lügen, weil der Abschlussdurchgang des Motors (`applyFinish`)
+  die Bildpunkte fest mit 320 × 200 zurückliest. Weil 8:5 nicht 16:9 ist, wird mittig
+  **beschnitten** (volle Breite, die mittleren 90 % der Höhe) statt mit schwarzen Balken
+  eingepasst: Balken sähen aus wie ein Symbol in einer Kachel, und SignalRGBs eigene Kacheln sind
+  randlos. Alle vier Ecken sind deshalb deckend.
+- **Wo gezeichnet wird:** im Hauptprozess, in einem Fenster, das nie sichtbar wird
+  (`src/main/cover-image.js`) — innerhalb von Electron direkt, außerhalb (Kommandozeile) über einen
+  gestarteten zweiten Electron, genau wie beim Bild-Import. Der Renderer schickt **keine** Bilddaten
+  und erst recht keinen Pfad: Dateinamen vergibt weiterhin nur der Hauptprozess.
+- **Wenn das Bild nicht entsteht** (kein Electron, Fenster lässt sich nicht öffnen, Schreibfehler):
+  Der Effekt wird trotzdem geschrieben, und es steht als Meldung im Fenster bzw. auf der
+  Kommandozeile, warum es kein Titelbild gibt. Lieber ein Effekt ohne Kachel als kein Effekt.
+
+Belegt ist das nicht durch Zusehen, sondern durch Messen: `test/main/cover-image.test.js` exportiert
+einen Bild- und einen Verlaufseffekt, liest die geschriebenen PNGs zurück und vergleicht sie
+punktweise mit dem, was der Motor für das im Effekt eingebettete Dokument bei t = 0 zeichnet
+(Abweichung 0,0 von 255) — und zusätzlich mit dem Bild des **anderen** Effekts, das deutlich
+abweichen muss (63 von 255), damit ein schwarzes oder immer gleiches Bild den Test nicht bestehen
+kann.
+
+### Die Vorhersage vom 10.08.2026 (unverändert stehen gelassen)
 
 Unabhängig vom Ausgang der Probe aus Abschnitt 2 lässt sich schon jetzt sagen, **was** eine
 Umsetzung anfassen müsste, falls die Nachbardatei-Hypothese sich bestätigt — und was sie am

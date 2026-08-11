@@ -40,4 +40,29 @@
   };
 
   window.__grab = grab;
+
+  /**
+   * Read a finished PNG back into pixels, on a canvas of the picture's own
+   * size — not the engine's. Used to check what an export actually wrote into
+   * a folder, which is the only way to tell a real render from a plausible
+   * file that happens to exist.
+   */
+  window.__decode = function (dataUrl) {
+    return new Promise(function (resolve, reject) {
+      const image = new Image();
+      image.onload = function () {
+        const c = document.createElement('canvas');
+        c.width = image.naturalWidth;
+        c.height = image.naturalHeight;
+        const g = c.getContext('2d', { willReadFrequently: true });
+        g.drawImage(image, 0, 0);
+        const d = g.getImageData(0, 0, c.width, c.height).data;
+        let s = '';
+        for (let i = 0; i < d.length; i += 1) s += String.fromCharCode(d[i]);
+        resolve({ width: c.width, height: c.height, pixels: btoa(s) });
+      };
+      image.onerror = function () { reject(new Error('the picture could not be decoded')); };
+      image.src = dataUrl;
+    });
+  };
 </script>

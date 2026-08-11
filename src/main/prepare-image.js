@@ -1,16 +1,14 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { spawn } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import { join, extname, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { runElectronHelper, resolveElectronBin } from './electron-helper.js';
 
 const require_ = createRequire(import.meta.url);
 const here = dirname(fileURLToPath(import.meta.url));
-const root = dirname(dirname(here));
 
 /**
  * The page a canvas lives in — the same one src/main/prepare-image-runner.cjs
@@ -19,37 +17,12 @@ const root = dirname(dirname(here));
 export const ENGINE_HOST = join(here, 'engine-host.html');
 
 /**
- * The path to the Electron binary to spawn as the helper process.
- *
- * `require('electron')` is not stable across callers: run under plain
- * Node.js (the test suite, bin/sfexport.js) the "electron" npm package
- * resolves to a string — the path to the electron executable. But when this
- * very module is loaded *inside* a running Electron main process (as
- * app/main.js does for the drag-and-drop import), Electron's own require
- * hook shadows that package with its built-in API namespace object instead,
- * so `require('electron')` there returns `{ app, BrowserWindow, ... }`, not
- * a path. Handing that object to `spawn()` as the command fails with
- * "The \"file\" argument must be of type string" — a failure no test caught
- * because none of them called prepareImageFile from inside a live Electron
- * process; a real drag-and-drop through the built app did.
- * `versions.electron` is only set when the current process actually is
- * Electron, in which case `execPath` is the very binary already running and
- * is exactly what a helper process should also run. `versions`/`execPath`/
- * `requireElectron` are injectable so this can be proven for both contexts
- * without actually needing to run inside one.
- *
- * Since prepareImageInProcess exists, a caller that is already inside Electron
- * never reaches the spawn at all, so the first branch below is a safety net
- * rather than a live path — it stays because the alternative is a function that
- * is right only as long as nobody calls it from the wrong place again.
+ * Re-exported rather than defined here: it moved to electron-helper.js, next
+ * to the spawn that is its only reason for existing, once a second job
+ * (rendering a cover image) needed the same binary. This keeps the name where
+ * everything that already knows it looks for it.
  */
-export function resolveElectronBin(
-  { versions = process.versions, execPath = process.execPath, requireElectron = () => require_('electron') } = {}
-) {
-  return versions.electron ? execPath : requireElectron();
-}
-
-const electronBin = resolveElectronBin();
+export { resolveElectronBin };
 
 const MIME_BY_EXTENSION = {
   '.png': 'image/png',
@@ -125,87 +98,15 @@ export async function prepareImageFile(imagePath, options = {}, {
 
   if (inElectron) return inProcess({ dataUrl, options });
 
-  const dir = mkdtempSync(join(tmpdir(), 'signalforge-prepare-'));
-  const requestFile = join(dir, 'request.json');
-  const outFile = join(dir, 'asset.json');
-  writeFileSync(requestFile, JSON.stringify({ dataUrl, options }), 'utf8');
-
-  try {
-    await new Promise((resolve, reject) => {
-      const child = spawn(electronBin, [
-        join(root, 'src', 'main', 'prepare-image-runner.cjs'), requestFile, outFile
-      ], { stdio: ['ignore', 'ignore', 'pipe'] });
-      let stderr = '';
-      let settled = false;
-
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
-
-      // 'close' alone is not enough: if some descendant process keeps a
-      // pipe open after the child itself has exited (a known Chromium
-      // multi-process quirk), 'close' never fires and this promise would
-      // hang forever. This timeout, paired with the settled guard below,
-      // is what test/harness/render.js uses for the identical risk.
-      const timer = setTimeout(() => {
-        if (settled) return;
-        settled = true;
-        child.kill();
-        reject(new Error(`prepare timed out after ${timeoutMs}ms\n${stderr}`));
-      }, timeoutMs);
-
-      child.on('error', (error) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        reject(error);
-      });
-
-      // 'close' (not 'exit') waits for stdio to finish draining, so stderr
-      // above is guaranteed complete by the time we read it here. Same
-      // reasoning as test/harness/render.js.
-      child.on('close', (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        if (code === 0) { resolve(); return; }
-
-        // prepare-image-runner.cjs writes the real error into outFile
-        // before exiting non-zero. Surface that instead of the bare exit
-        // code, without letting a bad outFile mask the original failure.
-        if (existsSync(outFile)) {
-          try {
-            const raw = JSON.parse(readFileSync(outFile, 'utf8'));
-            if (raw && raw.error) {
-              reject(new Error(`prepare failed (${code}): ${raw.error}`));
-              return;
-            }
-          } catch {
-            // outFile wasn't valid JSON (partial write); fall through.
-          }
-        }
-        reject(new Error(`prepare failed (${code})\n${stderr}`));
-      });
-    });
-
-    const asset = JSON.parse(readFileSync(outFile, 'utf8'));
-    if (asset.error) throw new Error(asset.error);
-    return asset;
-  } finally {
-    // On the timeout path the child is killed rather than allowed to exit
-    // on its own, so on Windows its handles on files in `dir` can take a
-    // moment to actually release; retry past that instead of leaking the
-    // directory. `force: true` only swallows ENOENT, not EBUSY/EPERM once
-    // retries are exhausted, so rmSync can still throw here. A throw from a
-    // finally block replaces whatever the try block was about to
-    // resolve/reject with, which would hide the real outcome (e.g. the
-    // "prepare timed out" rejection this cleanup exists for) behind a
-    // filesystem error. Guard it the same way the 'close' handler above
-    // guards its own outFile parsing, so a cleanup failure can never mask
-    // the original result.
-    try {
-      rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
-    } catch {
-      // Best-effort cleanup only; the caller needs the real outcome above,
-      // not a leftover-temp-directory error.
-    }
-  }
+  // The spawn, its timeout, its cleanup and the way it digs the runner's own
+  // error out of the result file all live in electron-helper.js — the same
+  // plumbing src/main/cover-image.js needs, kept in one place rather than in
+  // two that drift.
+  return runElectronHelper({
+    runner: join(here, 'prepare-image-runner.cjs'),
+    request: { dataUrl, options },
+    label: 'prepare',
+    prefix: 'signalforge-prepare-',
+    timeoutMs
+  });
 }

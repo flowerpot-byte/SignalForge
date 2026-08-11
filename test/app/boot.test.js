@@ -378,10 +378,16 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'the exported effect must carry what the settings column was showing at the moment of export'
   );
   assert.deepEqual(
-    report.exportedFiles,
-    ['Selftest Export.html'],
-    'exactly one effect, named after the name field, must be in the target folder'
+    report.exportedFiles.sort(),
+    ['Selftest Export.html', 'Selftest Export.png'],
+    'the effect and its tile picture, both named after the name field, must be in the target folder'
   );
+  // And the tile must be a real picture at the size the measurement settled
+  // on, not a plausible file (docs/messung-titelbilder.md).
+  assert.equal(report.coverSignature, '89504e470d0a1a0a', 'the tile must actually be a PNG');
+  assert.equal(report.coverWidth, 512);
+  assert.equal(report.coverHeight, 288);
+  assert.ok(report.coverBytes > 1000, `the tile is only ${report.coverBytes} bytes, which is not a rendered frame`);
 
   // A second export of the same name must ask, with the full path in the
   // question, and must not have touched the file while asking.
@@ -411,8 +417,8 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // have created anything anywhere.
   assert.match(report.badNameMessage, /\\ \/ : \?/, 'a useless name must say what a usable one looks like');
   assert.deepEqual(
-    report.filesAfterBadName,
-    ['Selftest Export.html'],
+    report.filesAfterBadName.sort(),
+    ['Selftest Export.html', 'Selftest Export.png'],
     'a refused name must not have written anything'
   );
 
@@ -420,7 +426,7 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   // under a plain file name, never one folder up or on another drive.
   assert.deepEqual(
     report.filesAfterSanitised.sort(),
-    ['Selftest Export.html', 'a-b-c-d.html'],
+    ['Selftest Export.html', 'Selftest Export.png', 'a-b-c-d.html', 'a-b-c-d.png'],
     'a name containing / \\ : ? must be sanitised into a plain file name in the chosen folder'
   );
   assert.match(report.sanitisedMessage, /a-b-c-d\.html/);

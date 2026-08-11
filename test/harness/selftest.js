@@ -451,6 +451,18 @@ async function selfTestExport(win, folder) {
   // advertised default has to be the value the slider was standing at.
   out.exportedBrightnessDefault = /<meta property="brightness"[^>]*default="([^"]*)"/
     .exec(readFileSync(join(folder, 'Selftest Export.html'), 'utf8'))?.[1] ?? null;
+
+  // The tile picture written beside it — the second half of the pair
+  // SignalRGB reads (docs/messung-titelbilder.md). Reported as its own header
+  // rather than as "a file is there": a zero-byte file would also be there.
+  // Bytes 0..7 are the PNG signature and 16..23 the width and height out of
+  // the IHDR chunk, which is the whole format needed to tell a real picture
+  // from a plausible one.
+  const cover = readFileSync(join(folder, 'Selftest Export.png'));
+  out.coverSignature = cover.subarray(0, 8).toString('hex');
+  out.coverWidth = cover.readUInt32BE(16);
+  out.coverHeight = cover.readUInt32BE(20);
+  out.coverBytes = cover.length;
   await shot('06-exported');
 
   // Exporting the same name again must ask, not overwrite. The question has
