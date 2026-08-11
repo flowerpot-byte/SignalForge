@@ -90,6 +90,7 @@
   "export.done": "In SignalRGB gespeichert",
   "export.failed": "Effekt konnte nicht gespeichert werden",
   "export.exists": "Diese Datei gibt es schon. Überschreiben?",
+  "export.existsWithCover": "Diese Datei und ihr Titelbild gibt es schon. Beide überschreiben?",
   "export.overwrite": "Überschreiben",
   "export.badName": "Bitte einen Namen ohne \\ / : ? eingeben",
   "export.nothing": "Erst ein Bild hineinziehen",

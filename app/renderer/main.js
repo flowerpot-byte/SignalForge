@@ -943,7 +943,15 @@ async function boot() {
     if (result.reason === 'exists') {
       // Never silently. The full path is in the question, and the answer is
       // a button that has to be pressed on purpose.
-      showMessage(`${i18n.t('export.exists')} ${result.path}`, true);
+      //
+      // And the question names everything the answer spends. Pressing
+      // "Überschreiben" replaces the tile picture beside the effect too, so a
+      // question that named only the .html was asking for less than it took —
+      // the main process says which of the two files that actually applies to
+      // (see exportEffect), rather than this end guessing from a name and an
+      // extension it would have to know.
+      const question = result.coverPath ? 'export.existsWithCover' : 'export.exists';
+      showMessage(`${i18n.t(question)} ${result.path}`, true);
       footer.askOverwrite(true);
       return;
     }

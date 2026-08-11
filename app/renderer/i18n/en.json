@@ -90,6 +90,7 @@
   "export.done": "Saved to SignalRGB",
   "export.failed": "Could not save the effect",
   "export.exists": "That file already exists. Overwrite?",
+  "export.existsWithCover": "That file and its cover image already exist. Overwrite both?",
   "export.overwrite": "Overwrite",
   "export.badName": "Please use a name without \\ / : ?",
   "export.nothing": "Drop an image in first",

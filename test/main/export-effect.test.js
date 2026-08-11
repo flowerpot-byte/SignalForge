@@ -270,6 +270,58 @@ test('a refused overwrite draws no tile and writes no tile', async () => {
   assert.equal(io.files.has(join(FOLDER, 'Twice.png')), false, 'and must not leave a picture behind');
 });
 
+/**
+ * The question has to name everything the answer spends.
+ *
+ * `force` writes BOTH files, and the question the window asks was built from
+ * `path` alone — so pressing "Überschreiben" replaced a tile picture the user
+ * may have made or chosen themselves, having been asked only about the .html.
+ * The refusal now says which of the two that answer would actually cost.
+ */
+test('the overwrite question names the tile picture when the answer would replace one', async () => {
+  const html = join(FOLDER, 'Twice.html');
+  const png = join(FOLDER, 'Twice.png');
+  const io = fakeIo({ [html]: 'the effect that is already there', [png]: Buffer.from([1, 2, 3]) });
+
+  const { result } = await runExport('Twice', { io, renderCover: fakeCover().render });
+
+  assert.equal(result.reason, 'exists');
+  assert.equal(result.coverPath, png, 'the picture the same answer would replace has to be in the question');
+});
+
+test('and says nothing about a picture when there is none to replace', async () => {
+  const html = join(FOLDER, 'Twice.html');
+  const io = fakeIo({ [html]: 'the effect that is already there' });
+
+  const { result } = await runExport('Twice', { io, renderCover: fakeCover().render });
+
+  assert.equal(result.reason, 'exists');
+  assert.equal(result.coverPath, null, 'a question about a file that is not there is a question that confuses');
+});
+
+test('a caller that draws no tile cannot be said to be replacing one', async () => {
+  // bin/sfexport.js under plain Node with no cover to draw: the .png beside the
+  // effect is somebody else's business and this export will not touch it.
+  const html = join(FOLDER, 'Twice.html');
+  const png = join(FOLDER, 'Twice.png');
+  const io = fakeIo({ [html]: 'the effect that is already there', [png]: Buffer.from([1, 2, 3]) });
+
+  const { result } = await runExport('Twice', { io });
+
+  assert.equal(result.reason, 'exists');
+  assert.equal(result.coverPath, null);
+});
+
+test('a stray tile picture on its own still never blocks an export', async () => {
+  // The deliberate trade, kept: the .html is the effect and the .png is
+  // decoration, so a leftover picture must not be able to stop somebody saving.
+  const io = fakeIo({ [join(FOLDER, 'Fresh.png')]: Buffer.from([9, 9]) });
+
+  const { result } = await runExport('Fresh', { io, renderCover: fakeCover().render });
+
+  assert.equal(result.ok, true, result.message);
+});
+
 test('force replaces the tile picture as well as the effect', async () => {
   const html = join(FOLDER, 'Twice.html');
   const png = join(FOLDER, 'Twice.png');

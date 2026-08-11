@@ -104,7 +104,10 @@ export function effectFileName(name) {
  *                                            set: an effect whose tile is missing is
  *                                            still an exported effect, and the caller
  *                                            has to be able to say both things at once
- *   { ok: false, reason: 'exists', path }   the file is there and force was not set
+ *   { ok: false, reason: 'exists', path,    the file is there and force was not set.
+ *                coverPath }               `coverPath` is the tile picture the same
+ *                                          answer would ALSO replace, or null — see
+ *                                          the question below
  *   { ok: false, reason: 'name' }           nothing usable left in the document's name
  *   { ok: false, reason: 'empty' }          nothing to export yet
  */
@@ -139,12 +142,25 @@ export async function exportEffect({
   const coverPath = join(folder, `${fileName}.${COVER_EXTENSION}`);
 
   // Asked before anything at all is created, so a refusal leaves the
-  // filesystem exactly as it was — no folder, no temp file, nothing. The
-  // question is asked of the .html alone: it is the effect, the picture is
-  // decoration, and making a leftover .png able to block an export would mean
-  // an effect somebody can no longer save because of a file SignalRGB does not
-  // even list on its own.
-  if (io.exists(path) && !force) return { ok: false, reason: 'exists', path };
+  // filesystem exactly as it was — no folder, no temp file, nothing.
+  //
+  // WHAT THE QUESTION IS ASKED OF, and what the ANSWER then spends. Only the
+  // .html can block an export: it is the effect, the picture is decoration, and
+  // making a leftover .png able to stop somebody saving would be an effect they
+  // can no longer write because of a file SignalRGB does not even list on its
+  // own. That trade stands.
+  //
+  // But the answer to it was quietly buying more than it named. `force` lets
+  // this write BOTH files, and the question said "this file" while meaning two
+  // — somebody keeping a tile picture they had made or chosen themselves lost
+  // it to a question that never mentioned it. So the question now says so: the
+  // cover is named when, and only when, this export would actually replace one
+  // (there is a cover to draw, and one is already there). Nothing about what
+  // blocks an export changes; only what the user is told they are agreeing to.
+  if (io.exists(path) && !force) {
+    const replacesCover = Boolean(renderCover) && io.exists(coverPath);
+    return { ok: false, reason: 'exists', path, coverPath: replacesCover ? coverPath : null };
+  }
 
   const layerId = normalized.layers[0].id;
   const prepared = withLiveMotion(normalized, layerId);
