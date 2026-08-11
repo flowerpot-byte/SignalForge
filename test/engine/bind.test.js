@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from '../../src/engine/bind.js';
-import { BINDABLE_DOCUMENT_FIELDS } from '../../src/engine/document.js';
+import {
+  getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls, resolveChoice
+} from '../../src/engine/bind.js';
+import { BINDABLE_DOCUMENT_FIELDS, MOTION_KINDS } from '../../src/engine/document.js';
 
 const base = () => ({
   brightness: 100,
@@ -58,6 +60,69 @@ test('applyControls leaves the original document untouched', () => {
 test('missing values fall back to the control default', () => {
   const doc = applyControls(base(), {});
   assert.equal(doc.layers[0].motion.speed, 15);
+});
+
+// ---------------------------------------------------------------------------
+// Combobox values, whatever shape the host hands them over in
+// ---------------------------------------------------------------------------
+//
+// WHY THIS EXISTS. An exported effect's control values come from SignalRGB,
+// which writes them into page globals (`var motion = "warp";`, seen verbatim
+// in SignalRgb.exe's own injection template). They used to be copied into the
+// document exactly as received, and the renderer decides what moves with a
+// strict string match — `motions.find((m) => m.kind === 'warp')` in
+// layers/gradient.js and layers/image.js. So a value that is not letter-for-
+// letter one of the declared options does not fall back to anything: it
+// matches nothing, every motion lookup comes back null, and the effect draws a
+// perfect, completely still picture. That is precisely the bug report this
+// file's guards were written for — "the picture shows, the motions do not
+// run" — and it is silent: nothing throws, nothing is logged, the frame looks
+// right.
+//
+// The rule now: a combobox value ALWAYS lands on one of its declared options.
+
+const comboDoc = () => ({
+  layers: [{ id: 'a1', type: 'image', opacity: 1, motions: [{ kind: 'warp', speed: 15, amount: 30 }] }],
+  controls: [
+    { property: 'motion', type: 'combobox', values: [...MOTION_KINDS], default: 'warp',
+      bind: ['a1.motions.0.kind'] }
+  ]
+});
+
+test('resolveChoice takes the declared option unchanged', () => {
+  assert.equal(resolveChoice('warp', ['none', 'warp', 'drift'], 'none'), 'warp');
+});
+
+test('resolveChoice accepts an index, as a number or as digits', () => {
+  assert.equal(resolveChoice(1, ['none', 'warp', 'drift'], 'none'), 'warp');
+  assert.equal(resolveChoice('2', ['none', 'warp', 'drift'], 'none'), 'drift');
+});
+
+test('resolveChoice forgives case and surrounding space', () => {
+  assert.equal(resolveChoice(' Warp ', ['none', 'warp', 'drift'], 'none'), 'warp');
+});
+
+test('resolveChoice falls back to the default rather than inventing a value', () => {
+  assert.equal(resolveChoice('nonsense', ['none', 'warp', 'drift'], 'warp'), 'warp');
+  assert.equal(resolveChoice(null, ['none', 'warp', 'drift'], 'warp'), 'warp');
+  assert.equal(resolveChoice(undefined, ['none', 'warp', 'drift'], 'warp'), 'warp');
+  // A default that is itself not on the list cannot be handed back either.
+  assert.equal(resolveChoice('nonsense', ['none', 'warp'], 'ghost'), 'none');
+});
+
+test('a combobox value the host delivers as an index still selects a real motion', () => {
+  const doc = applyControls(comboDoc(), { motion: 1 });
+  assert.equal(doc.layers[0].motions[0].kind, MOTION_KINDS[1]);
+  assert.ok(MOTION_KINDS.includes(doc.layers[0].motions[0].kind));
+});
+
+test('a combobox value the host delivers as junk never switches the motion off silently', () => {
+  for (const junk of ['', 'Warp', ' warp', 'wobble', 3.5, {}, []]) {
+    const doc = applyControls(comboDoc(), { motion: junk });
+    assert.ok(MOTION_KINDS.includes(doc.layers[0].motions[0].kind),
+      `a "${String(junk)}" motion value left kind = ${JSON.stringify(doc.layers[0].motions[0].kind)}, `
+      + 'which matches no motion at all and would freeze the effect');
+  }
 });
 
 test('unknown bindings are ignored rather than throwing', () => {
@@ -181,18 +246,23 @@ test('a combobox control with no value supplied falls back to its own default, n
   assert.equal(doc.layers[0].motion.kind, 'warp');
 });
 
-test('applyControls does not silently drop a combobox value that is not on the control\'s own values list '
-  + '-- writing it through is bind.js\'s job, not validation', () => {
-  // applyControls has no opinion on whether a value is one of the control's
-  // declared `values` -- that is normalizeDocument's job, and normalizeDocument
-  // never runs on the per-frame document applyControls produces (only once, on
-  // the document SignalRGB loads at startup). A stale or unexpected value from
-  // SignalRGB is written through exactly as handed over.
+test('applyControls resolves a combobox value that is not on the control\'s own values list '
+  + 'onto one that is, instead of writing it through', () => {
+  // THIS TEST USED TO ASSERT THE OPPOSITE, and the reasoning it gave was
+  // correct as far as it went: applyControls has no opinion on values,
+  // normalizeDocument does, and normalizeDocument only ever runs once, on the
+  // document loaded at startup — never on the per-frame document produced
+  // here. What the old reasoning missed is what "written through exactly as
+  // handed over" costs downstream. The renderer picks its motions by strict
+  // equality on `kind`, so a value that is on no list matches no motion, and
+  // the effect renders a flawless STILL picture with nothing to indicate why.
+  // Since nothing else in the chain ever validates it, this IS the last place
+  // that can, so it does. See resolveChoice in src/engine/bind.js.
   const input = base();
   input.controls.push({ property: 'motion', type: 'combobox', values: ['none', 'warp'],
     default: 'warp', bind: ['a1.motion.kind'] });
   const doc = applyControls(input, { motion: 'not-a-real-motion-kind' });
-  assert.equal(doc.layers[0].motion.kind, 'not-a-real-motion-kind');
+  assert.equal(doc.layers[0].motion.kind, 'warp');
 });
 
 test('a control can mix a layer binding and a document binding side by side', () => {

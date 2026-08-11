@@ -82,6 +82,68 @@ export function resolveBindingPath(doc, binding) {
 }
 
 /**
+ * Land a combobox value on one of its own declared options.
+ *
+ * WHY THIS EXISTS, AND WHY IT IS NOT PARANOIA. A control's value arrives from
+ * outside: in the exported effect it is a page global SignalRGB writes (its
+ * own injection template, read out of SignalRgb.exe, is `var %1 = "%2";` /
+ * `var %1 = %2;`), and in the app it is whatever the settings column put
+ * there. The value used to be written into the document exactly as received.
+ * That was safe for a colour (normalizeColor already falls back) and for a
+ * number (Number() plus a finite check below), and quietly catastrophic for a
+ * combobox: the two places that decide what MOVES look their motion up by
+ * strict equality —
+ *
+ *     motions.find((motion) => motion.kind === 'warp')     (layers/gradient.js)
+ *
+ * — so a `kind` that is not letter-for-letter "warp"/"drift"/"breathe" matches
+ * nothing at all. Every motion comes back null, the layer draws exactly as it
+ * would with no motion on it, and the effect is a flawless STILL picture. No
+ * exception, no console line, nothing to notice. The same hazard sits under
+ * `fit` and `shape`, where a miss silently picks a different framing.
+ *
+ * So the shape of the incoming value is no longer allowed to matter. Accepted,
+ * in this order: the option itself; an integer index into the list (0-based);
+ * the same text with different case or padding; digits that name an index. Any
+ * value that cannot be resolved falls back to the control's own default, and
+ * — if even that is not on the list — to the first option, because handing
+ * back something outside `values` is the very failure this function exists to
+ * prevent.
+ *
+ * Deliberately shared by preview and export: both go through applyControls, so
+ * they cannot disagree about what a control value means.
+ */
+export function resolveChoice(raw, values, fallback) {
+  if (!Array.isArray(values) || values.length === 0) return raw;
+
+  const onList = (candidate) => values.find((value) => value === candidate);
+
+  const direct = onList(raw);
+  if (direct !== undefined) return direct;
+
+  if (typeof raw === 'number' && Number.isInteger(raw) && raw >= 0 && raw < values.length) {
+    return values[raw];
+  }
+
+  // Anything else is compared as text — a host that writes "1" or "Warp" is
+  // describing an option it can see, not asking for a value of its own.
+  if (raw !== null && raw !== undefined && typeof raw !== 'object') {
+    const text = String(raw).trim();
+    const exact = values.find((value) => String(value) === text);
+    if (exact !== undefined) return exact;
+    const folded = values.find((value) => String(value).toLowerCase() === text.toLowerCase());
+    if (folded !== undefined) return folded;
+    if (/^\d+$/.test(text)) {
+      const index = Number(text);
+      if (index < values.length) return values[index];
+    }
+  }
+
+  const byDefault = onList(fallback);
+  return byDefault !== undefined ? byDefault : values[0];
+}
+
+/**
  * Apply SignalRGB control values to a copy of the document.
  *
  * values comes from the exported effect's global variables. Anything missing
@@ -106,8 +168,15 @@ export function applyControls(doc, values) {
     const raw = Object.prototype.hasOwnProperty.call(values, control.property)
       ? values[control.property]
       : control.default;
-    const value = control.type === 'number' ? Number(raw) : raw;
-    if (control.type === 'number' && !Number.isFinite(value)) continue;
+    let value = raw;
+    if (control.type === 'number') {
+      value = Number(raw);
+      if (!Number.isFinite(value)) continue;
+    } else if (control.type === 'combobox') {
+      // Never the host's raw value: see resolveChoice above for what a value
+      // that misses every option does to a motion.
+      value = resolveChoice(raw, control.values, control.default);
+    }
     for (const binding of control.bind) {
       const path = resolveBindingPath(copy, binding);
       if (path) setByPath(copy, path, value);
