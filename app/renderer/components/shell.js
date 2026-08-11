@@ -5,36 +5,52 @@
 /**
  * The frame the whole window is built in, and the empty regions it hands back.
  *
- * Four of them now, in the shape SignalRGB's own window has:
+ * Three of them:
  *
- *   nav        the left column, 200px, the destinations
  *   preview    the stage: the picture being built, its caption, the strip of
  *              tiles an effect can be started from
  *   inspector  the settings column, 300px, built of discrete cards
- *   footer     the transport bar across the bottom, beside the nav
+ *   footer     the transport bar across the bottom, full width
  *
- * There is no `.panel` any more, and that is the largest single change in this
- * file. Every region used to be a translucent, blurred, 14px-rounded box with
- * a hairline around it, floating on a tinted backdrop; in the reference not
- * one of these regions is a box at all. The stage sits directly on the page,
- * the settings column is page colour with cards ON it, and the left column is
- * simply a lighter field. Boxes only exist where something is genuinely raised
- * out of the surface it sits on — a card, a tile, a control.
+ * WHY THE LEFT COLUMN IS GONE
  *
- * There is still no layer region and still no layer list: that is a later task
- * and inventing a column for it would repeat exactly the mistake this window
- * has already been through once.
+ * There was a fourth: a 200px navigation column of five entries. Four of them
+ * scrolled the settings column to a heading that was already on screen beside
+ * them, and the fifth swapped that column for the app's own settings. Max put
+ * it in one sentence — "die linke Spalte ist unnötig da sie nur auf Dinge in
+ * der rechten Spalte verweist" — and he is right: a table of contents for a
+ * page that is entirely visible is not navigation, it is a second picture of
+ * the thing standing next to the thing. The screenshot it was judged on
+ * (work/design-pass-2/before/03-picture-loaded.png) shows what it cost: five
+ * entries at the top, one pinned at the bottom, and some six hundred pixels of
+ * empty column between them, on the same screen as a stage that was being
+ * squeezed for width.
  *
- * The frame owns no text at all any more. Everything the old `relabel()` said
- * has moved to the piece that owns it — the left column's caption to
- * components/sidebar.js — so a language switch never has to touch this file
- * and can therefore never rebuild it. That matters beyond tidiness: rebuilding
- * this element would throw away the preview canvas and the render loop drawing
- * into it.
+ * So the column is gone and its 200px are the stage's. Its two real jobs were
+ * kept and rehomed rather than dropped, both into the transport bar, which is
+ * where this window's app-level furniture now lives: the wordmark (the
+ * window's one <h1>) at the head of that bar, and the way into the app's own
+ * settings as a marked toggle among its actions. See components/footer.js.
+ *
+ * That is the second column this window has lost, and both for the same
+ * reason. The first was 260px of bordered nothing promising a layer list; this
+ * one was full, and still said nothing the window was not already saying. The
+ * rule stands and is now stated twice over: a region has to be the only place
+ * something is said, or it is not a region.
+ *
+ * There is no `.panel` here either, and that too was measured: in the
+ * reference not one region is a box. The stage sits directly on the page and
+ * the settings column is page colour with cards ON it. Boxes exist only where
+ * something is genuinely raised out of the surface it sits on — a card, a
+ * tile, a control.
+ *
+ * The frame owns no text at all. The two region names a screen reader needs
+ * are set from app/renderer/main.js on every language switch, so this element
+ * is never rebuilt — which matters beyond tidiness: rebuilding it would throw
+ * away the preview canvas and the render loop drawing into it.
  */
 export function mountShell(root) {
   root.innerHTML = `
-    <nav class="nav" id="nav"></nav>
     <section class="stage-column" id="preview"><div id="preview-body"></div></section>
     <section class="settings-column" id="inspector">
       <div id="inspector-body"></div>
@@ -44,12 +60,14 @@ export function mountShell(root) {
   `;
 
   return {
-    nav: root.querySelector('#nav'),
+    // The stage column itself, which is a landmark once it has been named, and
+    // the body inside it everything on the stage is built into.
+    stage: root.querySelector('#preview'),
     preview: root.querySelector('#preview-body'),
-    // The settings column itself — the element that scrolls — as well as the
-    // body inside it that the cards are built into. The left column has to
-    // reach the scroller to say where it is going and to hear where it ended
-    // up (see showSection in app/renderer/main.js).
+    // The settings column itself — the element that scrolls, and the second
+    // named landmark — as well as the body inside it that the cards are built
+    // into. A new document scrolls that scroller back to the top, which is the
+    // whole of what is left of the old left column's machinery.
     column: root.querySelector('#inspector'),
     inspector: root.querySelector('#inspector-body'),
     settings: root.querySelector('#settings-body'),

@@ -9,10 +9,10 @@ import { mountCrop } from './components/crop.js';
 import { mountInspector } from './components/inspector.js';
 import { mountFooter } from './components/footer.js';
 import { mountFirstRun } from './components/firstrun.js';
-import { mountSidebar } from './components/sidebar.js';
 import { mountGallery } from './components/gallery.js';
 import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
+import { enter } from './components/motion.js';
 
 // The preview loads dist/engine.bundle.js as a plain script tag (see
 // index.html) rather than importing engine sources directly — that is what
@@ -90,11 +90,7 @@ async function boot() {
    * rather than as a screen waiting for something.
    */
   /**
-   * Say — to the stylesheet, to the left column and to the crop — what is on
-   * the stage now.
-   *
-   * `arrive` is the section to go to when something has just been started or
-   * opened; leave it out for a refresh that must not move anybody.
+   * Say — to the stylesheet and to the crop — what is on the stage now.
    *
    * The class is still called `has-picture` although a solid colour is not a
    * picture: what it actually means, and always meant, is "there is something
@@ -102,99 +98,52 @@ async function boot() {
    * and the harness both know that name, and renaming it would be a change to
    * three files that means nothing.
    *
-   * Which destinations exist is asked of the settings column rather than
-   * worked out here (see mountInspector's sections()), because that is the one
-   * place that decides which controls a layer type has.
+   * `arrived` says a NEW document has just landed, which is the one moment
+   * this window still has to move anything for the user. It does two things
+   * and no more, where the left column used to make it do four:
+   *
+   *  - It puts the settings column back to the top. The first section of a
+   *    document is the one that says what the document IS — a gradient's
+   *    "Fläche", a picture's "Bild" — and it is already the first thing in
+   *    that column, so arriving at it is a scroll to zero and not a search for
+   *    a heading. That one line is the whole of what is left of the old
+   *    scrollIntoView / mark-what-you-scrolled-past machinery.
+   *  - It leaves the app's own settings if they happen to be showing. Somebody
+   *    who starts an effect while looking at the language dropdown means to
+   *    look at the effect.
    */
-  function showContent(arrive = null) {
+  function showContent({ arrived = false } = {}) {
     const doc = preview.document();
     regions.preview.classList.toggle('has-picture', doc.layers.length > 0);
-    const sections = inspector.sections();
-    sidebar.setAvailable(sections);
-    if (arrive && sections.has(arrive)) {
-      showSection(arrive);
-    } else if (section !== 'settings' && !sections.has(section)) {
-      // Somebody standing on a destination the new document does not have —
-      // "Bild" after opening a gradient — must be moved off it rather than
-      // left looking at an empty column. "Farbe" is the one section every
-      // document has.
-      showSection('colour');
-    }
+    if (!arrived) return;
+    showSettings(false);
+    regions.column.scrollTop = 0;
   }
   const regions = mountShell(document.getElementById('app'));
 
-  /**
-   * Which destination the left column is pointing at.
-   *
-   * 'colour' at a fresh start, deliberately: it is the one section that exists
-   * whether or not there is a picture, so the window never opens on a column
-   * that is waiting for something.
-   */
-  let section = 'colour';
+  /** Whether the settings column is showing the app's settings rather than the effect's. */
+  let settingsShowing = false;
 
-  /** Mark the group the left column is pointing at, without moving anything. */
-  function markSection() {
-    sidebar.setActive(section);
-    for (const group of regions.inspector.querySelectorAll('.field-group')) {
-      group.classList.toggle('is-active', group.dataset.section === section);
-    }
+  /**
+   * Swap the settings column between the effect's settings and the app's.
+   *
+   * The two share the column and take turns; the effect's controls stay in the
+   * document either way (see mountInspector on why they are never torn down),
+   * so nothing is lost by looking away from them.
+   *
+   * The panel that arrives is marked `sf-enter` for as long as its entrance
+   * lasts, which is the one thing that says the column SWAPPED rather than
+   * that its contents teleported. `initial` is how the very first call — the
+   * one that puts the window into its resting state during boot — declines
+   * that: an animation nobody caused is an animation nobody asked for.
+   */
+  function showSettings(next, { initial = false } = {}) {
+    settingsShowing = next;
+    regions.inspector.hidden = next;
+    regions.settings.hidden = !next;
+    footer.setSettings(next);
+    if (!initial) enter(next ? regions.settings : regions.inspector);
   }
-
-  /**
-   * Go to a destination.
-   *
-   * For the three that belong to the effect this scrolls the settings column
-   * to that group and marks it; all three stay on screen, because one at a
-   * time left the column mostly empty (see mountInspector for the measurement
-   * and the screenshot that settled it). The fourth swaps the column for the
-   * app's own settings, which is a different thing entirely and does take
-   * over.
-   */
-  function showSection(next, { scroll = true } = {}) {
-    section = next;
-    // The app's own settings and the effect's settings share the column and
-    // take turns; the effect's controls stay in the document either way (see
-    // mountInspector on why they are never torn down).
-    const settingsShowing = next === 'settings';
-    regions.inspector.hidden = settingsShowing;
-    regions.settings.hidden = !settingsShowing;
-    markSection();
-    if (settingsShowing || !scroll) return;
-    const group = regions.inspector.querySelector(`.field-group[data-section="${next}"]`);
-    // 'auto' rather than 'smooth': a scroll that animates would still be
-    // moving when the next thing (a screenshot, a keyboard user's next arrow
-    // press) arrives.
-    if (group) group.scrollIntoView({ block: 'start', behavior: 'auto' });
-  }
-
-  const sidebar = mountSidebar(regions.nav, {
-    t: (k) => i18n.t(k),
-    active: section,
-    onSelect: showSection
-  });
-
-  /**
-   * Which group is actually under the eye, said back to the left column.
-   *
-   * Without this the marked entry would only ever be the last one clicked, so
-   * scrolling the column past all three would leave the left column claiming
-   * the wrong one — a map that lies about where you are is worse than no map.
-   * It only ever MARKS; it never scrolls anything, so it cannot fight the
-   * gesture that caused it.
-   */
-  regions.column.addEventListener('scroll', () => {
-    if (section === 'settings') return;
-    const top = regions.column.getBoundingClientRect().top + 24;
-    let arrived = null;
-    for (const group of regions.inspector.querySelectorAll('.field-group')) {
-      if (group.getBoundingClientRect().top <= top) arrived = group;
-    }
-    const first = regions.inspector.querySelector('.field-group');
-    const now = (arrived || first)?.dataset.section;
-    if (!now || now === section) return;
-    section = now;
-    markSection();
-  });
 
   const preview = createPreview(regions.preview, (k) => i18n.t(k));
 
@@ -434,11 +383,6 @@ async function boot() {
   const inspector = mountInspector(regions.inspector, {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
-    // Which of the three the left column is pointing at. Read on every redraw
-    // rather than passed in once, so a redraw caused by something else — a
-    // motion added, a project opened, a language switched — cannot put the
-    // column back to showing all three.
-    visibleSection: () => section,
     /**
      * Which way a change reaches the picture depends on what kind of change
      * it is:
@@ -548,7 +492,7 @@ async function boot() {
         crop.refresh();
         // The column had nothing but the document-wide sliders until now.
         inspector.refresh();
-        showContent('image');
+        showContent({ arrived: true });
         showName(preview.document().name);
         preview.start();
       } catch (err) {
@@ -642,7 +586,7 @@ async function boot() {
       markChanged();
       crop.refresh();
       inspector.refresh();
-      showContent('fill');
+      showContent({ arrived: true });
       showName(preview.document().name);
       preview.start();
     } catch (err) {
@@ -776,10 +720,9 @@ async function boot() {
     // canvas is a tab stop is decided fresh here too.
     crop.refresh();
     inspector.refresh();
-    // Land on the section that says what this project IS: its fill for a
-    // colour effect, its picture for a picture. showContent falls back to the
-    // one section every document has if the document has neither.
-    showContent(measured ? 'image' : 'fill');
+    // A whole new document: the column goes back to its top, where the section
+    // that says what this project IS already sits.
+    showContent({ arrived: true });
     showName(doc.name);
     preview.start();
     // What is on screen came out of a file and has not been touched since.
@@ -884,10 +827,26 @@ async function boot() {
    * user has been working on, and throw away the keyboard focus — all for a
    * change that alters nothing but words.
    */
+  /**
+   * The names of the two regions, which nobody sees and a screen reader needs.
+   *
+   * The window used to have a named `<nav>` landmark and, through it, one place
+   * to jump to. With that column gone the two columns that ARE the window have
+   * to carry their own names, or a screen reader meets one undifferentiated
+   * main region: `<section aria-label>` is a region landmark, so this is the
+   * whole of it. Set from here rather than in components/shell.js because they
+   * are translated strings and that file deliberately owns no text — see the
+   * note there on why the frame must never be rebuilt.
+   */
+  function labelRegions() {
+    regions.stage.setAttribute('aria-label', i18n.t('region.stage'));
+    regions.column.setAttribute('aria-label', i18n.t('region.settings'));
+  }
+
   function applyLanguage(next) {
     i18n.setLanguage(next);
     document.documentElement.lang = i18n.language;
-    sidebar.relabel();
+    labelRegions();
     gallery.relabel();
     appSettings.relabel();
     firstRun.relabel();
@@ -945,13 +904,20 @@ async function boot() {
     onExport: guard('export.failed', () => exportEffect(false)),
     onOverwrite: guard('export.failed', () => exportEffect(true)),
     onSave: guard('project.saveFailed', saveProject),
-    onOpen: guard('project.openFailed', openProject)
+    onOpen: guard('project.openFailed', openProject),
+    // A toggle, and read as one: pressing it while the app's settings are up
+    // is how somebody gets back to the effect they were editing. There is no
+    // other way back and there does not need to be — the same control, in the
+    // same place, marked with the state it is in.
+    onSettings: () => showSettings(!settingsShowing)
   });
 
-  // The app's own two settings, in the settings column behind the entry pinned
-  // to the bottom of the left column. They used to be wedged into the footer
-  // beside the buttons, which is what stopped that row from ever being a
-  // transport bar.
+  // The app's own two settings, in the settings column, reached by the toggle
+  // at the head of the transport bar's actions. They were wedged into the
+  // footer beside the buttons once, which is what stopped that row from ever
+  // being a transport bar; the left column then held the way to them, and that
+  // column has since gone the way of everything else that only pointed at
+  // something already on screen.
   const appSettings = mountAppSettings(regions.settings, {
     t: (k) => i18n.t(k),
     language,
@@ -982,8 +948,11 @@ async function boot() {
     firstRun.setTarget(target);
   }
 
+  labelRegions();
   showName(preview.document().name);
-  showSection(section);
+  // The resting state: the effect's own settings, with nothing announced as
+  // having arrived, because nothing has.
+  showSettings(false, { initial: true });
   showTarget(await window.sf.effectsTarget());
 
   // The first start's own language is not a choice the user made, so it is

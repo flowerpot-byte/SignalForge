@@ -39,6 +39,39 @@ import { SUPPORTED_IMAGE_EXTENSIONS } from './drop.js';
  * Frame zero, once, at mount: these documents carry no motions, so they are
  * still pictures — there is nothing for a loop to animate, and three extra
  * render loops under the stage would cost frames the stage needs.
+ *
+ * ===========================================================================
+ * SEAM: THIS STRIP IS WHERE THE EFFECT LIBRARY GOES
+ * ===========================================================================
+ *
+ * A library of ready-made effects is its own task and is deliberately not
+ * started here. This note is so that whoever does start it does not build a
+ * second strip beside this one, or a fifth column, or a modal — the three
+ * shapes this window has already had to be talked out of.
+ *
+ * The strip is already the right shape for it and already carries the whole
+ * contract:
+ *
+ *  - TILES is the list. A library entry is another entry in it, and nothing
+ *    about a tile knows how many there are: `.gallery-rail` scrolls sideways
+ *    (styles/app.css), so the fifteenth tile costs no height.
+ *  - `starterDocument(kind)` is how a tile learns what it makes. It is defined
+ *    once, in app/renderer/main.js, and both the picture on the tile and the
+ *    document the press produces come out of it — which is what makes a tile
+ *    unable to lie about its own output. A library entry is a starter document
+ *    with more in it, and it inherits that guarantee for free.
+ *  - `onStart(kind)` is how a press becomes a document, and it already goes
+ *    through the unsaved-work question on the way (startEffect in main.js).
+ *
+ * So the work is: more entries in TILES, more documents behind
+ * starterDocument, and — the only genuinely new part — some way to group or
+ * filter them once there are more than a rail's worth. The heading
+ * ("Effekt beginnen mit") is the place that grouping would be said.
+ *
+ * What must NOT happen: a starting document described anywhere but
+ * starterDocument, a tile whose picture is drawn by anything other than the
+ * real engine on a real canvas, or a region added to hold this. All three have
+ * been tried in this window and all three were taken out again.
  */
 
 /** What the file dialog offers, derived from the one list that decides it. */

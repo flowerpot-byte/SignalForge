@@ -138,18 +138,31 @@ async function selfTestFirstRun(win, folder) {
     return stops.length > 0 && stops[0].id === 'first-run-choose';
   })()`);
 
-  // The window's heading tree, read where it is: exactly one <h1>, no <h3>
-  // orphaned under nothing, and a name on both the navigation landmark and the
-  // starting gallery. Each of these was missing after the rebuild.
+  // The window's heading tree and its landmarks, read where they are: exactly
+  // one <h1>, no <h3> orphaned under nothing, and a name on every region a
+  // screen reader is offered.
+  //
+  // The navigation landmark this used to check is gone with the left column it
+  // named (see components/shell.js). What replaced it is checked instead, and
+  // it is more than was there before rather than less: the two columns that
+  // ARE the window now carry names of their own, where previously only the
+  // navigation did — so a reader who could once jump to a list of links can
+  // now jump to the stage or to the settings. The <h1> moved to the transport
+  // bar and is read back by its new id, and the way into the app's own
+  // settings is a marked toggle whose name and pressed state are both asked
+  // for here, because a glyph button with neither is a control nobody can use.
   out.landmarks = await js(`({
     h1: [...document.querySelectorAll('h1')].map((h) => h.textContent.trim()),
+    h1Id: document.querySelector('h1')?.id ?? null,
     h3: document.querySelectorAll('h3').length,
-    navName: document.getElementById('nav').getAttribute('aria-label'),
+    navLandmarks: document.querySelectorAll('nav').length,
+    stageName: document.getElementById('preview').getAttribute('aria-label'),
+    settingsName: document.getElementById('inspector').getAttribute('aria-label'),
     galleryNamedBy: document.getElementById('gallery').getAttribute('aria-labelledby'),
     tablists: document.querySelectorAll('[role="tablist"], [role="tab"]').length,
-    navCurrent: [...document.querySelectorAll('.nav-entry[aria-current]')].map((e) => e.id),
-    navTabStops: [...document.querySelectorAll('.nav-entry')]
-      .filter((e) => e.tabIndex >= 0).length
+    settingsToggleName: document.getElementById('footer-settings').getAttribute('aria-label'),
+    settingsTogglePressed: document.getElementById('footer-settings').getAttribute('aria-pressed'),
+    settingsTabStop: document.getElementById('footer-settings').tabIndex >= 0
   })`);
   // The rest of the window must stay usable while the question is on screen —
   // that is the whole difference between a panel and a modal assistant.
@@ -172,13 +185,14 @@ async function selfTestFirstRun(win, folder) {
   /** The language switch in the footer, operated the way a person operates it. */
   const chooseLanguage = async (code) => {
     // The language switch moved out of the footer and into the settings
-    // column, behind the entry pinned to the bottom of the left column (see
-    // components/appsettings.js). Same control, same event, new home.
+    // column (see components/appsettings.js), reached now by the toggle in the
+    // transport bar. Same control, same event, new home.
     await setSelect('settings-language', code);
     return js(`({
-      // The word "Settings" is now the left column's fourth entry rather than
-      // a heading over the settings column, so it is read where it lives.
-      settings: document.getElementById('nav-settings-label').textContent,
+      // The word "Settings" names the transport bar's toggle and heads the
+      // panel it opens — one word, two places, so it is read off the control,
+      // which is the half a person actually meets first.
+      settings: document.getElementById('footer-settings').getAttribute('aria-label'),
       section: document.querySelector('#inspector-body .field-group > h2').textContent,
       exportButton: document.getElementById('footer-export').textContent,
       brightness: document.querySelector('label[for="sf-brightness"]').textContent,
@@ -207,6 +221,34 @@ async function selfTestFirstRun(win, folder) {
     'the chosen language is stored',
     100
   );
+
+  /**
+   * The way into the app's own settings, driven by pressing it.
+   *
+   * This is what took the left column's last real job, so it is proved the way
+   * that column's entries were: pressed, and the window asked what changed.
+   * Both directions, because it is a toggle and the press that comes BACK is
+   * the one there is no other way to make — nothing else in the window returns
+   * the column to the effect's settings, and a panel somebody cannot leave is
+   * how a window traps them.
+   *
+   * Four things per press: which of the two panels is really rendered (not
+   * merely lacking the `hidden` property — an author `display` in the
+   * stylesheet has outranked that attribute twice in this window's history),
+   * and whether the button says out loud which one it is showing.
+   */
+  const settingsState = () => js(`({
+    appSettings: getComputedStyle(document.getElementById('settings-body')).display !== 'none',
+    effectSettings: getComputedStyle(document.getElementById('inspector-body')).display !== 'none',
+    pressed: document.getElementById('footer-settings').getAttribute('aria-pressed'),
+    marked: document.getElementById('footer-settings').classList.contains('is-on')
+  })`);
+  out.settingsAtRest = await settingsState();
+  await clickById('footer-settings');
+  out.settingsOpened = await settingsState();
+  await shot('00e-app-settings');
+  await clickById('footer-settings');
+  out.settingsClosedAgain = await settingsState();
 
   // And the answer to the question. The folder dialog is the stub; everything
   // else is the real handler writing a real settings file.

@@ -238,7 +238,7 @@ async function phaseOne(win, state) {
 
   // --- 1. language --------------------------------------------------------
   const words = () => d.js(`({
-    settings: document.getElementById('nav-settings-label').textContent,
+    settings: document.getElementById('footer-settings').getAttribute('aria-label'),
     section: document.querySelector('#inspector-body .field-group > h2').textContent,
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,

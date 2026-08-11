@@ -84,7 +84,7 @@ function token(name) {
  * from GLYPHS.mark — copied, not redrawn, which is what keeps the icon and the
  * window showing the same mark.
  */
-function markSvg({ bgBase, bgNav, accent, accentHover }) {
+function markSvg({ bgBase, surfaceStep, accent, accentHover }) {
   // GLYPHS.mark's bolt, verbatim from app/renderer/components/icons.js. Its
   // box is x 6..10.4, y 4.4..11.6, so its middle is (8.2, 8) — which is what
   // the transform below turns about.
@@ -92,7 +92,7 @@ function markSvg({ bgBase, bgNav, accent, accentHover }) {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="${SIZE}" height="${SIZE}">
   <defs>
     <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="${bgNav}" />
+      <stop offset="0" stop-color="${surfaceStep}" />
       <stop offset="1" stop-color="${bgBase}" />
     </linearGradient>
     <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
@@ -305,7 +305,7 @@ app.whenReady().then(async () => {
   try {
     const colours = {
       bgBase: token('bg-base'),
-      bgNav: token('bg-nav'),
+      surfaceStep: token('surface-step'),
       accent: token('accent'),
       accentHover: token('accent-hover')
     };

@@ -16,6 +16,7 @@ import {
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
 import { createField, createMotions, createStops } from './field.js';
 import { icon } from './icons.js';
+import { enter } from './motion.js';
 
 /** A range plus the one thing a slider needs that a baked control does not. */
 const withStep = (range) => Object.freeze({ ...range, step: 1 });
@@ -79,15 +80,16 @@ export const SECTION_TITLES = Object.freeze({
 });
 
 /**
- * The glyph that leads each section's heading — and the very same one the left
- * column's entry carries, which is why this is exported.
+ * The glyph that leads each section's heading.
  *
- * The pairing is the whole point: a sidebar entry and the heading it leads to
- * are one thing said twice, so wearing different icons would be the window
- * contradicting itself. The WORD half of that pairing is already held together
- * by SECTION_TITLES and a test; this is the icon half, written down once here
- * and pinned to components/sidebar.js's DESTINATIONS in
- * test/app/fill-section.test.js.
+ * It used to be exported because the left column's entries carried the very
+ * same icons and the two tables had to be pinned to each other. That column is
+ * gone (see components/shell.js), and with it the second table — so this is
+ * now the ONE place a section's picture is decided, which is what that pinning
+ * was only ever an approximation of. It stays exported so that
+ * test/app/fill-section.test.js can still check the pairing that survives:
+ * every section this file can build has both a word and a picture, and neither
+ * table names a section the other has never heard of.
  */
 export const SECTION_GLYPHS = Object.freeze({
   fill: 'solid',
@@ -301,33 +303,26 @@ export function widenToInclude(field, value) {
  * There is no layer list yet (that is a later task), so the layer shown is
  * the document's first one.
  */
-export function mountInspector(container, { getDocument, onChange, t, onError, visibleSection }) {
+export function mountInspector(container, { getDocument, onChange, t, onError }) {
   const SF = window.SignalForgeEngine;
 
   /**
-   * Which of the three sections the left column is pointing at.
+   * Which sections this column was holding the last time it was built, so the
+   * ones that were NOT can be seen to arrive.
    *
-   * All three are on screen at once, and the one this names is merely MARKED —
-   * its heading takes the accent — rather than being the only one drawn.
+   * That is the whole condition, and it is exact rather than approximate,
+   * which is the reason this is a set of names and not a flag. A language
+   * switch rebuilds every control in the column and changes no section, so
+   * nothing moves. Adding a motion rebuilds it and changes no section, so
+   * nothing moves. Dropping a picture on a window that had none genuinely
+   * grows the column a "Bild" it did not have, and that one animates — because
+   * something appeared, which is exactly what the movement says.
    *
-   * That is the second answer to this question, and the first one is worth
-   * recording because it looked better on paper. The column started out
-   * showing exactly one section at a time, which is what a left column full of
-   * destinations promises. Photographed, it was indefensible: "Bild" is one
-   * control, so choosing it produced a 300px column holding a single card with
-   * six hundred pixels of nothing under it — precisely the blank space this
-   * whole pass exists to kill (the screenshot is kept at
-   * work/redesign-shots/signalrgb/00-rejected-one-group-at-a-time.png). Three
-   * sections together fill the column; one at a time cannot, because this app
-   * does not have enough controls for four screens.
-   *
-   * So the left column scrolls to a group and says which one you are in, and
-   * the column stays whole. Every control also stays in the document, which
-   * the self-test, the acceptance walkthrough and the unsaved-work harness all
-   * depend on — each of them reads the fit, the motions and the colour sliders
-   * in one breath.
+   * `null` until the first build: the window opening is not something arriving
+   * in it, and an entrance played over the whole column at boot would be an
+   * animation nobody caused.
    */
-  const showing = () => (visibleSection ? visibleSection() : null);
+  let previousSections = null;
 
   function rememberFocus() {
     const active = document.activeElement;
@@ -348,17 +343,20 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
   /**
    * A headed section of the column, appended and handed back to fill.
    *
-   * The heading is the column's header row: the section's own glyph and name
-   * on the left, its actions on the right — which is where the reference puts
-   * a section's icon buttons, and where the "add a motion" button now lives.
-   * Because exactly one section is on screen at a time, that heading reads as
-   * the header of the whole column rather than as one of three stacked rules.
+   * The heading is the section's own glyph and name on the left, its actions
+   * on the right — which is where the reference puts a section's icon buttons,
+   * and where the "add a motion" button now lives.
+   *
+   * There used to be an `is-active` mark on one of them, taking the accent
+   * under its heading to echo whichever entry the left column was pointing at.
+   * With no left column there is nothing to echo: all of these sections are on
+   * screen, in one scroll, and none of them is more current than the others.
+   * Marking one would be answering a question nobody is now asking.
    */
   function openSection(name) {
     const group = document.createElement('section');
     group.className = 'field-group';
     group.dataset.section = name;
-    group.classList.toggle('is-active', showing() === name);
 
     const heading = document.createElement('h2');
     heading.append(icon(SECTION_GLYPHS[name]));
@@ -405,6 +403,8 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
     let sectionName = null;
     let section = null;
     let sectionActions = null;
+    /** Every section this build produced, by name, so the new ones can be told. */
+    const built = new Map();
     // The repeating list currently open — 'motions' or 'stops' — with its
     // rows and the button that adds another, taken when the list itself comes
     // past and put in their places as the controls that belong to them arrive.
@@ -444,6 +444,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
         const opened = openSection(sectionName);
         section = opened.group;
         sectionActions = opened.actions;
+        built.set(sectionName, section);
       }
 
       const value = SF.getByPath(doc, field.path);
@@ -507,26 +508,19 @@ export function mountInspector(container, { getDocument, onChange, t, onError, v
 
     closeList();
     restoreFocus(focused);
+
+    // The sections the document has just grown, and only those: a column that
+    // is one control longer than it was says so by that control arriving,
+    // which is the difference between a window that answered and a window that
+    // was simply different the next time it was looked at.
+    if (previousSections) {
+      for (const [name, group] of built) {
+        if (!previousSections.has(name)) enter(group);
+      }
+    }
+    previousSections = new Set(built.keys());
   }
 
   render();
-  return {
-    refresh: render,
-    /**
-     * Which sections the document currently HAS, as a set of names.
-     *
-     * The left column needs this: which destinations exist depends entirely on
-     * what kind of layer is loaded (a gradient has a "Fläche" and no "Bild", a
-     * picture the other way round), and the one place that already works that
-     * out is describeInspector. Handing the answer out here means the left
-     * column and the settings column can never disagree about which sections
-     * exist — the alternative was a second rule in main.js listing which layer
-     * type implies which destination, i.e. the same knowledge written twice.
-     */
-    sections() {
-      const doc = getDocument();
-      const layerId = doc.layers.length > 0 ? doc.layers[0].id : null;
-      return new Set(describeInspector(doc, layerId).map((field) => field.section));
-    }
-  };
+  return { refresh: render };
 }

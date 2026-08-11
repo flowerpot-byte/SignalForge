@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { pickLanguage } from '../../app/renderer/i18n/i18n.js';
 
@@ -21,6 +21,45 @@ test('both languages carry exactly the same keys', () => {
   const missingInDe = en.filter((k) => !de.includes(k));
   assert.deepEqual(missingInEn, [], 'keys present in de but not en');
   assert.deepEqual(missingInDe, [], 'keys present in en but not de');
+});
+
+/**
+ * Every key the window asks for by name must actually be in both files.
+ *
+ * Nothing guarded this, and the removal of the left column is exactly the
+ * change that shows why it was needed: two keys went with it (`nav.caption`,
+ * `nav.label`) and two arrived (`region.stage`, `region.settings`). A key left
+ * behind in the files is dead weight nobody notices; a key asked for and not
+ * present is worse — createI18n hands back the key itself, so the window
+ * quietly displays "region.stage" to somebody, in both languages, with every
+ * other test still green.
+ *
+ * Only LITERAL asks are checked, i.e. t('...'). Several are assembled at
+ * runtime instead (t(`gallery.${kind}`), t(SECTION_TITLES[name])) and cannot
+ * be read out of the source this way — those are covered where they are built,
+ * by the harnesses that read the finished words off the real window. This
+ * catches the plain half, which is most of them and is the half that goes
+ * stale silently.
+ */
+test('every key the window asks for by name exists in both languages', () => {
+  const de = load('de');
+  const en = load('en');
+  const asked = new Set();
+  const walk = (relative) => {
+    const absolute = fileURLToPath(new URL(`../../${relative}`, import.meta.url));
+    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
+      if (entry.isDirectory()) { walk(`${relative}/${entry.name}`); continue; }
+      if (!entry.name.endsWith('.js')) continue;
+      const source = readFileSync(`${absolute}/${entry.name}`, 'utf8');
+      for (const [, key] of source.matchAll(/\bt\(\s*'([a-zA-Z0-9_.]+)'\s*\)/g)) asked.add(key);
+    }
+  };
+  walk('app/renderer');
+
+  // A vacuous pass would be worthless: the window asks for dozens of these.
+  assert.ok(asked.size > 20, `only ${asked.size} literal keys were found — has the walk stopped walking?`);
+  const missing = [...asked].filter((key) => !(key in de) || !(key in en)).sort();
+  assert.deepEqual(missing, [], 'keys the window asks for that no language file answers');
 });
 
 test('no value is left empty', () => {

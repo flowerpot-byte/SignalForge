@@ -114,24 +114,46 @@ test('the app boots, opens a window and exposes its bridge', async () => {
   );
 
   /**
-   * The heading tree and the landmarks, after the rebuild left them incomplete:
-   * there was no <h1> at all, the settings column's <h3> headings sat under no
-   * <h2>, the navigation had no accessible name, the starting gallery had a
-   * heading but nothing tying the section to it, and the sidebar declared two
-   * `role="tablist"` elements whose tabs controlled no `role="tabpanel"`.
+   * The heading tree and the landmarks.
    *
-   * The tablists were dropped rather than completed, because the contract they
-   * half-stated is not what this column does: all three effect sections stay on
-   * screen in one scrolling column and an entry scrolls to its own (see
-   * showSection in app/renderer/main.js), which is a table of contents and not
-   * a tab strip. What is left is five ordinary buttons in a named landmark,
-   * with `aria-current` on the one being pointed at and every one of them a tab
-   * stop.
+   * A rebuild once left them incomplete — no <h1> at all, <h3> headings under
+   * no <h2>, an unnamed navigation landmark, a gallery whose own heading was
+   * not tied to it, and two `role="tablist"` elements whose tabs controlled no
+   * `role="tabpanel"` — and this is what has guarded them since.
+   *
+   * The left column has since gone (see components/shell.js), which moves two
+   * of these checks rather than dropping them. The <h1> is the same one word,
+   * read at its new home in the transport bar. The named landmark was the
+   * navigation; there are now two, and they are the two columns that actually
+   * ARE the window, so a screen reader can be offered the stage or the
+   * settings where before it could only be offered a list of links to headings
+   * it was already standing next to.
+   *
+   * And the entry that column pinned at its bottom — the way into the app's
+   * own settings — is checked as what replaced it: a toggle that is named, is
+   * reachable by Tab, and says which of the two panels it is showing. Its
+   * behaviour is checked further down, in both directions.
    */
   const { landmarks } = report;
   assert.deepEqual(landmarks.h1, ['SignalForge'], 'the window has exactly one <h1>: the app itself');
+  assert.equal(
+    landmarks.h1Id,
+    'transport-brand',
+    'and it is the wordmark in the transport bar, which is where the app names itself now'
+  );
   assert.equal(landmarks.h3, 0, 'and no <h3> under nothing — every section heading is an <h2>');
-  assert.ok(landmarks.navName, 'the navigation landmark must carry a name');
+  assert.equal(
+    landmarks.navLandmarks,
+    0,
+    'the navigation column is gone — a <nav> left standing would mean it came back'
+  );
+  assert.ok(landmarks.stageName, 'the stage column must carry a name to be a landmark at all');
+  assert.ok(landmarks.settingsName, 'and so must the settings column');
+  assert.notEqual(
+    landmarks.stageName,
+    landmarks.settingsName,
+    'two regions with the same name are two regions a screen reader cannot tell apart'
+  );
   assert.equal(
     landmarks.galleryNamedBy,
     'gallery-title',
@@ -142,11 +164,38 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     0,
     'no half-stated tablist: tabs that control no tabpanel are worse than plain buttons'
   );
-  assert.equal(landmarks.navCurrent.length, 1, 'exactly one entry says it is the current one');
+  assert.ok(
+    landmarks.settingsToggleName,
+    'the settings toggle is a glyph with no word beside it, so its accessible name is the only thing announcing it'
+  );
   assert.equal(
-    landmarks.navTabStops,
-    5,
-    'and every destination is reachable by Tab, not only by the arrow keys'
+    landmarks.settingsTogglePressed,
+    'false',
+    'and at rest it must say it is not showing the app\'s settings, rather than say nothing'
+  );
+  assert.equal(landmarks.settingsTabStop, true, 'it must be reachable by Tab like any other action');
+
+  /**
+   * The toggle, pressed. This is the one control that took a job from the
+   * column that was removed, so it is proved by being operated rather than by
+   * being present — and in both directions, because the press that comes back
+   * is the only way out of that panel.
+   */
+  assert.deepEqual(
+    report.settingsAtRest,
+    { appSettings: false, effectSettings: true, pressed: 'false', marked: false },
+    'the window rests on the effect\'s own settings'
+  );
+  assert.deepEqual(
+    report.settingsOpened,
+    { appSettings: true, effectSettings: false, pressed: 'true', marked: true },
+    'pressing the toggle must really render the app\'s settings and really hide the effect\'s, ' +
+      'and the button must say so in both the class the eye reads and the state a screen reader reads'
+  );
+  assert.deepEqual(
+    report.settingsClosedAgain,
+    report.settingsAtRest,
+    'and pressing it again must put the effect\'s settings back — there is no other way out'
   );
 
   // Nobody has chosen a language, so the machine's own decides — and the

@@ -15,6 +15,34 @@ import { icon } from './icons.js';
  * settings column where they belong (see components/appsettings.js), which is
  * the only reason this row can be a transport bar at all.
  *
+ * WHAT IT INHERITED FROM THE LEFT COLUMN
+ *
+ * Two things, when that column was taken out (see components/shell.js for why
+ * it went), and this bar is where they belong rather than where there happened
+ * to be room:
+ *
+ *  - THE WORDMARK, at the head of the row, and it is the window's one <h1>.
+ *    The bar now runs the full width of the window and is the only strip of
+ *    the window that belongs to the app rather than to the effect, so the
+ *    app's own name reads as a label on that strip instead of as a heading
+ *    over a stage it does not describe. It is set quiet on purpose: the loud
+ *    things in this row are the name of the thing being built and the one
+ *    filled button, and a wordmark that competes with either is decoration.
+ *
+ *  - THE WAY INTO THE APP'S OWN SETTINGS, as the first and quietest of the
+ *    actions. It is a toggle, not a door: pressing it swaps the settings
+ *    column between the effect's settings and the app's, and it says which of
+ *    the two is showing with `aria-pressed` and with the same raised fill the
+ *    left column's active entry used to wear. It sits at the far end from the
+ *    export, with the two document actions between them, because the row reads
+ *    outwards from "the app" through "this project" to "send it".
+ *
+ * That is deliberately not a fourth word-and-icon button: at 1040px this row
+ * has four of those already when the overwrite question is up, and the app's
+ * settings are the least urgent thing in it. It is the same square glyph
+ * button the settings column's own section headings use, with the same
+ * obligation — never without an accessible name.
+ *
  * The thumbnail is the picture's three strongest colours rather than the
  * picture itself, and that is a decision rather than a shortcut: this app
  * makes light, the chip is 40px across, and a 320 x 200 crop shrunk to 40px is
@@ -34,9 +62,18 @@ import { icon } from './icons.js';
  * button is added.
  */
 export function mountFooter(container, {
-  t, onNameChange, onExport, onOverwrite, onSave, onOpen
+  t, onNameChange, onExport, onOverwrite, onSave, onOpen, onSettings
 }) {
   container.replaceChildren();
+
+  // ---------------------------------------------------------------- the app
+  // The window's one <h1>, and the only honest candidate for it: the name of
+  // the whole thing. Everything else that carries a heading — the stage's
+  // caption, the starting gallery, the first-start notice, each section of the
+  // settings column — is a part of it and is an <h2>.
+  const wordmark = document.createElement('h1');
+  wordmark.className = 'transport-brand';
+  wordmark.id = 'transport-brand';
 
   // ------------------------------------------------------------- what is loaded
   const now = document.createElement('div');
@@ -45,7 +82,16 @@ export function mountFooter(container, {
   const thumb = document.createElement('div');
   thumb.className = 'transport-thumb';
   thumb.id = 'footer-thumb';
-  thumb.append(icon('mark'));
+  // At rest it held the app's own mark, which was right when this was the
+  // first thing in the row and there was no wordmark anywhere near it. The
+  // wordmark is now immediately to its left, and a wordmark standing beside
+  // the very mark it spells is the app saying its own name twice — the same
+  // sin the left column was removed for. So the resting state says what is
+  // actually true instead: nothing is loaded. It says it with the sign the
+  // empty stage and the picture tile in the starting strip both already use
+  // for exactly that, so it is the window's existing word for "waiting", not
+  // a new one invented here.
+  thumb.append(icon('drop'));
 
   const identity = document.createElement('div');
   identity.className = 'transport-identity';
@@ -115,6 +161,24 @@ export function mountFooter(container, {
     return { element, word };
   }
 
+  /**
+   * The one action in this row that is about the app and not about the
+   * document: a square glyph button with no word beside it, exactly as the
+   * settings column's own section headings carry theirs.
+   *
+   * `aria-pressed` and not `aria-expanded`: nothing is being expanded — the
+   * settings column shows one of two panels and this says which. setSettings()
+   * below is called by whoever actually performed the swap, so the button can
+   * never claim to be showing something it is not.
+   */
+  const settings = document.createElement('button');
+  settings.type = 'button';
+  settings.id = 'footer-settings';
+  settings.className = 'icon-button transport-settings';
+  settings.append(icon('settings'));
+  settings.setAttribute('aria-pressed', 'false');
+  settings.addEventListener('click', onSettings);
+
   const open = button('footer-open', 'folder', 'quiet');
   open.element.addEventListener('click', onOpen);
   const save = button('footer-save', 'save', 'quiet');
@@ -129,12 +193,12 @@ export function mountFooter(container, {
 
   const actions = document.createElement('div');
   actions.className = 'transport-actions';
-  // The order is the reading order and the tab order at once, running from the
-  // quiet actions to the one the whole app exists for. The overwrite answer
-  // sits directly beside the export it belongs to.
-  actions.append(open.element, save.element, overwrite.element, exportButton.element);
+  // The order is the reading order and the tab order at once, running outwards
+  // from the app, through this project, to the one action the whole app exists
+  // for. The overwrite answer sits directly beside the export it belongs to.
+  actions.append(settings, open.element, save.element, overwrite.element, exportButton.element);
 
-  container.append(now, actions);
+  container.append(wordmark, now, actions);
 
   /**
    * Say everything again in whatever language `t` now speaks.
@@ -144,7 +208,13 @@ export function mountFooter(container, {
    * has anything to do with the language.
    */
   function relabel() {
+    wordmark.textContent = t('app.title');
     nameLabel.textContent = t('footer.name');
+    // The glyph is the whole button, so the name is the only thing announcing
+    // it — and the same word the panel it opens is headed with, because they
+    // are one thing said twice. The tooltip carries it too, for a pointer.
+    settings.setAttribute('aria-label', t('inspector.title'));
+    settings.title = t('inspector.title');
     unsaved.setAttribute('aria-label', t('project.unsaved.marker'));
     exportButton.word.textContent = t('footer.export');
     overwrite.word.textContent = t('export.overwrite');
@@ -184,6 +254,16 @@ export function mountFooter(container, {
     setName(text) { name.value = text ?? ''; },
     /** Offer, or withdraw, the answer to "that file already exists". */
     askOverwrite(asking) { overwrite.element.hidden = !asking; },
+    /**
+     * Mark the settings toggle, after somebody else has actually swapped the
+     * column. Both halves of the state are said: the class is what the eye
+     * reads, `aria-pressed` what a screen reader reads, and neither is left to
+     * be inferred from the other.
+     */
+    setSettings(showing) {
+      settings.classList.toggle('is-on', showing);
+      settings.setAttribute('aria-pressed', showing ? 'true' : 'false');
+    },
     /**
      * The thumbnail's three bands, from the picture that is loaded. An empty
      * list puts the resting mark back — which is what an opened project with

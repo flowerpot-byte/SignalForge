@@ -8,7 +8,6 @@ import {
 } from '../../app/renderer/components/inspector.js';
 import { nextStopPosition } from '../../app/renderer/components/field.js';
 import { TILES } from '../../app/renderer/components/gallery.js';
-import { DESTINATIONS } from '../../app/renderer/components/sidebar.js';
 import {
   normalizeDocument, GRADIENT_SHAPES, SOLID_MOTION_KINDS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS
@@ -124,46 +123,50 @@ test('no colour slider offers a value the engine would clamp away', () => {
   }
 });
 
-// ------------------------------------------------------- the left column
+// --------------------------------------------- every section is headed
 
-test('every section the column can build has a destination in the left column', () => {
-  const destinations = new Set(DESTINATIONS.map((entry) => entry.key));
+/**
+ * These three used to be a cross-check between two files: the settings
+ * column's own tables of section words and section glyphs on one side, and the
+ * left column's DESTINATIONS on the other, which carried a copy of both so
+ * that an entry and the heading it led to could be pinned to each other.
+ *
+ * That column is gone (see app/renderer/components/shell.js), and with it the
+ * second copy — which is a better outcome than the pinning was, because the
+ * only reliable way to keep two tables agreeing is for there to be one. What
+ * is left to guard is what was underneath the pinning all along: a section
+ * this column can build must arrive with a word AND a picture, and neither
+ * table may name a section the other has never heard of. Both halves have gone
+ * missing before; neither can now go missing quietly.
+ */
+test('every section the column can build has both a heading word and a glyph', () => {
   const sections = new Set();
   for (const layer of [{ type: 'solid' }, { type: 'gradient' }, { type: 'image', asset: 'q' }]) {
     for (const field of fieldsOf(layer)) sections.add(field.section);
   }
+  // Every layer type this app has must contribute something, or the loop above
+  // is passing vacuously over an empty set.
+  assert.ok(sections.size >= 3, `only ${sections.size} sections were produced at all`);
   for (const section of sections) {
-    assert.ok(destinations.has(section), `no left-column entry leads to "${section}"`);
-  }
-  // And nothing in the left column leads somewhere the column never builds.
-  for (const key of destinations) {
-    assert.ok(sections.has(key), `the left column offers "${key}", which no layer type produces`);
+    assert.ok(SECTION_TITLES[section], `the section "${section}" is built with no heading word`);
+    assert.ok(SECTION_GLYPHS[section], `the section "${section}" is built with no glyph`);
   }
 });
 
-test('every left-column entry carries the very heading it leads to', () => {
-  for (const entry of DESTINATIONS) {
-    assert.equal(entry.labelKey, SECTION_TITLES[entry.key],
-      `the entry "${entry.key}" and its heading must be the same word`);
-  }
-});
-
-// And the same again for the icon, which was the half nothing held. The two
-// tables are written out separately — one beside the settings column's
-// headings, one beside the left column's entries — so an icon changed in one
-// of them would have left a sidebar entry and the heading it leads to wearing
-// different pictures, with every other check still green.
-test('every left-column entry carries the very glyph its heading carries', () => {
-  for (const entry of DESTINATIONS) {
-    assert.equal(entry.glyph, SECTION_GLYPHS[entry.key],
-      `the entry "${entry.key}" and its heading must show the same icon`);
-  }
-});
-
-// Neither table may quietly grow a section the other has never heard of.
-test('the two tables name exactly the same sections', () => {
+test('neither table names a section the other has never heard of', () => {
   assert.deepEqual(Object.keys(SECTION_GLYPHS).sort(), Object.keys(SECTION_TITLES).sort());
-  assert.deepEqual(DESTINATIONS.map((entry) => entry.key).sort(), Object.keys(SECTION_TITLES).sort());
+});
+
+// And no table may quietly keep a section no layer type produces — the shape
+// of dead weight the left column's fifth entry could once hide.
+test('no section is headed that nothing ever builds', () => {
+  const sections = new Set();
+  for (const layer of [{ type: 'solid' }, { type: 'gradient' }, { type: 'image', asset: 'q' }]) {
+    for (const field of fieldsOf(layer)) sections.add(field.section);
+  }
+  for (const name of Object.keys(SECTION_TITLES)) {
+    assert.ok(sections.has(name), `"${name}" is headed and glyphed, but no layer type produces it`);
+  }
 });
 
 // ---------------------------------------------------------- the gallery

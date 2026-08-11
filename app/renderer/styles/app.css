@@ -26,22 +26,30 @@ html, body {
   color-scheme: dark;
 }
 
-/* Four regions that touch. There is no gap and no page padding: in the
+/* Three regions that touch. There is no gap and no page padding: in the
    reference the columns are fields of colour meeting at a line, which is what
    makes the window read as one surface with structure rather than as a tray of
    floating tiles.
 
-   The transport bar runs beside the left column rather than under it —
-   measured off the reference, where the bar begins at the sidebar's right edge
-   and the sidebar keeps its own settings entry pinned below it. */
+   THE LEFT COLUMN IS GONE, AND THE STAGE HAS ITS 200 PIXELS
+
+   There was a fourth region here: a 200px navigation column, with the
+   transport bar starting at its right edge. Max's sentence about it —
+   "die linke Spalte ist unnötig da sie nur auf Dinge in der rechten Spalte
+   verweist" — is the whole argument, and components/shell.js records what
+   followed from it. In this file the change is exactly two lines, and the
+   effect of them is the largest single thing in the window: at 1280 the stage
+   goes from 781px to 981px wide, so the picture this app exists to build gets
+   a quarter again as much room, and the transport bar runs the full width
+   because there is no longer anything for it to run beside. */
 #app {
   height: 100%;
   display: grid;
-  grid-template-columns: var(--nav-width) minmax(0, 1fr) var(--settings-width);
+  grid-template-columns: minmax(0, 1fr) var(--settings-width);
   grid-template-rows: minmax(0, 1fr) auto;
   grid-template-areas:
-    "nav stage settings"
-    "nav transport transport";
+    "stage settings"
+    "transport transport";
 }
 
 /* ---------------------------------------------------------------------------
@@ -60,89 +68,6 @@ html, body {
 }
 
 /* ---------------------------------------------------------------------------
-   The left column: where you are, and where else you could be.
-   --------------------------------------------------------------------------- */
-
-.nav {
-  grid-area: nav;
-  /* Lighter than the stage beside it, not darker — the measured values are in
-     tokens.css, where colours live. It is the one surface in the reference
-     that goes UP, and it is what stops the window from reading as one flat
-     sheet with lines drawn on it. */
-  background: var(--bg-nav);
-  border-right: 1px solid var(--hairline);
-  display: flex;
-  flex-direction: column;
-  padding: var(--space-3) var(--space-2) var(--space-3);
-  min-height: 0;
-  overflow: hidden;
-}
-
-.nav-brand {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2) var(--space-4);
-  color: var(--accent);
-}
-/* The window's <h1>, which is why the margin has to be said: it is the app's
-   wordmark and is sized like one, not like a heading the browser has opinions
-   about. */
-.nav-wordmark {
-  margin: 0;
-  color: var(--text-strong);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.nav-caption {
-  margin: 0 0 var(--space-2);
-  padding: 0 var(--space-2);
-  color: var(--text-dim);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-}
-
-.nav-list { display: flex; flex-direction: column; gap: 2px; }
-/* The fourth destination is pinned to the bottom and separated by a rule: it
-   belongs to the app, the three above it belong to the effect. */
-.nav-foot {
-  margin-top: auto;
-  padding-top: var(--space-2);
-  border-top: 1px solid var(--hairline);
-}
-
-/* One entry: line icon, text label, and — when it is the one showing — a
-   rounded pill a step lighter than the column. Measured (see --surface-raise
-   in tokens.css): a neutral, with no accent in it at all. */
-.nav-entry {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  width: 100%;
-  padding: var(--space-2) var(--space-2);
-  border: 0;
-  border-radius: var(--radius-lg);
-  background: transparent;
-  color: var(--text-muted);
-  font: inherit;
-  font-size: 13px;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease-out, color 120ms ease-out;
-}
-.nav-entry:hover:not(:disabled) { background: var(--surface-raise); color: var(--text-strong); }
-.nav-entry.is-active { background: var(--surface-raise); color: var(--text-strong); }
-/* A destination that is waiting for a picture. Visibly present, deliberately:
-   hiding it would make the window change shape the moment a file lands on it,
-   and the note in the settings column says what it is waiting for. */
-.nav-entry:disabled { color: var(--text-dim); cursor: default; }
-
-/* ---------------------------------------------------------------------------
    The stage: the one thing this app is for.
    --------------------------------------------------------------------------- */
 
@@ -151,7 +76,7 @@ html, body {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   /* Measured off the reference rather than chosen: its stage runs from x=213
-     to x=1257, with the sidebar ending at x=200 and the settings cards
+     to x=1257, with the reference's OWN sidebar ending at x=200 and the settings cards
      beginning at x=1268 — 13px of margin on the left and 11px on the right,
      i.e. --space-3 either side, not --space-4. Those four pixels a side are
      not decoration: the frame here is width-limited at 16:10, so every pixel
@@ -178,6 +103,48 @@ html, body {
   min-height: 0;
   border-radius: var(--radius);
   border: 1px dashed transparent;
+  /* The drop target lighting up as a file crosses it. A state that snapped on
+     and off read as a rendering fault at the edge of the eye — a rectangle
+     flickering somewhere off to the side while the pointer is busy carrying
+     something. Faded, it reads as the window noticing. */
+  transition: border-color var(--motion-press) var(--ease-out),
+              background-color var(--motion-press) var(--ease-out);
+
+  /* ------------------------------------------------------------------------
+     HOW WIDE THE THINGS UNDER THE PICTURE ARE, AND WHY IT IS NOT "ALL OF IT"
+
+     The stage is 16:10 and has to leave room under itself for a caption, a
+     line of feedback and the starting strip, so above a certain window width
+     it runs out of HEIGHT before it runs out of width and simply cannot use
+     the rest. That was invisible while a 200px column stood to the left: at
+     1760 the picture had 1234px to work with and could use 1067 of them. With
+     that column gone it has 1434 and still uses 1067 — so 365px of the stage
+     column is width the picture will never reach, at any window size.
+
+     Left as it was, the line of feedback's rule and the strip below it ran the
+     full 1434 while the picture stopped at 1067, and a hairline crossing three
+     hundred pixels of nothing is what MAKES that nothing visible. Everything
+     under the picture is about the picture, so everything under the picture is
+     as wide as the picture: one left edge (see .stage below) and one right
+     edge, and the leftover collects outside the block as a single gutter.
+
+     The 232px is the height everything that is NOT the picture costs, and it
+     is the one number here that has to be maintained by hand:
+
+        48   the caption row (--meta-row below, which states the same thing)
+        38   the line of feedback  (12 margin + 8 padding + 18 min-height)
+       146   the starting strip    (12 margin + 25 heading + 109 rail)
+
+     Both ways of getting it wrong are survivable, which is why it is allowed
+     to be a constant at all: too large and the block is narrower than the
+     picture could have been, too small and the picture is the narrower of the
+     two — neither overflows, because the picture's own width is still derived
+     from a real measurement (.stage-inner) and never from this. It is read
+     back in test/harness/shots.js, which reports the picture's width and this
+     block's width side by side, so a drift shows up as two numbers that used
+     to be equal and are not. */
+  container-type: size;
+  --content-width: min(100%, calc((100cqh - 232px) * 1.6));
 }
 .first-run { grid-row: 1; }
 .stage { grid-row: 2; }
@@ -204,10 +171,28 @@ html, body {
    --meta-row is the caption under the frame plus its gap, which the frame must
    leave room for — and which is not there at all while the frame is empty, so
    it is a variable rather than a number baked into the sum. */
+/* Centred vertically, and pinned to the LEFT.
+
+   It was centred on both axes, which was invisible while the stage column was
+   781px wide: the picture very nearly filled it, so "centred" and "flush left"
+   were the same place. With the left column gone the column is 981px and the
+   picture cannot use all of it — at 16:10 a stage that has to leave room for a
+   caption, a line of feedback and the starting strip runs out of HEIGHT first,
+   so about 170px of width is left over whatever the window does. That is not a
+   fault to be fixed; every fixed-ratio stage has it.
+
+   Where the leftover goes is the decision, and centring made it the wrong
+   answer: it split the slack either side of the picture, so the picture and
+   its caption sat at x=99 while the line of feedback, the strip's heading and
+   the tiles all sat at x=13 — two left edges, 86px apart, on the same column
+   (photographed: work/design-pass-2/after/03-picture-loaded.png). Flush left
+   gives the column ONE edge that everything in it starts from, and collects
+   every leftover pixel into a single gutter on the right, where the settings
+   column already is. */
 .stage {
   min-height: 0;
   display: grid;
-  place-items: center;
+  place-items: center start;
   container-type: size;
 }
 .stage-inner {
@@ -217,9 +202,18 @@ html, body {
 }
 /* No picture, no caption about one: "320 x 200" is true of the effect but it
    is information about a preview, and there is nothing being previewed. It
-   comes back with the first picture, next to the cost of drawing it. */
+   comes back with the first picture, next to the cost of drawing it.
+
+   Its ROOM is kept even so, and that is the second half of the rule. The
+   caption's 48px used to be handed back to the frame while there was nothing
+   to caption, which made the empty frame 77px WIDER than the same frame with
+   a picture in it — so the one gesture this whole window is built around,
+   putting something on the stage, was answered by the stage getting smaller.
+   It also left the empty frame reaching past the strip beneath it, since that
+   strip is sized for the picture (see --content-width above). Reserving the
+   row costs 48px of a frame that has nothing in it and buys a frame that never
+   changes size and a column with one right edge in both states. */
 #preview-body:not(.has-picture) .stage-meta { display: none; }
-#preview-body:not(.has-picture) .stage-inner { --meta-row: 0px; }
 
 /* The frame. Sunk into the page rather than raised off it — no shadow, because
    the reference has none: what makes the picture the brightest thing in the
@@ -230,6 +224,10 @@ html, body {
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
   background: var(--surface-sunk);
+  /* The frame joins the column's own edge in answering a file crossing it, so
+     the two halves of that one gesture arrive together rather than one of them
+     snapping while the other fades. */
+  transition: border-color var(--motion-press) var(--ease-out);
 }
 /* Empty, the frame is the drop target and says so with its edge. The stronger
    stroke is deliberate: this edge is carrying a state ("waiting for a file"),
@@ -334,6 +332,8 @@ html, body {
    there is anything to say, so the picture above it does not resize every time
    a message comes and goes. */
 .drop-message {
+  /* As wide as the picture it reports on — see --content-width above. */
+  width: var(--content-width);
   margin: var(--space-3) 0 0;
   min-height: 18px;
   padding-top: var(--space-2);
@@ -353,7 +353,10 @@ html, body {
    The starting gallery: how an effect begins.
    --------------------------------------------------------------------------- */
 
-.gallery { margin-top: var(--space-3); min-width: 0; }
+/* As wide as the picture above it — see --content-width on #preview-body. The
+   rail inside still scrolls sideways, so this decides where the shelf ENDS,
+   never how many things may stand on it. */
+.gallery { width: var(--content-width); margin-top: var(--space-3); min-width: 0; }
 .gallery-title {
   margin: 0 0 var(--space-2);
   color: var(--text-dim);
@@ -403,11 +406,18 @@ html, body {
   font: inherit;
   text-align: left;
   cursor: pointer;
+  transition: transform var(--motion-press) var(--ease-out);
 }
+/* Less than a button's 0.97: this is a 168px tile and the same ratio on it
+   would be a five-pixel jump rather than an acknowledgement. What is pressed
+   is also the most destructive control in the window — three of these four
+   replace the whole document — so it gets the clearest possible "yes, that
+   was you", and then the question about unsaved work. */
+.tile:active:not(:disabled) { transform: scale(0.985); }
 .tile-art {
   position: absolute;
   inset: 0;
-  transition: transform 140ms ease-out;
+  transition: transform var(--motion-press) var(--ease-out);
 }
 /* The gallery gesture: the picture leans in under the pointer. Nothing else
    moves — the name stays exactly where it was, because a label that drifts
@@ -542,10 +552,13 @@ html, body {
 .field-group:last-child { margin-bottom: 0; }
 
 /* The section's glyph and name on the left, its actions on the right — which
-   is where the reference puts a section's icon buttons. The one the left
-   column is pointing at takes the accent under it and brightens: a marker, not
-   a second selection. */
-.field-group.is-active > h2 { color: var(--text-strong); border-bottom-color: var(--accent); }
+   is where the reference puts a section's icon buttons.
+
+   One of these used to be marked with the accent, echoing whichever entry the
+   left column was pointing at. There is no left column and therefore nothing
+   to echo: every section is on screen, in one scroll, and none of them is
+   more current than the rest. The rule that is left says "section", once, in
+   the same voice for all of them. */
 .field-group > h2 {
   display: flex;
   align-items: center;
@@ -677,6 +690,31 @@ html, body {
   gap: var(--space-4);
   min-width: 0;
 }
+
+/* The window's one <h1>, at the head of the one strip of the window that
+   belongs to the app rather than to the effect. It came from the left column's
+   top corner and it is quieter here than it was there, on purpose: in that
+   column it was the heading of a region, whereas in this row it is a label on
+   a bar whose loud things are the name of the thing being built and the one
+   filled button. --text-muted on the page measures 11.8:1, so quiet is a
+   matter of weight and size and never of legibility.
+
+   The rule after it is what makes the row read in three parts — the app, this
+   project, the actions — rather than as one long queue of things. It gives way
+   before nothing: `flex: 0 0 auto`, because a wordmark that ellipsised would
+   be worse than one that is simply short. */
+.transport-brand {
+  flex: 0 0 auto;
+  margin: 0;
+  padding-right: var(--space-4);
+  border-right: 1px solid var(--hairline);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 /* The identity block gives way before anything else does: `flex: 1 1 0` rather
    than `1 1 auto` so its basis is nothing and every pixel it holds is one the
    actions did not need. At the smallest window this is what keeps the buttons
@@ -722,15 +760,49 @@ html, body {
    only warning the window gives before the close guard lands.
    `visibility: hidden` also takes it out of the accessibility tree, which is
    what makes its aria-label ("Nicht gespeichert") announced exactly while it
-   is true (see components/footer.js). */
+   is true (see components/footer.js).
+
+   It ARRIVES rather than simply being there the next time anybody looks. This
+   is the window's only warning before the close guard, it appears at the very
+   moment the first character is typed somewhere else in the row, and something
+   that fades up in a sixth of a second beside the field being typed in is seen
+   without being looked for — which is the whole job. Opacity and transform
+   only, so it still costs the row nothing.
+
+   ARRIVING IS ANIMATED; LEAVING IS NOT, AND THAT IS NOT AN OVERSIGHT
+
+   The transition lives on the state that is ON, so it governs the way in and
+   there is nothing to govern the way out: the moment the work is saved the
+   mark is simply gone. Two reasons, and they agree.
+
+   The first is what it means. Appearing is news — something changed and
+   nobody was looking at this corner. Disappearing is the answer to a button
+   the user just pressed and is already looking at, and a system response
+   should be instant.
+
+   The second is the one that actually settled it, because it is measured: a
+   fade-out means holding `visibility: visible` until the fade ends, and
+   `visibility` is exactly what keeps this mark out of the accessibility tree.
+   A 160ms fade would therefore go on announcing "not saved" for 160ms after
+   the save. test/harness/unsaved.js reads the mark the instant the save
+   returns and caught precisely that. A mark that is briefly wrong is worse
+   than a mark that is abrupt. */
 .transport-unsaved {
   flex: 0 0 auto;
   visibility: hidden;
+  opacity: 0;
+  transform: scale(0.7);
   color: var(--accent);
   font-size: 14px;
   line-height: 1;
 }
-.has-unsaved-changes .transport-unsaved { visibility: visible; }
+.has-unsaved-changes .transport-unsaved {
+  visibility: visible;
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity var(--motion-state) var(--ease-out),
+              transform var(--motion-state) var(--ease-out);
+}
 /* The longest thing in the row and the least urgent, so it is the one that
    gives way. The full path is never only here — it is in the message after
    every export, in the overwrite question, and in the settings column. */
@@ -745,6 +817,15 @@ html, body {
 
 .transport-actions { display: flex; align-items: center; gap: var(--space-2); flex: 0 0 auto; }
 .transport-actions button { white-space: nowrap; }
+/* The way into the app's own settings: the quietest thing in the group and the
+   furthest from the export, with a little more air after it than the two
+   document actions have between them, so the row reads "the app | this project
+   | send it". When the column is showing that panel it wears the same raised
+   fill the left column's active entry used to — the one mark this window has
+   ever used for "you are looking at this", kept and moved with the job.
+   --text-strong on --surface-raise measures 12.7:1. */
+.transport-settings { margin-right: var(--space-1); }
+.transport-settings.is-on { background: var(--surface-raise); color: var(--text-strong); }
 
 /* ---------------------------------------------------------------------------
    Controls. Every one of them has all five states.
@@ -818,7 +899,7 @@ select:disabled { color: var(--text-muted); cursor: default; }
 select:disabled:hover { border-color: var(--hairline); }
 /* The dropdown list itself is drawn by the system and does not inherit the
    surface above it, so it needs a solid background of its own. */
-select option { background: var(--bg-nav); color: var(--text-strong); }
+select option { background: var(--surface-step); color: var(--text-strong); }
 
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
    so every element in this file that is given one has to honour the attribute
@@ -842,9 +923,17 @@ button {
   border-radius: var(--radius);
   padding: 6px var(--space-3);
   cursor: pointer;
-  transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+  transition: background 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out,
+              transform var(--motion-press) var(--ease-out);
 }
 button:hover { background: var(--surface-raise); }
+/* Pressed. The one piece of motion in this window that answers a gesture
+   rather than reporting a state, and the reason it is here at all: an export
+   that takes a second to write, a file dialog that takes longer to open, and
+   nothing in between saying the press was heard. Small enough that it is felt
+   and not watched — a fifth of a millimetre at this size — and short enough
+   that it is over before the thing it acknowledged has finished happening. */
+button:active:not(:disabled) { transform: scale(0.97); }
 /* Nothing left to do: say so by looking spent, and do not light up on hover. */
 button:disabled { color: var(--text-dim); cursor: default; }
 button:disabled:hover { background: var(--surface-card); }
@@ -1010,6 +1099,36 @@ input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-mute
   margin: -1px;
 }
 
+/* ---------------------------------------------------------------------------
+   The one entrance: something that was not in the window a moment ago.
+
+   Two things use it and nothing else may without an argument as good — a
+   section of the settings column that the document has just grown ("Bild",
+   the instant a picture lands), and the settings column's other panel when the
+   transport bar's toggle swaps it. Both are the column being a different
+   length or holding different things than it was, which is the one change in
+   this window that used to happen with nothing at all to say it had.
+
+   Six pixels and a fade, no scale: these are full-width blocks in a narrow
+   column, and a block that grows into place draws the eye to its edges rather
+   than to what is written in it. Deliberately NO fill-mode — an element that
+   is not mid-entrance wears its own resting style, which is half of what stops
+   a paused animation from leaving a section invisible; components/motion.js
+   carries the other half and says why a window nobody can see needs it.
+
+   180ms, and the strong ease-out from tokens.css: long enough to be seen as
+   an arrival, short enough that the control is under the pointer before
+   anybody would think to reach for it. */
+@keyframes sf-enter {
+  from { opacity: 0; transform: translateY(6px); }
+}
+.sf-enter { animation: sf-enter var(--motion-enter) var(--ease-out); }
+
+/* Reduced motion is a blanket, and it stays one. Everything above is either a
+   state that is also said in a colour, a word or a position, or an entrance
+   whose element is in its final place the whole time — so there is nothing
+   here that has to degrade into a gentler version of itself instead of simply
+   not happening. */
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation: none !important; }
 }

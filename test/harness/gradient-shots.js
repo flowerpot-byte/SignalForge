@@ -121,9 +121,12 @@ async function main() {
     const px = (x, y) => { const d = g.getImageData(x, y, 1, 1).data; return [d[0], d[1], d[2]]; };
     return {
       name: document.getElementById('footer-name').value,
-      section: document.querySelector('.nav-entry.is-active')?.dataset.destination ?? null,
-      navDisabled: [...document.querySelectorAll('.nav-entry')]
-        .filter((e) => e.disabled).map((e) => e.dataset.destination),
+      // Which sections the column has built, in order. The left column that
+      // used to name one of them "active" is gone, and so is the idea that one
+      // of them is: they are all on screen, in one scroll (see
+      // app/renderer/components/shell.js).
+      sections: [...document.querySelectorAll('#inspector-body .field-group')]
+        .map((e) => e.dataset.section),
       headings: [...document.querySelectorAll('.field-group > h2')].map((h) => h.textContent.trim()),
       controls: [...document.querySelectorAll('#inspector-body input, #inspector-body select')]
         .map((e) => e.id || e.type),
@@ -156,8 +159,9 @@ async function main() {
   notes.linear = await state();
   await shot('04-linear');
 
-  // The settings column of a gradient, on its own destination.
-  await d.js(`document.getElementById('nav-fill').click(), true`);
+  // The settings column of a gradient. Its "Fläche" section is the first thing
+  // in that column, so this is a scroll to the top and not a search.
+  await d.js(`document.getElementById('inspector').scrollTop = 0, true`);
   await wait(120);
   notes.linearSettings = await state();
   await shot('05-linear-settings');
@@ -178,13 +182,11 @@ async function main() {
   // ---------------------------------------------------------- a radial ramp
   await start('radial');
   notes.radial = await state();
-  await d.js(`document.getElementById('nav-fill').click(), true`);
+  await d.js(`document.getElementById('inspector').scrollTop = 0, true`);
   await wait(120);
   await shot('08-radial');
 
   // ------------------------------------------------------ a motion running
-  await d.js(`document.getElementById('nav-motions').click(), true`);
-  await wait(120);
   await d.js(`document.getElementById('sf-layers-0-add').click(), true`);
   await d.until(`document.getElementById('sf-layers-0-motions-0-speed') !== null`, 'a motion was added', 100);
   await d.setInput('sf-layers-0-motions-0-speed', '80');

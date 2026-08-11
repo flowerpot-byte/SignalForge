@@ -1,7 +1,7 @@
 {
   "app.title": "SignalForge",
-  "nav.caption": "Effekt",
-  "nav.label": "Bereiche",
+  "region.stage": "Vorschau",
+  "region.settings": "Einstellungen",
   "gallery.title": "Effekt beginnen mit",
   "gallery.picture": "Eigenes Bild",
   "gallery.solid": "Farbfläche",

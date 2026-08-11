@@ -106,6 +106,13 @@ async function main() {
   const d = driver(win);
   const notes = {};
 
+  // The promise this whole file is built on, measured rather than assumed: no
+  // window of this process is on screen at any point. Asked at the start and
+  // again at the end, because `show: false` at creation would not save anybody
+  // from a later show() — and somebody is sitting at this machine working.
+  const nothingVisible = () => BrowserWindow.getAllWindows().every((w) => !w.isVisible());
+  notes.windowVisibleAtStart = !nothingVisible();
+
   // Real mouse events go through the debugging protocol, which has to be
   // attached before driver.drag() can send anything — the same line
   // test/harness/unsaved.js and walkthrough.js open with.
@@ -186,13 +193,27 @@ async function main() {
   await shot('03-picture-loaded');
 
   // ------------------------------------------------- the settings column, all
-  for (const [key, name] of [['image', '04-settings-image'], ['motions', '05-settings-motions'],
-    ['colour', '06-settings-colour'], ['settings', '07-settings-app']]) {
-    await d.js(`document.getElementById('nav-${key}').click(), true`);
+  //
+  // Every section of that column is on screen at once and always was; what has
+  // changed is that there is no longer a left column pretending to navigate
+  // between them. So the column is photographed by SCROLLING it — which is the
+  // only gesture there is now — and the app's own settings by pressing the one
+  // control that reaches them.
+  for (const [to, name] of [[0, '04-settings-top'], [1, '05-settings-scrolled']]) {
+    await d.js(`(() => {
+      const c = document.getElementById('inspector');
+      c.scrollTop = ${to} * (c.scrollHeight - c.clientHeight);
+      return true;
+    })()`);
     await wait(120);
     await shot(name, { frames: 4 });
   }
-  await d.js(`document.getElementById('nav-colour').click(), true`);
+  await d.js(`document.getElementById('inspector').scrollTop = 0, true`);
+  await d.js(`document.getElementById('footer-settings').click(), true`);
+  await wait(160);
+  await shot('06-settings-app', { frames: 4 });
+  await d.js(`document.getElementById('footer-settings').click(), true`);
+  await wait(160);
 
   // -------------------------------------------------------- the two extremes
   await shot('08-smallest-1040x700', { size: [1040, 700] });
@@ -201,28 +222,40 @@ async function main() {
   // Back to the ordinary size for the one that goes beside the reference.
   await shot('10-beside-the-reference', { size: [1280, 820] });
 
-  // And the empty window at the smallest size, which is where blank space
-  // shows first if there is any.
-  await d.js(`document.getElementById('nav-colour').click(), true`);
+  // What every region actually measures. A capture of a window nobody is
+  // showing can put stale compositor tiles in the wrong place — one run drew
+  // fragments of the settings column over the left one — so the DOM is asked
+  // directly rather than the picture being trusted.
+  //
+  // `stageGained` is the number this whole pass turns on: the stage was 781px
+  // wide at 1280 while a 200px navigation column stood beside it, and the
+  // removal of that column is only worth anything if those pixels genuinely
+  // ended up here.
   notes.regions = await d.js(`(() => {
     const box = (sel) => {
       const el = document.querySelector(sel);
       if (!el) return null;
       const b = el.getBoundingClientRect();
-      return { w: Math.round(b.width), h: Math.round(b.height) };
+      return { w: Math.round(b.width), h: Math.round(b.height), left: Math.round(b.left) };
     };
     return {
-      nav: box('#nav'), stage: box('#preview'), settings: box('#inspector'),
+      stage: box('#preview'), settings: box('#inspector'),
       transport: box('#footer'), canvas: box('#preview-canvas'), gallery: box('#gallery'),
-      // What the left column actually holds, and where every slider and value
-      // in the window really is. A capture of a window nobody is showing can
-      // put stale compositor tiles in the wrong place — one run drew fragments
-      // of the settings column over the left one — so the DOM is asked
-      // directly rather than the picture being trusted.
-      navHolds: document.getElementById('nav').textContent.replace(/\\s+/g, ' ').trim(),
-      controlsLeftOf200: [...document.querySelectorAll('input[type=range], output')]
-        .filter((e) => e.getBoundingClientRect().left < 200)
-        .map((e) => e.id)
+      brand: box('#transport-brand'), settingsToggle: box('#footer-settings'),
+      // The picture's width and the width of everything under it, side by
+      // side. They are arrived at two different ways — the picture from a real
+      // measurement, the block below from the 232px constant in styles/app.css
+      // — and they are supposed to come out the same. Two numbers that used to
+      // be equal and are not mean that constant has gone stale.
+      alignment: {
+        picture: Math.round(document.querySelector('.stage-inner').getBoundingClientRect().width),
+        message: Math.round(document.querySelector('.drop-message').getBoundingClientRect().width),
+        gallery: Math.round(document.getElementById('gallery').getBoundingClientRect().width)
+      },
+      // Nothing may be left standing at the window's left edge that belongs to
+      // a column that no longer exists.
+      navsLeft: document.querySelectorAll('nav, .nav-entry').length,
+      stageStartsAt: Math.round(document.getElementById('preview').getBoundingClientRect().left)
     };
   })()`);
 
@@ -273,6 +306,7 @@ async function main() {
     movedCanvasPixels: after - before
   };
   await shot('12-crop-dragged-1to1');
+  notes.windowVisibleAtEnd = !nothingVisible();
   process.stdout.write(`${JSON.stringify(notes)}\n`);
 }
 

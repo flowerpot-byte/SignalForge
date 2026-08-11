@@ -11,11 +11,13 @@ import { icon } from './icons.js';
  * whatever width was left over. That row could never be the transport bar this
  * window now has, because half of it was a settings panel in disguise.
  *
- * So they moved to where settings belong — the settings column — reached
- * through the fourth entry in the left column, pinned at the bottom away from
- * the three that belong to the effect. They are built in exactly the shape
- * every other card in that column has: the name of the thing on the left, its
- * current value on the right, and the control across the width beneath.
+ * So they moved to where settings belong — the settings column — reached now
+ * through the marked toggle at the head of the transport bar's actions (see
+ * components/footer.js; the left column that used to hold the way in has gone,
+ * because pointing at things already on screen was all it did). They are built
+ * in exactly the shape every other card in that column has: the name of the
+ * thing on the left, its current value on the right, and the control across
+ * the width beneath.
  *
  * This panel decides nothing. It shows what it is told and reports what was
  * pressed; where the effects folder actually is, and whether a language can be
@@ -24,11 +26,11 @@ import { icon } from './icons.js';
 export function mountAppSettings(container, { t, language, languages, onLanguageChange, onChooseFolder }) {
   container.replaceChildren();
 
-  // The same header row the three effect sections have — glyph, name, a rule
-  // under it — so that switching to this destination changes what the column
-  // holds without changing what the column IS.
+  // The same header row the effect's own sections have — glyph, name, a rule
+  // under it — so that switching to this panel changes what the column holds
+  // without changing what the column IS.
   const group = document.createElement('section');
-  group.className = 'field-group is-active';
+  group.className = 'field-group';
   group.dataset.section = 'settings';
   const heading = document.createElement('h2');
   heading.append(icon('settings'));

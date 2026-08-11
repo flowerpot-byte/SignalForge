@@ -25,11 +25,18 @@
      either, which would make every surface above it look like a sticker. */
   --bg-base:        #060b11;
 
-  /* The left column, one step UP from the page rather than down. Measured at
-     (100,600), (100,900) and (10,10): #0f1620. This is the surprise in the
-     reference — a sidebar that is lighter than the stage beside it, which is
-     what stops the window from reading as one flat sheet with lines on it. */
-  --bg-nav:         #0f1620;
+  /* One step UP from the page rather than down. Measured off the reference's
+     left column at (100,600), (100,900) and (10,10): #0f1620.
+
+     It was called --bg-nav while this window had a left column of its own to
+     paint. That column is gone (see the note at the head of app.css), and a
+     token named after a region that no longer exists is a trap for whoever
+     reads this next — so it carries what it has always actually been: the step
+     above the page. Two things still stand on it, and both need a surface the
+     page's own near-black cannot give them: the list a <select> pops open,
+     which the system draws and which inherits nothing, and the lighter end of
+     the app mark's gradient (tools/icon/build-icon.mjs reads this very line). */
+  --surface-step:   #0f1620;
 
   /* A card in the settings column. Measured inside three different cards
      (1320,620 / 1400,700 / 1400,306): #212d3a, the same value each time.
@@ -139,7 +146,7 @@
 
   /* A line that merely separates: the rule under the left column's caption,
      the edge between the stage and the settings column. Measured at the
-     sidebar's right edge (200,600): #212d3a — the same value as a card fill,
+     reference's own sidebar edge (200,600): #212d3a — the same value as a card fill,
      which is why there is one token for the step and this alias for the
      line. */
   --hairline:       #212d3a;
@@ -175,10 +182,13 @@
   --space-5:        24px;
 
   /* ---------------------------------------------------------------------
-     The two fixed columns, measured off the reference: the sidebar's right
-     edge is at x=200, and the settings cards run 1268..1556 in a 1568-wide
-     window, i.e. a 300px column with 12px of padding either side. */
-  --nav-width:      200px;
+     The one fixed column left, measured off the reference: its settings cards
+     run 1268..1556 in a 1568-wide window, i.e. a 300px column with 12px of
+     padding either side.
+
+     There used to be a --nav-width of 200px beside it. Those 200 pixels are
+     the stage's now, and the token is gone rather than left standing at a
+     value nothing reads. */
   --settings-width: 300px;
 
   /* Every icon in this window is drawn on this grid, at this weight. Both are
@@ -195,4 +205,25 @@
      anything older. */
   --font-ui:        "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
   --font-mono:      "Cascadia Mono", Consolas, ui-monospace, monospace;
+
+  /* ---------------------------------------------------------------------
+     Motion. Three durations and one curve, so that "how long" and "which
+     shape" are decisions made once and read back rather than typed out at
+     every use — the same argument the spacing scale above is built on.
+
+     The curve is a strong ease-out rather than the browser's own `ease-out`,
+     which is too shallow to read as deliberate: it starts fast, so the window
+     answers in the frame the gesture happens, and settles slowly. Nothing in
+     this app eases IN — a control that starts slowly feels slower than the
+     same duration eased out, at exactly the moment somebody is watching.
+
+     Nothing here is decoration. Every use is state: a control acknowledging a
+     press, the mark for unsaved work arriving, the stage lighting up as a file
+     crosses it, a section of the settings column appearing because the
+     document grew one. The whole set is switched off wholesale at the foot of
+     app.css under prefers-reduced-motion. */
+  --ease-out:       cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-press:   140ms;
+  --motion-state:   160ms;
+  --motion-enter:   180ms;
 }
