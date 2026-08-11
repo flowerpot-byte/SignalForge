@@ -5,7 +5,7 @@ import { speedToRate } from './speed.js';
 
 /**
  * Radians per second per unit of speedToRate, for drift and breathe. Warp gets
- * its own, larger scale (see layers/image.js) — its visible motion is more
+ * its own, larger scale (see motion/warp.js) — its visible motion is more
  * subtle per radian, so it needs a faster phase to read as comparably fast.
  *
  * It lives here rather than in one layer type because "speed 40 means the same

@@ -41,7 +41,7 @@ const R0 = S0;
  * the pair, and the report records the sweep).
  *
  * Raising THIS rather than SPEED_SCALE (src/engine/motion/breathe.js) or
- * WARP_SPEED_SCALE (src/engine/layers/image.js, gradient.js) is the whole
+ * WARP_SPEED_SCALE (src/engine/motion/warp.js) is the whole
  * point. Those two are per-motion constants: multiplying them speeds
  * everything up including the default, which would change the tempo of every
  * effect Max has already built and exported. The ceiling of the curve is the

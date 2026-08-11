@@ -165,10 +165,32 @@ ${reads}
     // ask how long a frame really took without reading a wall clock, which is
     // forbidden here. That is an accepted trade with a known worst case: a
     // host that both ticks animation frames at 60Hz AND hands over a timestamp
-    // that never moves would play this at twice speed. Frozen is fatal and
-    // twice speed is not, and the pump below runs at exactly this rate, so the
-    // one case that matters -- no animation frames at all -- is exact.
-    if (usable(stamp)) { previousStamp = stamp; drawnStamp = stamp; }
+    // that never moves would play this at twice speed -- and, since render()
+    // is then called once per real animation frame, at twice the compute cost
+    // of the intended 30fps too, not only twice the apparent tempo. Frozen is
+    // fatal and twice speed is not, and the pump below runs at exactly this
+    // rate, so the one case that matters -- no animation frames at all -- is
+    // exact.
+    if (usable(stamp)) {
+      previousStamp = stamp;
+      drawnStamp = stamp;
+    } else {
+      // No timestamp means this is the interval fallback (see the pump
+      // below), which just added a nominal step to seconds on the strength
+      // of no clock at all. Leaving previousStamp at its old value would let
+      // the next REAL frame compute its delta from before this fallback
+      // tick -- double-counting the wall-clock gap a NOMINAL_STEP already
+      // covered, so every dropped host frame would add an extra ~33ms of
+      // drift on exactly the stalling host this fallback targets. Clearing
+      // it instead sends that next real frame through this same branch
+      // (usable(stamp) true, previousStamp null fails the delta check above)
+      // so it also costs exactly one nominal step and re-anchors
+      // previousStamp for the frame after that. drawnStamp is deliberately
+      // left alone -- tooSoon()'s 30fps gate must keep comparing against the
+      // last frame actually drawn, not get reset by a fallback tick that drew
+      // one too.
+      previousStamp = null;
+    }
     seconds += NOMINAL_STEP;
   }
 
@@ -187,7 +209,7 @@ ${reads}
     step(stamp);
   }
 
-  // The second way in. setTimeout keeps running where requestAnimationFrame
+  // The second way in. setInterval keeps running where requestAnimationFrame
   // has stopped (measured in this project's own harness), so a timer that only
   // draws when no animation frame has arrived since it last looked keeps a
   // stalled effect alive without drawing a single extra frame while the loop
