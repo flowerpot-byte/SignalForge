@@ -117,6 +117,10 @@ export function coverRenderScript(doc) {
   })()`;
 }
 
+// Same budget and same reasoning as prepare-image.js: generous enough to
+// survive a cold Electron launch, far short of looking like a hang.
+const DEFAULT_TIMEOUT_MS = 30_000;
+
 /**
  * Render the cover in THIS process, in a window nobody ever sees.
  *
@@ -127,27 +131,46 @@ export function coverRenderScript(doc) {
  *
  * `createWindow` is injectable so the choice above can be proven from a plain
  * Node test, which cannot construct a BrowserWindow at all.
+ *
+ * AND IT GIVES UP, which it did not used to. Both awaits below are unbounded on
+ * their own: loadFile on a host that never finishes loading, and
+ * executeJavaScript on a document whose render never returns. The spawned route
+ * has always had a timeout (runElectronHelper's) and this one had none, which
+ * made the in-process path — the one the app itself uses — the only one that
+ * could hang. It hangs in the worst possible place: the library draws missing
+ * tile pictures ONE AT A TIME through a serial queue (app/main.js), so a single
+ * wedged render is not one tile without a picture, it is every tile behind it
+ * as well, forever.
+ *
+ * The window is destroyed in a `finally`, so it goes whichever way this ends —
+ * a timed-out render that left its window open would leak a hidden BrowserWindow
+ * per tile, which is worse than the hang it was reported as.
  */
 export async function renderCoverInProcess(doc, {
   createWindow = () => new (require_('electron').BrowserWindow)({
     show: false, webPreferences: { backgroundThrottling: false }
   }),
-  hostFile = ENGINE_HOST
+  hostFile = ENGINE_HOST,
+  timeoutMs = DEFAULT_TIMEOUT_MS
 } = {}) {
   const win = createWindow();
+  let watchdog = null;
   try {
-    await win.loadFile(hostFile);
-    return await win.webContents.executeJavaScript(coverRenderScript(doc));
+    const rendered = (async () => {
+      await win.loadFile(hostFile);
+      return await win.webContents.executeJavaScript(coverRenderScript(doc));
+    })();
+    const timedOut = new Promise((_resolve, reject) => {
+      watchdog = setTimeout(() => reject(new Error(`cover render timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
+    return await Promise.race([rendered, timedOut]);
   } finally {
+    clearTimeout(watchdog);
     // destroy(), not close(): close() is a request the page could in principle
     // delay, and nothing here has anything to save.
     win.destroy();
   }
 }
-
-// Same budget and same reasoning as prepare-image.js: generous enough to
-// survive a cold Electron launch, far short of looking like a hang.
-const DEFAULT_TIMEOUT_MS = 30_000;
 
 /**
  * The tile picture for a document, as PNG bytes.
@@ -160,13 +183,17 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  * Throws rather than returning a placeholder: a cover that could not be drawn
  * is something the caller has to be able to say out loud. Nobody is served by
  * a grey rectangle that claims to be a preview.
+ *
+ * `timeoutMs` governs BOTH routes. It used to be documented here and then
+ * handed only to the spawned one, which left the route the app itself takes
+ * with no bound at all.
  */
 export async function renderCoverPng(doc, {
   timeoutMs = DEFAULT_TIMEOUT_MS,
   inElectron = Boolean(process.versions.electron),
   inProcess = renderCoverInProcess
 } = {}) {
-  if (inElectron) return Buffer.from(await inProcess(doc), 'base64');
+  if (inElectron) return Buffer.from(await inProcess(doc, { timeoutMs }), 'base64');
 
   const result = await runElectronHelper({
     runner: join(here, 'cover-image-runner.cjs'),

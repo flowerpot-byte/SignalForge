@@ -8,7 +8,9 @@ import { mkdtempSync, writeFileSync, readFileSync, existsSync, rmSync } from 'no
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { COVER_WIDTH, COVER_HEIGHT, renderCoverPng } from '../../src/main/cover-image.js';
+import {
+  COVER_WIDTH, COVER_HEIGHT, renderCoverPng, renderCoverInProcess
+} from '../../src/main/cover-image.js';
 import { runJobs } from '../harness/render.js';
 import { pixelAt } from '../harness/pixels.js';
 
@@ -75,6 +77,84 @@ test('outside Electron it spawns, because a plain Node process has no canvas', a
       timeoutMs: 1
     }),
     /cover render timed out after 1ms/
+  );
+});
+
+// ----------------------------------------------------- the in-process timeout
+
+/**
+ * A window that behaves however the test needs, and writes down what was done
+ * to it. There is no BrowserWindow in plain Node, which is the whole reason
+ * createWindow is a parameter.
+ */
+function fakeWindow({ load = async () => {}, run = async () => 'AAAA' } = {}) {
+  const win = {
+    destroyed: false,
+    loadFile: load,
+    webContents: { executeJavaScript: run },
+    destroy() { win.destroyed = true; }
+  };
+  return win;
+}
+
+/** A promise that never settles: the wedge this whole section is about. */
+const never = () => new Promise(() => {});
+
+/**
+ * The route the app itself takes, held to giving up.
+ *
+ * Both awaits inside renderCoverInProcess are unbounded on their own, and the
+ * library draws missing tile pictures through a SERIAL queue — so one wedged
+ * render is not one tile without a picture, it is that tile and every tile
+ * behind it, forever. The spawned route has always had a timeout; this one had
+ * none, and renderCoverPng documented a `timeoutMs` it then did not pass on.
+ */
+test('a render that never finishes loading times out instead of wedging', async () => {
+  const win = fakeWindow({ load: never });
+  await assert.rejects(
+    () => renderCoverInProcess({ name: 'x' }, { createWindow: () => win, timeoutMs: 30 }),
+    /cover render timed out after 30ms/
+  );
+  assert.equal(win.destroyed, true, 'and the hidden window goes, or a timeout leaks one window per tile');
+});
+
+test('a render that never returns a frame times out too', async () => {
+  // Past loadFile, wedged inside the page: the other half of the same hang.
+  const win = fakeWindow({ run: never });
+  await assert.rejects(
+    () => renderCoverInProcess({ name: 'x' }, { createWindow: () => win, timeoutMs: 30 }),
+    /cover render timed out/
+  );
+  assert.equal(win.destroyed, true);
+});
+
+test('the tile behind a wedged one still renders', async () => {
+  // The queue's guarantee, end to end through the same function: a tile that
+  // times out must cost its own picture and nothing else.
+  const wedged = fakeWindow({ run: never });
+  await assert.rejects(
+    () => renderCoverInProcess({ name: 'wedged' }, { createWindow: () => wedged, timeoutMs: 30 }),
+    /timed out/
+  );
+
+  const next = fakeWindow({ run: async () => 'QUJD' });
+  const png = await renderCoverInProcess({ name: 'next' }, { createWindow: () => next, timeoutMs: 5000 });
+  assert.equal(png, 'QUJD', 'the one after it draws normally');
+  assert.equal(next.destroyed, true, 'and its window is cleaned up on the ordinary path too');
+});
+
+test('renderCoverPng hands its budget to the in-process route, not only to the spawned one', async () => {
+  // The bug precisely: the parameter was documented here and passed only to
+  // runElectronHelper. A stub that hangs proves it now reaches both.
+  await assert.rejects(
+    () => renderCoverPng({ name: 'x' }, {
+      inElectron: true,
+      inProcess: (doc, options) => renderCoverInProcess(doc, {
+        ...options, createWindow: () => fakeWindow({ run: never })
+      }),
+      timeoutMs: 30
+    }),
+    /cover render timed out after 30ms/
   );
 });
 
