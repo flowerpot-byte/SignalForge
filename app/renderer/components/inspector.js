@@ -581,11 +581,28 @@ export function describeInspector(doc, layerId) {
       // combobox above is deliberately NOT in the group — it is the control
       // that caused the change, and a control that animates itself when it is
       // used is a control that flinches.
-      for (const field of [
-        ...fillFields(background, behind, 'background', BACKGROUND_RANGES),
-        ...motionFields(background, behind, 'background', BACKGROUND_RANGES)
-      ]) {
+      for (const field of fillFields(background, behind, 'background', BACKGROUND_RANGES)) {
         fields.push({ ...field, group: 'background' });
+      }
+      // ITS MOTIONS ARE A SECOND GROUP, AND THAT IS NOT TIDINESS. Each of the
+      // two lists in this section — the colour stops and the motions — carries
+      // a button that adds another entry, and a list's add button goes into the
+      // heading of whatever it is inside (see closeList in mountInspector).
+      // Both in one section put two identical "+" glyphs side by side in the
+      // "Hintergrund" heading, with nothing but a tooltip to say which added a
+      // colour and which added a motion. That is the fault this column refuses
+      // everywhere else, photographed doing it: work/background-shots, first
+      // run.
+      //
+      // A group of its own with a caption of its own takes one of them out of
+      // that heading and puts it beside the word for what it adds — which is
+      // exactly the arrangement the foreground already has, where the two lists
+      // are in two sections. The caption is a sub-heading and NOT a section: a
+      // section is a thing the column scrolls between, and a background's
+      // motions are part of the background.
+      const motions = motionFields(background, behind, 'background', BACKGROUND_RANGES);
+      for (const field of motions) {
+        fields.push({ ...field, group: 'background-motions', groupLabel: 'inspector.motions' });
       }
     }
   }
@@ -780,13 +797,24 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
     // cards are going straight into the section as they always have.
     let groupName = null;
     let groupBox = null;
+    let groupActions = null;
 
     /** Where a card belongs right now: its group's box, or the section itself. */
     const host = () => groupBox ?? section;
 
+    /**
+     * And where an "add another" button belongs: the nearest heading there is.
+     *
+     * A captioned group has one of its own, which is the whole reason captions
+     * exist here — two lists under one section heading would otherwise put two
+     * identical glyphs in it.
+     */
+    const actionsHost = () => groupActions ?? sectionActions;
+
     const closeGroup = () => {
       groupName = null;
       groupBox = null;
+      groupActions = null;
     };
 
     /**
@@ -799,10 +827,24 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
      * own (see .field-cards in styles/app.css) — a second frame inside a
      * section would say there is a second section, and there is not.
      */
-    const openGroup = (name) => {
+    const openGroup = (name, labelKey) => {
       const box = document.createElement('div');
       box.className = 'field-cards';
       box.dataset.group = name;
+      if (labelKey) {
+        // The same small-caps word a motion card's own legend is set in, so a
+        // sub-heading reads as one level under the section rather than as a
+        // second section. Its actions sit at the right end of the same row,
+        // which is where a section puts its own.
+        const caption = document.createElement('p');
+        caption.className = 'group-heading';
+        const word = document.createElement('span');
+        word.textContent = t(labelKey);
+        groupActions = document.createElement('span');
+        groupActions.className = 'section-actions';
+        caption.append(word, groupActions);
+        box.append(caption);
+      }
       section.append(box);
       groupName = name;
       groupBox = box;
@@ -817,9 +859,10 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
     let entryIndex = null;
     let entryCard = null;
 
-    /** The add button goes into the heading of the section it adds to. */
+    /** The add button goes into the nearest heading above what it adds to. */
     const closeList = () => {
-      if (listAdd && sectionActions) sectionActions.append(listAdd);
+      const where = actionsHost();
+      if (listAdd && where) where.append(listAdd);
       listName = null;
       listAdd = null;
       listRows = [];
@@ -859,7 +902,7 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
       if (group !== groupName) {
         closeList();
         closeGroup();
-        if (group) openGroup(group);
+        if (group) openGroup(group, field.groupLabel);
       }
 
       const value = SF.getByPath(doc, field.path);

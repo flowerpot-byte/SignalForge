@@ -114,8 +114,27 @@ test('a chosen background brings its own cards, and every one of them is boxed',
   const own = fieldsFor(doc).filter((f) => f.section === 'background' && f.type !== 'background');
   assert.ok(own.length >= 4, `only ${own.length} cards came with it`);
   for (const field of own) {
-    assert.equal(field.group, 'background', `${field.path} is not in the box that arrives`);
+    assert.ok(field.group === 'background' || field.group === 'background-motions',
+      `${field.path} is not in a box that arrives`);
     assert.ok(field.path.startsWith('layers.0'), `${field.path} does not address the layer behind`);
+  }
+});
+
+test('the two lists behind are in two boxes, so each add button says what it adds', () => {
+  // Both of a background's repeating lists live under one heading, and a list's
+  // add button goes into the nearest heading above it. One box would put two
+  // identical "+" glyphs side by side in "Hintergrund" with nothing but a
+  // tooltip between them, which is the fault this column refuses everywhere
+  // else.
+  const own = fieldsFor(choose(docOf([FRONT]), 'gradient'))
+    .filter((f) => f.section === 'background' && f.type !== 'background');
+  const stops = own.filter((f) => f.type === 'stops' || f.path.includes('.stops.'));
+  const motions = own.filter((f) => f.type === 'motions' || f.path.includes('.motions.'));
+  assert.ok(stops.length > 0 && motions.length > 0);
+  for (const field of stops) assert.equal(field.group, 'background');
+  for (const field of motions) {
+    assert.equal(field.group, 'background-motions');
+    assert.equal(field.groupLabel, 'inspector.motions', 'and the second box says what it holds');
   }
 });
 
