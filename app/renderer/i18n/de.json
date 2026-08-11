@@ -13,6 +13,8 @@
   "library.open": "Geöffnet",
   "library.empty": "Noch nichts gespeichert. Ein Effekt landet hier, sobald du ihn in SignalRGB speicherst.",
   "library.noFolder": "Erst den Effektordner wählen, dann erscheinen deine Effekte hier.",
+  "library.skippedOne": "1 Datei im Ordner ist kein Effekt, den SignalForge öffnen kann.",
+  "library.skippedMany": "{count} Dateien im Ordner sind keine Effekte, die SignalForge öffnen kann.",
   "library.opened": "Effekt geöffnet",
   "library.openFailed": "Effekt konnte nicht geöffnet werden",
   "inspector.title": "Einstellungen",

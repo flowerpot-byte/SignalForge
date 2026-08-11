@@ -849,7 +849,11 @@ async function boot() {
       const result = await window.sf.library.list();
       gallery.setLibrary({
         entries: result.ok ? result.entries : [],
-        hasFolder: result.ok ? result.hasFolder : false
+        hasFolder: result.ok ? result.hasFolder : false,
+        // What the folder holds that this shelf cannot offer. It was counted
+        // and thrown away, so a file the user knows is in that folder simply
+        // vanished — MaxAmbient.html, his own, being the case that matters.
+        skipped: result.ok ? result.skipped : 0
       });
       gallery.setCurrent(currentEffect);
     } catch (err) {

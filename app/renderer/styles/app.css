@@ -476,6 +476,18 @@ html, body {
   font-size: 12px;
 }
 
+/* Files in the effects folder that this shelf leaves out, said quietly.
+   Deliberately the dimmest text the window has and no icon, no border, no
+   warning colour: it is a fact about somebody else's files, not a problem with
+   theirs. It sits under the tiles, so it is read after them rather than
+   instead of them. See components/gallery.js and listEffects's `skipped`. */
+.gallery-skipped {
+  margin: 0;
+  padding: var(--space-2) 0 0;
+  color: var(--text-dim);
+  font-size: 11px;
+}
+
 /* A library tile is a starting tile with a photograph in it instead of a
    canvas: same size, same radius, same scrim, same name across the bottom. The
    picture is the .png the export wrote (which is the very file SignalRGB shows)

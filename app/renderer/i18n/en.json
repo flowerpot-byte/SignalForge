@@ -13,6 +13,8 @@
   "library.open": "Open",
   "library.empty": "Nothing saved yet. An effect appears here as soon as you save it to SignalRGB.",
   "library.noFolder": "Choose the effects folder first, then your effects appear here.",
+  "library.skippedOne": "1 file in the folder is not an effect SignalForge can open.",
+  "library.skippedMany": "{count} files in the folder are not effects SignalForge can open.",
   "library.opened": "Effect opened",
   "library.openFailed": "Could not open the effect",
   "inspector.title": "Settings",

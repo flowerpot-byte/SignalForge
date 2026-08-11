@@ -305,6 +305,11 @@ export function mountGallery(container, {
   let shown = 'start';
   /** Whether the library's tiles have been asked for their pictures yet. */
   let coversAsked = false;
+  /**
+   * Which set of tiles the pictures being fetched belong to. Bumped by every
+   * rebuild, captured by the fetching loop — see loadCovers below.
+   */
+  let coverGeneration = 0;
 
   function showTab(next, { focus = false } = {}) {
     shown = next;
@@ -319,6 +324,8 @@ export function mountGallery(container, {
     }
     rail.hidden = next !== 'start';
     libraryRail.hidden = next !== 'library';
+    // The note belongs to the library shelf, so it comes and goes with it.
+    relabelLibrary();
     // The pictures are drawn on demand and never before: an effect nobody has
     // looked for costs nothing, and drawing a cover that has none on disk means
     // a hidden window in the main process (see app/main.js).
@@ -336,7 +343,7 @@ export function mountGallery(container, {
   // --------------------------------------------------------------- the library
 
   /** What the library is showing, so a relabel can say it again. */
-  let library = { entries: [], hasFolder: true };
+  let library = { entries: [], hasFolder: true, skipped: 0 };
   /** The file name of the effect on the stage right now, or null. */
   let current = null;
   /** Every built library tile, so `current` and a language switch can find one. */
@@ -345,6 +352,31 @@ export function mountGallery(container, {
   const empty = document.createElement('p');
   empty.className = 'gallery-empty';
   empty.id = 'gallery-empty';
+
+  /**
+   * The files in the folder this shelf left out, said once and quietly.
+   *
+   * WHY IT EXISTS AT ALL. listEffects counts what it skips and nothing read the
+   * count, so a file simply vanished. That is not hypothetical: MaxAmbient.html
+   * — the machine owner's own effect, from this project's predecessor — carries
+   * no SignalForge document, and it disappeared off the shelf without a word.
+   * Somebody who knows the file is in that folder and cannot see it on the
+   * shelf is owed the one sentence that explains it.
+   *
+   * WHY IT IS NOT A WARNING. Nothing is wrong. SignalRGB's effects folder is
+   * full of perfectly good effects this app cannot open — its own bundled ones,
+   * ones built by other tools — and none of them are the user's problem. So:
+   * the dimmest text in the window, no icon, no colour, under the tiles rather
+   * than over them, and gone entirely when there is nothing to say.
+   *
+   * It sits OUTSIDE the rail because the rail is a horizontally scrolling row
+   * of tiles and this is a line beneath them; the panel points at it with
+   * aria-describedby so a screen reader still meets the two together.
+   */
+  const skippedNote = document.createElement('p');
+  skippedNote.className = 'gallery-skipped';
+  skippedNote.id = 'gallery-skipped';
+  skippedNote.hidden = true;
 
   /**
    * One library tile.
@@ -374,6 +406,17 @@ export function mountGallery(container, {
     image.className = 'tile-photo';
     image.alt = '';
     image.hidden = true;
+    // A .png in the effects folder that is not a picture — truncated, half
+    // written, or never one to begin with — arrives here as bytes like any
+    // other and only fails when the browser tries to decode it. Without this
+    // the tile un-hides a broken-image box, which is the one thing worse than
+    // the resting frame: the resting frame says "no picture yet", a broken
+    // image says "this app is broken". So the tile goes back to resting, which
+    // is a state it already has and already looks right in.
+    image.onerror = () => {
+      image.hidden = true;
+      image.removeAttribute?.('src');
+    };
     art.append(image);
 
     const label = document.createElement('span');
@@ -401,6 +444,9 @@ export function mountGallery(container, {
     for (const tile of libraryTiles) libraryRail.append(tile.button);
     if (libraryTiles.length === 0) libraryRail.append(empty);
     coversAsked = false;
+    // Every tile the old loop was filling has just been thrown away, so the
+    // loop itself is over: this is what tells it so.
+    coverGeneration += 1;
     markCurrent();
     relabelLibrary();
     if (shown === 'library') loadCovers();
@@ -413,12 +459,31 @@ export function mountGallery(container, {
    * missing cover in a window of its own, and asking for twelve at once would
    * be twelve of those. A picture that never arrives leaves the tile in its
    * resting state, which is a state it already has.
+   *
+   * THE GENERATION COUNTER, and why a loop that awaits needs one. This walk
+   * takes as long as the slowest tile — a cover that has to be DRAWN means a
+   * hidden window in the main process — and the library can be rebuilt while it
+   * is part way through: a window regaining focus, an export landing, a folder
+   * changed in Explorer. buildLibrary() then throws away every tile this loop
+   * still holds a reference to, and the loop went on filling detached elements
+   * with pictures nobody would ever see, while a second loop ran beside it on
+   * the new ones — two loops, both asking the main process to draw, in the
+   * order they happened to interleave.
+   *
+   * So each rebuild mints a generation and this loop carries the one it started
+   * in: after every await it checks whether it is still the current loop and
+   * stops if it is not. The same pattern the preview loop already uses
+   * (components/preview.js), for the same reason and written the same way.
    */
   async function loadCovers() {
     if (coversAsked || !requestCover) return;
     coversAsked = true;
+    const mine = coverGeneration;
     for (const tile of libraryTiles) {
       const png = await requestCover(tile.entry.file);
+      // Checked after the await, not before it: the rebuild can only have
+      // happened while this was waiting.
+      if (mine !== coverGeneration) return;
       if (!png) continue;
       tile.image.src = `data:image/png;base64,${png}`;
       tile.image.hidden = false;
@@ -439,9 +504,22 @@ export function mountGallery(container, {
     empty.textContent = library.hasFolder ? t('library.empty') : t('library.noFolder');
     for (const tile of libraryTiles) tile.openMark.textContent =
       tile.entry.file === current ? t('library.open') : '';
+
+    // One file or several, in the language in force. The count is put into the
+    // sentence rather than glued in front of it, because German and English do
+    // not agree about where a number goes or what it does to the noun after it.
+    const skipped = Number(library.skipped) || 0;
+    skippedNote.textContent = skipped === 1
+      ? t('library.skippedOne')
+      : t('library.skippedMany').replace('{count}', String(skipped));
+    // Never on the starting shelf: it is a fact about the OTHER shelf, and the
+    // four ways to begin an effect have nothing to do with it.
+    skippedNote.hidden = skipped === 0 || shown !== 'library';
+    if (skippedNote.hidden) libraryRail.removeAttribute?.('aria-describedby');
+    else libraryRail.setAttribute('aria-describedby', skippedNote.id);
   }
 
-  strip.append(heading, tabs, rail, libraryRail, picker);
+  strip.append(heading, tabs, rail, libraryRail, skippedNote, picker);
   container.append(strip);
 
   function relabel() {
@@ -467,6 +545,10 @@ export function mountGallery(container, {
      */
     setLibrary(next) {
       const same = next.hasFolder === library.hasFolder
+        // The count of what was left out is part of what the shelf SAYS, so a
+        // folder that gained nothing but a foreign file still has to be said
+        // again — otherwise the note goes stale in exactly the case it is for.
+        && (Number(next.skipped) || 0) === (Number(library.skipped) || 0)
         && next.entries.length === library.entries.length
         && next.entries.every((entry, index) => {
           const was = library.entries[index];
