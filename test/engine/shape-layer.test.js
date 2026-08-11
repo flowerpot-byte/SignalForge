@@ -594,15 +594,23 @@ test('a drifting shape with a trail leaves an attenuated ghost behind it', async
   assert.ok(brightestGhost < 255,
     `the ghost is as bright as the figure (${brightestGhost}) — it is not fading at all`);
 
-  // ...and without the trail there is no ghost whatsoever, so the count above
-  // is measuring the feature and not the drift.
+  // ...and every pixel the figure itself lights in the trail-free run must be
+  // just as lit in the trailing one. Both runs draw the identical last frame,
+  // so this is the other half of the no-ghost property the loop above does
+  // not check: it counts a `without`-lit pixel as figurePixels and moves on
+  // without ever looking at what withTrail holds there. If the veil ever
+  // dimmed the CURRENT frame's own figure -- rather than only the frames
+  // behind it -- a pixel lit here would go dark there, and this is what would
+  // catch it.
   let strayPixels = 0;
   for (let i = 0; i < without.pixels.length; i += 4) {
     const lit = Math.max(without.pixels[i], without.pixels[i + 1], without.pixels[i + 2]);
-    const near = i;
-    if (lit > 8 && withTrail.pixels[near] === undefined) strayPixels += 1;
+    if (lit <= 8) continue;
+    const stillLit = Math.max(withTrail.pixels[i], withTrail.pixels[i + 1], withTrail.pixels[i + 2]);
+    if (stillLit <= 8) strayPixels += 1;
   }
-  assert.equal(strayPixels, 0);
+  assert.equal(strayPixels, 0,
+    `${strayPixels} pixel(s) of the figure are lit without a trail but dark with one`);
   assert.ok(blackShare(without.pixels) > blackShare(withTrail.pixels),
     'the trailing run must have fewer untouched pixels than the clearing one');
 });
