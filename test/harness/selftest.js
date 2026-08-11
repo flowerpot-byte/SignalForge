@@ -159,7 +159,28 @@ async function selfTestFirstRun(win, folder) {
     stageName: document.getElementById('preview').getAttribute('aria-label'),
     settingsName: document.getElementById('inspector').getAttribute('aria-label'),
     galleryNamedBy: document.getElementById('gallery').getAttribute('aria-labelledby'),
-    tablists: document.querySelectorAll('[role="tablist"], [role="tab"]').length,
+    tablists: document.querySelectorAll('[role="tablist"]').length,
+    tabs: document.querySelectorAll('[role="tab"]').length,
+    tabpanels: document.querySelectorAll('[role="tabpanel"]').length,
+    // A tab that is not fully stated, counted one shortcoming at a time: no
+    // aria-selected (a tab that never says whether it is the one showing), or
+    // an aria-controls naming something that is not a tabpanel — which is
+    // exactly the shape this window was found in once and must never return to.
+    // The count, not the existence of tabs, is what the check is about now: the
+    // strip under the stage genuinely IS two shelves taking turns, and half a
+    // tablist is the fault, not a tablist.
+    halfStatedTabs: [...document.querySelectorAll('[role="tab"]')].filter((tab) => {
+      if (tab.getAttribute('aria-selected') === null) return true;
+      const controls = document.getElementById(tab.getAttribute('aria-controls') ?? '');
+      return !controls || controls.getAttribute('role') !== 'tabpanel';
+    }).length,
+    // And every tab must be inside a tablist, or it is a button wearing the
+    // word "tab".
+    orphanedTabs: [...document.querySelectorAll('[role="tab"]')]
+      .filter((tab) => !tab.closest('[role="tablist"]')).length,
+    // Where the tabs are. One tablist, in the strip that has two shelves; a
+    // second one anywhere else is a pattern this window has said no to twice.
+    tablistIds: [...document.querySelectorAll('[role="tablist"]')].map((list) => list.id),
     settingsToggleName: document.getElementById('footer-settings').getAttribute('aria-label'),
     settingsTogglePressed: document.getElementById('footer-settings').getAttribute('aria-pressed'),
     settingsTabStop: document.getElementById('footer-settings').tabIndex >= 0

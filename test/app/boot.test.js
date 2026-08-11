@@ -159,11 +159,36 @@ test('the app boots, opens a window and exposes its bridge', async () => {
     'gallery-title',
     'the starting gallery must be named by the heading inside it'
   );
+  /**
+   * The tabs under the stage, held to being real ones.
+   *
+   * This used to read `tablists === 0`: there were no tabs in the window, two
+   * elements had claimed the role without ever pointing at a panel, and
+   * forbidding the role outright was the cheapest way to keep them from coming
+   * back. The strip under the stage now genuinely has two shelves that take
+   * turns (the four ways to start an effect, and the effects that already
+   * exist — see components/gallery.js), so the role is earned, and the check
+   * has moved to the thing it was always about: a tab that does not say whether
+   * it is showing, or that names no panel, is worse than a plain button.
+   *
+   * That is more checking than before, not less. The old line could only ever
+   * say "there are none"; these four say every tab there is has a selected
+   * state, controls a real tabpanel, sits inside a tablist, and that there is
+   * exactly one tablist, in the one place a tablist belongs.
+   */
   assert.equal(
-    landmarks.tablists,
+    landmarks.halfStatedTabs,
     0,
-    'no half-stated tablist: tabs that control no tabpanel are worse than plain buttons'
+    'no half-stated tab: one that never says whether it is showing, or that controls no tabpanel'
   );
+  assert.equal(landmarks.orphanedTabs, 0, 'a tab outside a tablist is a button wearing the word "tab"');
+  assert.deepEqual(
+    landmarks.tablistIds,
+    ['gallery-tabs'],
+    'exactly one tablist, and it is the strip\'s two shelves — anything else is a pattern this window has refused'
+  );
+  assert.equal(landmarks.tabs, 2, 'the strip has two shelves, so it has two tabs');
+  assert.equal(landmarks.tabpanels, 2, 'and each of them shows one');
   assert.ok(
     landmarks.settingsToggleName,
     'the settings toggle is a glyph with no word beside it, so its accessible name is the only thing announcing it'

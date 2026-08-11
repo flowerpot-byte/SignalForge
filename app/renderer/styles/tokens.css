@@ -138,6 +138,22 @@
       rgba(6, 11, 17, 0.90) 0,
       rgba(6, 11, 17, 0.84) 26px,
       rgba(6, 11, 17, 0.00) 46px);
+  /* The mark on the library tile of the effect that is on the stage right now.
+     Two rings, not one: the accent on the outside, and a ring of the page's own
+     near-black just inside it.
+
+     The second one is not decoration and this is the case that demands it — the
+     colour a solid effect starts out as IS #ff0066 (DEFAULT_SOLID_COLOR, see
+     the accent above), so a lone accent ring around a tile showing that effect
+     is an accent line on an accent field: invisible, on the one tile most
+     likely to be the one open. The dark ring gives it an edge to be seen
+     against, whatever the effect underneath happens to be. Inset, so it is
+     drawn inside the tile's own rounded corners and cannot be confused with the
+     focus ring, which is an outline and sits outside them. */
+  --tile-current-ring:
+      inset 0 0 0 2px #ff0066,
+      inset 0 0 0 4px rgba(6, 11, 17, 0.92);
+
   /* The dark edge under the name, so the letterforms keep their shape where
      the scrim is thinnest. Not load-bearing for the contrast figure above —
      that is the scrim's job — but it is what stops bright type on a bright

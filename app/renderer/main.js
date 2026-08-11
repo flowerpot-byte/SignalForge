@@ -496,6 +496,9 @@ async function boot() {
         // built on. Marked only once the import has actually succeeded: a
         // refused or unreadable file changes nothing and must say nothing.
         markChanged();
+        // What is on the stage is a new picture, not the effect the library
+        // tile was marking.
+        setCurrentEffect(null);
         // The transport bar takes the new picture's colours. Not awaited: the
         // picture is already on screen and the chip is allowed to arrive a
         // frame later.
@@ -598,6 +601,8 @@ async function boot() {
       // resting outline rather than leaving the last picture's tint behind.
       retintThumbnail(null);
       markChanged();
+      // A fresh effect is not the effect any library tile stands for.
+      setCurrentEffect(null);
       crop.refresh();
       inspector.refresh();
       showContent({ arrived: true });
@@ -624,6 +629,28 @@ async function boot() {
     onStart: startEffect,
     // What each tile draws on itself: the very document pressing it produces.
     starterDocument,
+    // The other shelf: an effect that already exists, opened again. Goes
+    // through the same unsaved-work question every other entrance does.
+    onOpenEffect: openEffect,
+    /**
+     * One library tile's picture, as PNG bytes in base64.
+     *
+     * The window asks by the leaf name it was handed and gets bytes back; it
+     * never learns where the file is, and it cannot ask for one that is not in
+     * the folder (see findEffect in src/main/effects-library.js). A tile whose
+     * picture cannot be produced gets null and keeps its resting state, which
+     * is why this swallows rather than reports: a missing tile picture is not
+     * worth taking the one line of feedback away from whatever the user did.
+     */
+    requestCover: async (file) => {
+      try {
+        const result = await window.sf.library.cover(file);
+        return result.ok ? result.png : null;
+      } catch (err) {
+        console.error('could not get a tile picture:', err);
+        return null;
+      }
+    },
     // A dialog can only offer what the importer accepts, but `accept` is a
     // hint the operating system is free to ignore ("all files" is one click
     // away in every file dialog there is), so the same judgement the drop
@@ -714,35 +741,10 @@ async function boot() {
       return;
     }
 
-    const doc = result.document;
-    const sizes = await measureEmbeddedAssets(doc);
-
-    await preview.setDocument(doc);
-    // Whatever the one layer is: a project that carries a gradient has no
-    // asset to measure, and a project whose picture layer is called something
-    // other than this window's own name for it (a document built by the
-    // command line calls it "a1") still has to be measurable.
-    const layer = pictureLayer(doc);
-    const measured = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
-    sourceSize = measured ? { width: measured.width, height: measured.height } : null;
-    // The pictures were decoded a few lines up to be measured, so the colours
-    // for the backdrop cost nothing more than reading one of them. A project
-    // with no picture in it puts the seed colours back rather than leaving
-    // the previous project's tint behind.
-    retintThumbnail(measured ? measured.image : null);
-    // A project brings its own picture and its own fit mode, so whether the
-    // canvas is a tab stop is decided fresh here too.
-    crop.refresh();
-    inspector.refresh();
-    // A whole new document: the column goes back to its top, where the section
-    // that says what this project IS already sits.
-    showContent({ arrived: true });
-    showName(doc.name);
-    preview.start();
-    // What is on screen came out of a file and has not been touched since.
-    // That holds for a repaired project too (below): the corrections are the
-    // parser's, not the user's, and there is no work here of theirs to lose.
-    markSaved();
+    await showDocument(result.document);
+    // A project file and an effect file are two different things: what is on
+    // the stage came out of a .sfx, so no tile in the library stands for it.
+    setCurrentEffect(null);
 
     // A project that had to be corrected on the way in says so rather than
     // quietly presenting something other than what the file held.
@@ -750,6 +752,131 @@ async function boot() {
       showMessage(`${i18n.t('project.repaired')}: ${result.problems.join(' ')}`, true);
     } else {
       showMessage(`${i18n.t('project.opened')}: ${result.name}`);
+    }
+  }
+
+  /**
+   * Put a document that came out of a FILE on the stage.
+   *
+   * The one path for it, and there are two files it can have come out of now: a
+   * saved project (.sfx) and an exported effect (.html, reopened out of the
+   * library). Written once because the order of these lines is load-bearing and
+   * a second copy would drift out of it — the picture is measured and decoded
+   * BEFORE anything on screen is touched, so a file whose picture will not
+   * decode leaves the document already open exactly as it was, message and all.
+   *
+   * Everything after the measurement is the window catching up with a document
+   * it did not have a moment ago: the crop (which now has something else to
+   * drag, or nothing), the settings column (whose sections depend on the layer
+   * type), the column's scroll position, the name in both places it is shown,
+   * and the render loop.
+   */
+  async function showDocument(doc) {
+    const sizes = await measureEmbeddedAssets(doc);
+
+    await preview.setDocument(doc);
+    // Whatever the one layer is: a document that carries a gradient has no
+    // asset to measure, and one whose picture layer is called something
+    // other than this window's own name for it (a document built by the
+    // command line calls it "a1") still has to be measurable.
+    const layer = pictureLayer(doc);
+    const measured = layer && sizes.has(layer.asset) ? sizes.get(layer.asset) : null;
+    sourceSize = measured ? { width: measured.width, height: measured.height } : null;
+    // The pictures were decoded a few lines up to be measured, so the colours
+    // for the backdrop cost nothing more than reading one of them. A document
+    // with no picture in it puts the seed colours back rather than leaving
+    // the previous one's tint behind.
+    retintThumbnail(measured ? measured.image : null);
+    // A document brings its own picture and its own fit mode, so whether the
+    // canvas is a tab stop is decided fresh here too.
+    crop.refresh();
+    inspector.refresh();
+    // A whole new document: the column goes back to its top, where the section
+    // that says what this document IS already sits.
+    showContent({ arrived: true });
+    showName(doc.name);
+    preview.start();
+    // What is on screen came out of a file and has not been touched since.
+    // That holds for a repaired document too: the corrections are the parser's,
+    // not the user's, and there is no work here of theirs to lose.
+    markSaved();
+  }
+
+  // -------------------------------------------------------------- the library
+
+  /**
+   * Which effect in the library is the one on the stage, by file name, or null.
+   *
+   * Set when one is opened out of the library and when an export lands (the
+   * export writes exactly that file, so the strip would be lying if it went on
+   * marking the previous one). Cleared by every gesture that begins something
+   * new, because from that moment what is on the stage is no longer the effect
+   * that file holds.
+   */
+  let currentEffect = null;
+
+  function setCurrentEffect(file) {
+    currentEffect = file;
+    gallery.setCurrent(file);
+  }
+
+  /**
+   * Read the effects folder again and show what is in it.
+   *
+   * WHEN, AND WHY THERE IS NO WATCHER. Three moments: the window starting, an
+   * export landing, and the window being given the focus back. The last one is
+   * what covers everything that happens outside this app — an effect deleted in
+   * Explorer, one written by the command line — and it covers it at the only
+   * moment it could matter, because a folder cannot have changed under a window
+   * that has had the focus the whole time. A watcher on that folder would have
+   * to run whether or not anybody ever looks at the strip; this costs a
+   * directory listing at the moment somebody comes back to the window, and the
+   * main process answers most of those out of a cache (see app/main.js).
+   *
+   * Never fatal and never a message: a library that could not be read is an
+   * empty shelf, and the one line of feedback belongs to the thing the user
+   * just did.
+   */
+  async function refreshLibrary() {
+    try {
+      const result = await window.sf.library.list();
+      gallery.setLibrary({
+        entries: result.ok ? result.entries : [],
+        hasFolder: result.ok ? result.hasFolder : false
+      });
+      gallery.setCurrent(currentEffect);
+    } catch (err) {
+      console.error('could not read the effects folder:', err);
+    }
+  }
+
+  /**
+   * Open an effect out of the library.
+   *
+   * The same shape as openProject above, question and all: the unsaved-work
+   * question comes first, then the file is read and proved readable, and only a
+   * document that arrived intact ever reaches the stage. An effect made by an
+   * older SignalForge opens here too — that is what normalizeDocument's
+   * compatibility is for, and it is why the document comes back through the
+   * very same gate a project file passes (see src/main/effect-document.js).
+   */
+  async function openEffect(entry) {
+    if (!(await mayDiscard())) return;
+
+    const result = await window.sf.library.open(entry.file);
+    if (!result.ok) {
+      showMessage(`${i18n.t('library.openFailed')}: ${result.message}`, true);
+      return;
+    }
+
+    await showDocument(result.document);
+    // The effect on the stage IS this file now, so the strip says so.
+    setCurrentEffect(result.file);
+
+    if (result.problems.length > 0) {
+      showMessage(`${i18n.t('project.repaired')}: ${result.problems.join(' ')}`, true);
+    } else {
+      showMessage(`${i18n.t('library.opened')}: ${result.name}`);
     }
   }
 
@@ -796,6 +923,13 @@ async function boot() {
       // read as a promise the export did not keep — the file on disk is
       // named after result.name, not after whatever is still typed here.
       showName(result.name);
+      // The effects folder has just gained (or replaced) a file, so the shelf
+      // that shows that folder is read again — this is what makes an effect
+      // appear as a tile the moment it is written, with the tile picture the
+      // export drew for it. And what is on the stage is now that very file, so
+      // it is the tile that gets marked as open.
+      setCurrentEffect(result.file);
+      refreshLibrary();
       return;
     }
 
@@ -968,6 +1102,13 @@ async function boot() {
   // having arrived, because nothing has.
   showSettings(false, { initial: true });
   showTarget(await window.sf.effectsTarget());
+
+  // What is already in the effects folder, now and whenever the window is
+  // given the focus back — see refreshLibrary on why that is the whole of the
+  // watching this needs. Not awaited: the window is usable without the strip's
+  // second shelf, and a slow folder must not hold the first paint up.
+  window.addEventListener('focus', () => { refreshLibrary(); });
+  refreshLibrary();
 
   // The first start's own language is not a choice the user made, so it is
   // written back now: from the next start on, the machine's language has no

@@ -128,12 +128,19 @@ html, body {
      as wide as the picture: one left edge (see .stage below) and one right
      edge, and the leftover collects outside the block as a single gutter.
 
-     The 232px is the height everything that is NOT the picture costs, and it
+     The 238px is the height everything that is NOT the picture costs, and it
      is the one number here that has to be maintained by hand:
 
         48   the caption row (--meta-row below, which states the same thing)
         38   the line of feedback  (12 margin + 8 padding + 18 min-height)
-       146   the starting strip    (12 margin + 25 heading + 109 rail)
+       152   the strip             (12 margin + 22 tabs + 8 gap + 109 rail)
+
+     It was 232 while the strip's heading was a plain <h2>. The heading is a
+     pair of tabs now (see the gallery below), which measures 22px against the
+     old heading's 25 but carries an 8px gap of its own — six pixels more in
+     total, and six pixels of height is nine of width at 16:10. Measured in
+     test/harness/library.js, which reports this block's width and the picture's
+     side by side: 726 against 717 before, 717 against 717 after.
 
      Both ways of getting it wrong are survivable, which is why it is allowed
      to be a constant at all: too large and the block is narrower than the
@@ -144,7 +151,7 @@ html, body {
      block's width side by side, so a drift shows up as two numbers that used
      to be equal and are not. */
   container-type: size;
-  --content-width: min(100%, calc((100cqh - 232px) * 1.6));
+  --content-width: min(100%, calc((100cqh - 238px) * 1.6));
 }
 .first-run { grid-row: 1; }
 .stage { grid-row: 2; }
@@ -382,14 +389,68 @@ html, body {
    rail inside still scrolls sideways, so this decides where the shelf ENDS,
    never how many things may stand on it. */
 .gallery { width: var(--content-width); margin-top: var(--space-3); min-width: 0; }
-.gallery-title {
+
+/* The heading row, which is now two headings that take turns: what an effect
+   can be STARTED with, and the effects that already exist (components/
+   gallery.js says why it is two shelves and not one longer rail).
+
+   Deliberately built out of the heading this row already had rather than out of
+   a control: same 11px uppercase, same letterspacing, same dim colour for the
+   one that is not showing. So the strip did not gain a widget — its heading
+   simply became answerable. The one that IS showing is bright and carries the
+   accent under it, which is the whole of the state; nothing moves, nothing
+   grows, and there is no box around either of them. */
+.gallery-tabs {
+  display: flex;
+  gap: var(--space-3);
   margin: 0 0 var(--space-2);
+}
+.gallery-tab {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  padding: 0 0 var(--space-1);
+  border: 0;
+  border-bottom: 2px solid transparent;
   color: var(--text-dim);
+  font: inherit;
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.09em;
   text-transform: uppercase;
+  cursor: pointer;
+  /* NOTHING about this transitions, and it is the only control in the window
+     that says so out loud.
+
+     It is a heading, and pressing it swaps what is on the shelf underneath
+     instantly. A colour fading into place while the tiles below have already
+     changed says the window is still deciding when it has already decided — and
+     this row is pressed as often as somebody switches between making an effect
+     and finding one, which is exactly the frequency at which an animation stops
+     being an acknowledgement and becomes a delay. The global `button` rule
+     below transitions background, border and colour for controls that ARE
+     acknowledgements; this one opts out of all three. */
+  transition: none;
+  /* The global button rule gives every button a card to sit on. A heading is
+     not a control on a surface. */
+  background: none;
+  padding-left: 0;
+  padding-right: 0;
 }
+.gallery-tab:hover { background: none; color: var(--text-muted); }
+.gallery-tab.is-selected { color: var(--text-strong); border-bottom-color: var(--accent); }
+/* How many effects are on the other shelf, said in the tab rather than found by
+   opening it. Mono, like every other number in this window, and never shown as
+   a nought — an empty library says so in the shelf itself, in words. */
+.gallery-tab-count {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: var(--text-dim);
+}
+.gallery-tab.is-selected .gallery-tab-count { color: var(--text-muted); }
+.gallery-tab-count:empty { display: none; }
 /* A rail that scrolls sideways, exactly as the reference's effect strip does —
    so a fifth tile costs no height and the row never wraps into a grid. */
 .gallery-rail {
@@ -399,6 +460,61 @@ html, body {
   overflow-y: hidden;
   padding-bottom: var(--space-1);
   scrollbar-width: thin;
+}
+/* An author `display` outranks the browser's own `[hidden] { display: none }`,
+   exactly as it does on the first-start question above — without this line both
+   shelves are on screen at once and the tabs do nothing whatsoever. */
+.gallery-rail[hidden] { display: none; }
+
+/* The library's own resting state: no effects yet, or no folder to look in.
+   A sentence rather than a drawn-out empty box — there is nothing to frame,
+   and the shelf's own height is already reserved by the rail beside it. */
+.gallery-empty {
+  margin: 0;
+  padding: var(--space-3) 0;
+  color: var(--text-dim);
+  font-size: 12px;
+}
+
+/* A library tile is a starting tile with a photograph in it instead of a
+   canvas: same size, same radius, same scrim, same name across the bottom. The
+   picture is the .png the export wrote (which is the very file SignalRGB shows)
+   or the effect's first frame drawn on demand — see components/gallery.js. */
+.tile-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* The cover is 16:9 and the tile is 16:10, so the picture is cropped rather
+     than squashed: the effect's own proportions survive, which is the whole
+     point of showing its own frame. */
+  object-fit: cover;
+  display: block;
+}
+.tile-photo[hidden] { display: none; }
+
+/* The effect currently on the stage.
+
+   An inset ring rather than an outline, so that it cannot be confused with the
+   focus ring — which IS an outline, sits outside the tile, and can be on this
+   very tile at the same moment — and so that it is not clipped by the tile's
+   own overflow. The accent, because "this is the one you are working on" is
+   exactly the kind of thing this window says in pink.
+
+   It has to be a layer of its own ABOVE the picture, and that is measured
+   rather than assumed: an inset box-shadow on the tile itself is painted with
+   the tile's background, i.e. underneath every child — and the cover image is a
+   child covering the whole tile, so the ring was photographed as invisible
+   (work/library-shots). Hence a pseudo-element, over the picture, over the
+   scrim and over the name, with nothing to catch the pointer. */
+.tile-effect.is-current::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  box-shadow: var(--tile-current-ring);
+  pointer-events: none;
 }
 
 /* A tile is a picture with its name across it, exactly as the reference's

@@ -46,5 +46,18 @@ contextBridge.exposeInMainWorld('sf', {
   // to put a path. The folder is chosen in the main process (the detected
   // one, or the one the folder dialog returned), and the path in the result
   // is there to be shown, not to be sent back.
-  exportEffect: (doc, options) => ipcRenderer.invoke('sf:exportEffect', doc, { force: options?.force === true })
+  exportEffect: (doc, options) => ipcRenderer.invoke('sf:exportEffect', doc, { force: options?.force === true }),
+  // The library: the effects folder, read back. Same rule once more, and this
+  // is the channel group where it matters most, because these three are the
+  // only ones that carry a NAME at all. What travels out is a leaf name the
+  // window was given by `list` and nothing else — no folder, no path, no
+  // separator — and the main process never joins it onto anything: it looks the
+  // name up in a fresh listing and uses the string the filesystem handed back
+  // (findEffect in src/main/effects-library.js). So this cannot be turned into
+  // "read that file over there", and none of the three writes anything at all.
+  library: {
+    list: () => ipcRenderer.invoke('sf:library:list'),
+    cover: (file) => ipcRenderer.invoke('sf:library:cover', String(file)),
+    open: (file) => ipcRenderer.invoke('sf:library:open', String(file))
+  }
 });

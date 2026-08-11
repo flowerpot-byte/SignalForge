@@ -7,8 +7,14 @@ import { effectControls, withLiveMotion } from '../export/effect-controls.js';
 import { normalizeDocument } from '../engine/document.js';
 import { COVER_EXTENSION } from './cover-image.js';
 
-/** The extension SignalRGB looks for. */
-const EFFECT_EXTENSION = 'html';
+/**
+ * The extension SignalRGB looks for.
+ *
+ * Exported since the effects folder became the app's own library: listing it
+ * (src/main/effects-library.js) has to look for exactly what this writes, and
+ * the two agreeing by construction is cheaper than the two agreeing by comment.
+ */
+export const EFFECT_EXTENSION = 'html';
 
 /**
  * How much of a name survives into the file name.
@@ -181,6 +187,13 @@ export async function exportEffect({
     path,
     bytes: io.size(path),
     name: fileName,
+    // The leaf name of what was written, which is how the library names the
+    // same file (src/main/effects-library.js). It travels back so that the
+    // window can mark the tile of the effect it has just written without
+    // building a file name of its own out of `name` and an extension it would
+    // have to know — the renderer names no files, and that includes leaf names
+    // it could have got right.
+    file: `${fileName}.${EFFECT_EXTENSION}`,
     coverPath: coverWritten,
     coverMessage
   };

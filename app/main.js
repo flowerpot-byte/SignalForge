@@ -4,7 +4,7 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { readFileSync, mkdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, existsSync, statSync } from 'node:fs';
 import { writeFileAtomic } from '../src/main/write-file-atomic.js';
 import { homedir } from 'node:os';
 import { createSettings, FALLBACK_LANGUAGE } from '../src/main/settings.js';
@@ -15,6 +15,10 @@ import { SINGLE_INSTANCE_TEST_ENV } from '../src/main/single-instance.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { serializeProject, parseProject, PROJECT_EXTENSION } from '../src/main/project.js';
 import { exportEffect } from '../src/main/export-effect.js';
+import {
+  listEffects, findEffect, effectPath, coverPath
+} from '../src/main/effects-library.js';
+import { readEffectDocument } from '../src/main/effect-document.js';
 import { renderCoverPng } from '../src/main/cover-image.js';
 import { normalizeDocument } from '../src/engine/document.js';
 
@@ -403,6 +407,140 @@ ipcMain.handle('sf:exportEffect', async (_e, doc, options) => {
     });
   } catch (error) {
     return { ok: false, reason: 'failed', message: String(error.message || error) };
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The effect library: the effects folder, read back.
+// ---------------------------------------------------------------------------
+
+/**
+ * The filesystem the library reads through — the counterpart of exportIo above,
+ * and read-only on purpose. Nothing on the three library channels writes
+ * anything: reopening an effect must not be able to change one.
+ */
+const libraryIo = {
+  list: (folder) => readdirSync(folder),
+  read: (path) => readFileSync(path, 'utf8'),
+  stat: (path) => {
+    const info = statSync(path);
+    return { size: info.size, modified: info.mtimeMs };
+  },
+  exists: (path) => existsSync(path)
+};
+
+/**
+ * What has already been decided about a file, against that file's own size and
+ * modification time: whether it is one of ours (see listEffects), and the tile
+ * picture that was drawn for it if it had none of its own.
+ *
+ * A cache and not a store: every entry names the exact bytes it was derived
+ * from, so a file that changes on disk invalidates its own entry without
+ * anybody having to watch for it. It is what makes refreshing the library on
+ * every window focus cost nothing on a folder nobody has touched.
+ */
+const libraryCache = new Map();
+const renderedCovers = new Map();
+
+/**
+ * Drawing a tile picture needs a window of its own (see src/main/cover-image.js),
+ * so the covers a library refresh asks for are drawn ONE AT A TIME. A strip of
+ * twelve tiles asking at once would otherwise open twelve hidden windows at
+ * once, on the same machine that is trying to render the preview.
+ */
+let coverQueue = Promise.resolve();
+const queueCover = (work) => {
+  const next = coverQueue.then(work, work);
+  // Never let a rejection poison the chain for everything queued behind it.
+  coverQueue = next.then(() => {}, () => {});
+  return next;
+};
+
+ipcMain.handle('sf:library:list', () => {
+  try {
+    const target = currentTarget();
+    const { entries, skipped } = listEffects({
+      folder: target.folder, io: libraryIo, cache: libraryCache
+    });
+    // Deliberately no path: the window shows names and asks for names. It is
+    // told WHETHER there is a folder at all, because an empty strip means two
+    // different things ("no folder chosen yet" and "nothing exported yet") and
+    // the strip has to be able to say which.
+    return { ok: true, hasFolder: Boolean(target.folder), entries, skipped };
+  } catch (error) {
+    return { ok: false, message: String(error.message || error), entries: [], skipped: 0 };
+  }
+});
+
+/**
+ * The picture on a library tile, as PNG bytes.
+ *
+ * Two sources, in this order:
+ *
+ *  - the .png beside the effect, which is what every export since tile pictures
+ *    existed has written (src/main/export-effect.js). Read, not redrawn: it is
+ *    the very picture SignalRGB is showing for that effect, so the strip and
+ *    SignalRGB's own list agree by construction.
+ *  - failing that, the effect's own first frame, drawn here through the SAME
+ *    cover pipeline the export uses (renderCoverPng), in a window nobody sees.
+ *    That is what gives the effects made before tile pictures existed a real
+ *    picture instead of an empty rectangle — and it is a real picture of what
+ *    the effect does, because it comes from the effect's own document.
+ *
+ * The drawn one is kept in memory for the session and deliberately NOT written
+ * to disk: the library only reads. Somebody's effects folder gaining files
+ * because they looked at a strip of tiles would be this app doing something
+ * nobody asked it to do, and one more export of that effect writes the very
+ * same picture anyway, on purpose, at a moment the user chose.
+ */
+ipcMain.handle('sf:library:cover', async (_e, file) => {
+  try {
+    const target = currentTarget();
+    const entry = findEffect({ folder: target.folder, file, io: libraryIo, cache: libraryCache });
+    if (!entry) return { ok: false };
+
+    const path = effectPath(target.folder, entry);
+    const onDisk = coverPath(target.folder, entry);
+    if (onDisk) return { ok: true, png: readFileSync(onDisk).toString('base64'), drawn: false };
+
+    const key = `${path}|${entry.bytes}|${entry.modified}`;
+    const remembered = renderedCovers.get(path);
+    if (remembered?.key === key) return { ok: true, png: remembered.png, drawn: true };
+
+    const { doc } = readEffectDocument(readFileSync(path, 'utf8'));
+    const png = (await queueCover(() => renderCoverPng(doc))).toString('base64');
+    renderedCovers.set(path, { key, png });
+    return { ok: true, png, drawn: true };
+  } catch (error) {
+    // A tile with no picture is a tile; it is not worth a message in the
+    // window, and the strip has a resting state for exactly this.
+    console.error('could not produce a tile picture:', error);
+    return { ok: false };
+  }
+});
+
+/**
+ * Open an effect out of the library.
+ *
+ * The renderer hands over a leaf name it was given by sf:library:list and gets
+ * a document back — the same shape as sf:openProject, and for the same reason:
+ * it never learns a path and cannot name one. findEffect only ever matches a
+ * name against a fresh listing of the folder, so nothing the window says can
+ * become a path of its own (see src/main/effects-library.js).
+ *
+ * Failure comes back as a value, because an ipcMain.handle rejection reaches
+ * the renderer with its message stripped, and the message is the whole point:
+ * "this file is not a SignalForge effect" is a sentence somebody has to read.
+ */
+ipcMain.handle('sf:library:open', (_e, file) => {
+  try {
+    const target = currentTarget();
+    const entry = findEffect({ folder: target.folder, file, io: libraryIo, cache: libraryCache });
+    if (!entry) return { ok: false, message: 'that effect is no longer in the effects folder.' };
+    const { doc, problems } = readEffectDocument(readFileSync(effectPath(target.folder, entry), 'utf8'));
+    return { ok: true, file: entry.file, name: entry.name, document: doc, problems };
+  } catch (error) {
+    return { ok: false, message: String(error.message || error) };
   }
 });
 
