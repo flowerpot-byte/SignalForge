@@ -7,10 +7,11 @@ import { runJobs } from '../harness/render.js';
 import { pixelAt, isColour, blackShare, maxDifference } from '../harness/pixels.js';
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, SHAPE_FIGURES, DEFAULT_SHAPE_SIZE, DEFAULT_STAR_POINTS,
-  DEFAULT_SHAPE_THICKNESS, normalizeDocument
+  DEFAULT_SHAPE_THICKNESS, MIN_SHAPE_SIZE, MIN_SHAPE_THICKNESS, normalizeDocument
 } from '../../src/engine/document.js';
 import {
-  STAR_INNER_RATIO, STAR_FIRST_POINT, HEART_LOBE_TOP, HEART_INK_HEIGHT
+  STAR_INNER_RATIO, STAR_FIRST_POINT, HEART_LOBE_TOP, HEART_INK_HEIGHT,
+  render as renderShapeLayer, createState
 } from '../../src/engine/layers/shape.js';
 
 /**
@@ -479,6 +480,59 @@ test('a shape layer that says nothing but its type gets a whole figure', () => {
   assert.equal(layer.thickness, DEFAULT_SHAPE_THICKNESS);
   assert.deepEqual(layer.position, { x: 50, y: 50 });
   assert.deepEqual(layer.motions, []);
+});
+
+// -------------------------------------------------------- the raw-value floor
+//
+// radiusOf and holeOf re-read layer.size and layer.thickness every frame
+// rather than trusting normalizeDocument, for the reason the comment beside
+// radiusOf in shape.js gives: applyControls writes a SignalRGB control's raw
+// value straight into the layer. That is what these two tests hand render()
+// directly -- a plain object, never through normalizeDocument -- with a fake
+// ctx recording the radius tracePath's arc() calls actually used. Plain
+// Node, no Electron: shape.js's render() only ever calls methods on the ctx
+// it is given.
+
+/** A ctx that records every arc() radius and answers everything else with a no-op. */
+function fakeShapeCtx() {
+  const arcRadii = [];
+  return {
+    ctx: {
+      globalAlpha: 1,
+      save() {}, restore() {}, translate() {}, rotate() {},
+      beginPath() {}, closePath() {}, moveTo() {}, lineTo() {}, bezierCurveTo() {},
+      arc(x, y, r) { arcRadii.push(r); },
+      fill() {}, fillStyle: ''
+    },
+    arcRadii
+  };
+}
+
+test('a layer size of exactly 0 clamps to the size floor, not the default', () => {
+  const { ctx, arcRadii } = fakeShapeCtx();
+  const layer = { type: 'shape', figure: 'circle', size: 0, color: INK, motions: [] };
+  renderShapeLayer(ctx, layer, null, 0, createState());
+
+  const floorRadius = (MIN_SHAPE_SIZE / 100) * CANVAS_HEIGHT / 2;
+  const defaultRadius = (DEFAULT_SHAPE_SIZE / 100) * CANVAS_HEIGHT / 2;
+  assert.equal(arcRadii[0], floorRadius,
+    `size 0 must clamp to the floor (radius ${floorRadius}), not jump to the default `
+    + `(radius ${defaultRadius}); got ${arcRadii[0]}`);
+});
+
+test('a layer thickness of exactly 0 clamps to the thickness floor, not the default', () => {
+  const { ctx, arcRadii } = fakeShapeCtx();
+  const layer = { type: 'shape', figure: 'ring', size: 50, thickness: 0, color: INK, motions: [] };
+  renderShapeLayer(ctx, layer, null, 0, createState());
+
+  // tracePath's second arc() call is the ring's inner hole, at
+  // radius * holeOf(layer) -- see holeOf's own `1 - thickness / 100`.
+  const outerRadius = arcRadii[0];
+  const floorHole = 1 - MIN_SHAPE_THICKNESS / 100;
+  const defaultHole = 1 - DEFAULT_SHAPE_THICKNESS / 100;
+  assert.equal(arcRadii[1], outerRadius * floorHole,
+    `thickness 0 must clamp to the floor (hole ${floorHole}), not jump to the default `
+    + `(hole ${defaultHole}); got hole radius ${arcRadii[1]} of outer radius ${outerRadius}`);
 });
 
 // -------------------------------------------------------------- the motions

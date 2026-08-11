@@ -226,7 +226,12 @@ function figureOf(layer) {
  * panel sent and not what normalizeDocument last approved.
  */
 function radiusOf(layer) {
-  const size = clamp(Number(layer.size) || DEFAULT_SHAPE_SIZE, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
+  // Number.isFinite, not `|| DEFAULT_SHAPE_SIZE`: `||` treats a real, in-range
+  // 0 the same as a missing field and jumps all the way to the default
+  // instead of clamping to the floor -- the same distinction pointsOf below
+  // already makes for a star's point count.
+  const raw = Number(layer.size);
+  const size = clamp(Number.isFinite(raw) ? raw : DEFAULT_SHAPE_SIZE, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE);
   return (size / 100) * CANVAS_HEIGHT / 2;
 }
 
@@ -238,8 +243,9 @@ function pointsOf(layer) {
 
 /** The ring's inner radius, as a fraction of its outer one. */
 function holeOf(layer) {
+  const raw = Number(layer.thickness);
   const thickness = clamp(
-    Number(layer.thickness) || DEFAULT_SHAPE_THICKNESS, MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS
+    Number.isFinite(raw) ? raw : DEFAULT_SHAPE_THICKNESS, MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS
   );
   return 1 - thickness / 100;
 }
