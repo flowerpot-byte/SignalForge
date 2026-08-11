@@ -6,9 +6,10 @@ import {
   DEFAULT_GRADIENT_STOPS, MIN_BANDS, MAX_BANDS, DEFAULT_BANDS
 } from '../document.js';
 import { speedToRate } from '../motion/speed.js';
-import { breatheFactor, motionPhase } from '../motion/breathe.js';
+import { breatheFactor } from '../motion/breathe.js';
 import { pulseFactor } from '../motion/pulse.js';
 import { spinDegrees } from '../motion/spin.js';
+import { driftSwing, DRIFT_CENTRE_REACH } from '../motion/drift.js';
 import { WARP_SPEED_SCALE } from '../motion/warp.js';
 import {
   BUFFER_PAD, BUFFER_SCALE, SOURCE_WIDTH, SOURCE_HEIGHT, MAX_AMPLITUDE, drawWarped
@@ -89,8 +90,16 @@ import {
 
 /** At full strength, a linear drift slides the ramp this much of its length. */
 const LINEAR_DRIFT_REACH = 0.5;
-/** At full strength, a radial drift moves the centre this much of the canvas. */
-const RADIAL_DRIFT_REACH = 0.3;
+/**
+ * At full strength, a radial drift moves the centre this much of the canvas.
+ *
+ * The number and the swing it is multiplied by both live in motion/drift.js
+ * now, because the shape layer wanders by exactly the same amount along
+ * exactly the same curve — see the note over driftSwing there. This name is
+ * kept as a local alias so the four places below that read it still say which
+ * of the two reaches they mean.
+ */
+const RADIAL_DRIFT_REACH = DRIFT_CENTRE_REACH;
 
 /** The canvas diagonal, which is also how far a drifting centre can wander at most. */
 const CANVAS_DIAGONAL = Math.sqrt(CANVAS_WIDTH * CANVAS_WIDTH + CANVAS_HEIGHT * CANVAS_HEIGHT);
@@ -214,12 +223,6 @@ export function createState() {
     paint: null, paintCtx: null, source: null, sourceKey: null,
     conic: null, conicCtx: null, conicKey: null
   };
-}
-
-/** How far a drifting gradient has swung, on the same curve the picture uses. */
-function driftSwing(motion, timeSec) {
-  const at = motionPhase(motion, timeSec);
-  return { x: Math.sin(at * 0.37 + 0.4), y: Math.cos(at * 0.23 + 1.1) };
 }
 
 /** The layer's stops, in ramp order, with every colour parsed. */

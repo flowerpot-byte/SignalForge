@@ -5,10 +5,12 @@ import { registerLayer } from './layers/index.js';
 import * as imageLayer from './layers/image.js';
 import * as solidLayer from './layers/solid.js';
 import * as gradientLayer from './layers/gradient.js';
+import * as shapeLayer from './layers/shape.js';
 
 registerLayer('image', imageLayer);
 registerLayer('solid', solidLayer);
 registerLayer('gradient', gradientLayer);
+registerLayer('shape', shapeLayer);
 
 export {
   CANVAS_WIDTH,
@@ -19,8 +21,21 @@ export {
   SOLID_MOTION_KINDS,
   IMAGE_MOTION_KINDS,
   GRADIENT_MOTION_KINDS,
+  SHAPE_MOTION_KINDS,
+  SPINNING_SHAPE_MOTION_KINDS,
+  SPINNABLE_FIGURES,
   motionKindsFor,
   GRADIENT_SHAPES,
+  SHAPE_FIGURES,
+  MIN_SHAPE_SIZE,
+  MAX_SHAPE_SIZE,
+  DEFAULT_SHAPE_SIZE,
+  MIN_SHAPE_THICKNESS,
+  MAX_SHAPE_THICKNESS,
+  DEFAULT_SHAPE_THICKNESS,
+  MIN_STAR_POINTS,
+  MAX_STAR_POINTS,
+  DEFAULT_STAR_POINTS,
   MIN_BANDS,
   MAX_BANDS,
   DEFAULT_BANDS,
@@ -50,5 +65,9 @@ export { speedToRate } from './motion/speed.js';
 export { breatheFactor, motionPhase } from './motion/breathe.js';
 export { pulseFactor } from './motion/pulse.js';
 export { spinDegrees, spinRadians } from './motion/spin.js';
+export { driftSwing, DRIFT_CENTRE_REACH } from './motion/drift.js';
+export {
+  STAR_INNER_RATIO, STAR_FIRST_POINT, HEART_LOBE_TOP, HEART_INK_HEIGHT, shapeCentre
+} from './layers/shape.js';
 export { getByPath, setByPath, resolveLayerPath, resolveBindingPath, applyControls } from './bind.js';
 export { prepareImageAsset } from './asset-import.js';

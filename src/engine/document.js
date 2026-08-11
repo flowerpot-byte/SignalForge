@@ -71,6 +71,87 @@ export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combo
 export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial', 'conic', 'stripes', 'waves']);
 
 /**
+ * The figures a `shape` layer can be.
+ *
+ * A FIELD of one `shape` layer type rather than four layer types, for exactly
+ * the three reasons GRADIENT_SHAPES gives just above — and the third of them is
+ * the one that decides it here too: a layer type is baked into the exported
+ * file and cannot be changed from a control, a field can, so the finished
+ * effect gets a "Figure" dropdown for free and somebody who exported a circle
+ * can try the heart without coming back to the app.
+ *
+ * The order is the order the dropdown is built in, and it is smallest-idea
+ * first: the circle is the figure everything else is a variation of (the ring
+ * is a circle with its middle taken out, the star is a circle its outline
+ * folds in and out of, the heart is the one that is none of those).
+ *
+ * The maths for the star and the heart is not invented here. Both come from
+ * `Vibe`, the one effect in the 31 read for docs/effekt-inventur.md that draws
+ * figures for their own sake (`cache\effects\-NyghEBs8-mYkxU6qRFv\effect.html`,
+ * its drawStar and drawHeart) — see src/engine/layers/shape.js, which cites the
+ * lines it takes and says what it changed and why.
+ */
+export const SHAPE_FIGURES = Object.freeze(['circle', 'ring', 'star', 'heart']);
+
+/**
+ * How big the figure is, as a percent of the CANVAS HEIGHT.
+ *
+ * One number for four figures, and what it names is the same thing in all four:
+ * the diameter of the circle the figure is drawn inside. The circle IS that
+ * circle; the ring's outer edge is; the star's points touch it; the heart is as
+ * wide as it and centred in it. So "size 100" always means "as big across as
+ * the canvas is high", whichever figure is chosen — which is what lets the
+ * figure be switched from SignalRGB's own panel without the size meaning
+ * something different afterwards.
+ *
+ * The ceiling is 200 and not 100 because 100 is not the largest useful value:
+ * a circle of the canvas's own height still leaves all four corners black, and
+ * covering the canvas outright needs 189 (the diagonal, 377, over the height,
+ * 200). Above that it is off the edge on every side, which is a real thing to
+ * want — a wall of colour with a figure's edge just out of sight — so the range
+ * is rounded up to 200 rather than cut at the exact number.
+ *
+ * The floor is 1 rather than 0 because zero is not a size, it is "not there",
+ * and a layer that is not there is what the visibility switch is for.
+ */
+export const MIN_SHAPE_SIZE = 1;
+export const MAX_SHAPE_SIZE = 200;
+export const DEFAULT_SHAPE_SIZE = 50;
+
+/**
+ * How thick the ring's wall is, as a percent of its own outer radius.
+ *
+ * A percent of the radius rather than of the canvas, so that making a ring
+ * bigger makes its wall thicker in proportion instead of turning it into a
+ * hoop of wire. 100 means the wall reaches the middle, i.e. a filled disc —
+ * the range runs continuously into the circle rather than stopping just short
+ * of it, so there is no unreachable state between the two figures.
+ *
+ * Stored on every shape layer, not only on rings, for the reason `bands` is
+ * stored on every gradient (see MIN_BANDS above): the figure can be switched
+ * from SignalRGB's panel at any moment, and a field that only existed while
+ * one figure was chosen would be a dead end the moment somebody switched to
+ * the figure that needs it.
+ */
+export const MIN_SHAPE_THICKNESS = 1;
+export const MAX_SHAPE_THICKNESS = 100;
+export const DEFAULT_SHAPE_THICKNESS = 25;
+
+/**
+ * How many points the star has.
+ *
+ * Three is the fewest that is still a star rather than a line; twelve is where
+ * a star stops reading as one on this canvas. At size 50 the outer radius is 50
+ * canvas pixels, so twelve points put a spike every 26 pixels of circumference
+ * — and SignalRGB then samples that down to a few dozen LEDs, where anything
+ * finer is one colour. Five is `Vibe`'s own default and the shape everybody
+ * pictures when they read the word.
+ */
+export const MIN_STAR_POINTS = 3;
+export const MAX_STAR_POINTS = 12;
+export const DEFAULT_STAR_POINTS = 5;
+
+/**
  * How many times the ramp repeats across a shape that repeats.
  *
  * Live on three of the five shapes and dead on two, and that is a property of
@@ -130,15 +211,66 @@ export const DEFAULT_BANDS = 6;
  *    turning it costs nothing and hides nothing.
  *
  * The two lists are therefore no longer "solid, and everything else".
+ *
+ * ===========================================================================
+ * AND A THIRD ANSWER, WHICH IS THE FIRST ONE THAT DEPENDS ON A FIELD
+ * ===========================================================================
+ *
+ * A `shape` layer needs both of the arguments above answered separately,
+ * because two different things are true of it at once:
+ *
+ *  - WARP IS NOT OFFERED ON ANY FIGURE, and this one is not about taste. Warp
+ *    is the only motion in this engine that goes through the half-resolution
+ *    buffer (layers/warp-buffer.js), and drawWarped writes `out[o + 3] = 255`
+ *    for every pixel of it — an opaque 320 x 200 rectangle, by construction.
+ *    A shape layer's whole point is that it draws a figure on transparent
+ *    ground: warping it would paint over every layer beneath it and hide its
+ *    own trail, which is the opposite of what the motion is for. Making the
+ *    buffer alpha-aware is a change to a file the picture and gradient layers
+ *    both render through and both have parity tests over; it is a real piece
+ *    of work and not this one.
+ *  - SPIN DEPENDS ON WHICH FIGURE IT IS. On a shape layer spin turns the
+ *    figure about ITS OWN centre (see layers/shape.js — that is where the
+ *    pivot differs from the gradient's), so a figure that is symmetric under
+ *    rotation about that centre cannot be seen to spin at all. A circle is
+ *    symmetric under every angle and a ring is too; a star has five-fold
+ *    symmetry and a heart none, so both of those visibly turn. Offering spin
+ *    on a circle would be exactly the fault the solid layer's note above
+ *    describes: a control that provably cannot change a byte.
+ *
+ * That is why motionKindsFor takes a second argument. It is the smallest
+ * honest step: every existing caller passes one argument and gets exactly what
+ * it always got, and the one type whose answer genuinely varies within itself
+ * is the one type that has to say which figure it is asking about. The
+ * alternative — passing the whole layer — would have rewritten four call sites
+ * to answer a question only one of them has.
+ *
+ * A shape layer whose figure is unknown or missing gets the SYMMETRIC list,
+ * i.e. the narrower one. That matches what normalizeLayer does with an unknown
+ * figure (it becomes a circle), so the offer and the document agree.
  */
 export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
 export const IMAGE_MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'pulse']);
 export const GRADIENT_MOTION_KINDS = MOTION_KINDS;
+export const SHAPE_MOTION_KINDS = Object.freeze(['none', 'drift', 'breathe', 'pulse']);
+export const SPINNING_SHAPE_MOTION_KINDS = Object.freeze([
+  'none', 'drift', 'breathe', 'spin', 'pulse'
+]);
 
-/** The motion kinds worth offering for a layer of this type. */
-export function motionKindsFor(type) {
+/** The figures a spin can actually be seen on: the ones with no rotational symmetry. */
+export const SPINNABLE_FIGURES = Object.freeze(['star', 'heart']);
+
+/**
+ * The motion kinds worth offering for a layer of this type.
+ *
+ * `figure` is read for one type only — see the long note above.
+ */
+export function motionKindsFor(type, figure) {
   if (type === 'solid') return SOLID_MOTION_KINDS;
   if (type === 'image') return IMAGE_MOTION_KINDS;
+  if (type === 'shape') {
+    return SPINNABLE_FIGURES.includes(figure) ? SPINNING_SHAPE_MOTION_KINDS : SHAPE_MOTION_KINDS;
+  }
   return GRADIENT_MOTION_KINDS;
 }
 
@@ -529,6 +661,51 @@ function normalizeLayer(raw, index, usedIds, problems) {
     return {
       ...base,
       color: normalizeColor(input.color, DEFAULT_SOLID_COLOR),
+      motions: normalizeMotions(input, id, problems)
+    };
+  }
+
+  // One figure on transparent ground. Like the two above it owns no asset, and
+  // unlike either of them it does not cover the canvas — which is the whole
+  // reason it exists (docs/effekt-inventur.md, C4) and also what finally makes
+  // the trail visible on something other than a half-transparent layer.
+  //
+  // EVERY field is stored and clamped whatever the figure is, including the two
+  // that only one figure reads. That is the same decision `angle` and `bands`
+  // already made on a gradient and it is made here for the same reason: the
+  // Figure dropdown is in SignalRGB's own panel, so a thickness that only
+  // existed while "ring" was chosen would leave somebody who switched to the
+  // ring with no way to set the one thing a ring is about.
+  if (type === 'shape') {
+    let figure = str(input.figure, SHAPE_FIGURES[0]);
+    if (!SHAPE_FIGURES.includes(figure)) {
+      problems.push(`Layer "${id}": unknown figure "${figure}", using "${SHAPE_FIGURES[0]}".`);
+      figure = SHAPE_FIGURES[0];
+    }
+    const positionInput = input.position && typeof input.position === 'object' ? input.position : {};
+    return {
+      ...base,
+      figure,
+      color: normalizeColor(input.color, DEFAULT_SOLID_COLOR),
+      // Percent of the canvas height — see MIN_SHAPE_SIZE above.
+      size: clamp(num(input.size, DEFAULT_SHAPE_SIZE), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE),
+      // Where the middle of the figure sits, as a percent of each edge, so 50/50
+      // is the middle of the canvas. A percent rather than the image layer's
+      // -1..1 offset because this is a POSITION and not a nudge away from one:
+      // an image fills the canvas and is slid about inside it, a figure is put
+      // somewhere.
+      position: {
+        x: clamp(num(positionInput.x, 50), 0, 100),
+        y: clamp(num(positionInput.y, 50), 0, 100)
+      },
+      thickness: clamp(
+        num(input.thickness, DEFAULT_SHAPE_THICKNESS), MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS
+      ),
+      // Whole points only, rounded rather than truncated so a document carrying
+      // 5.7 lands on 6 instead of always downwards — the same rule `bands` uses.
+      points: clamp(
+        Math.round(num(input.points, DEFAULT_STAR_POINTS)), MIN_STAR_POINTS, MAX_STAR_POINTS
+      ),
       motions: normalizeMotions(input, id, problems)
     };
   }
