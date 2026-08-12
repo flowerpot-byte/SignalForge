@@ -359,10 +359,31 @@ async function phaseOne(win, state) {
   await wait(80);
   p['3'].cursor = await d.js(`document.getElementById('preview-canvas').style.cursor`);
 
-  await d.drag(canvas.cx, canvas.cy, canvas.cx + 200, canvas.cy);
+  const DRAG_BY = 200;
+  await d.drag(canvas.cx, canvas.cy, canvas.cx + DRAG_BY, canvas.cy);
   const movedRight = await d.stats();
   p['3'].barAfterDraggingRight = movedRight.brightestColumn;
   p['3'].shots.push(await d.shot('p3-a-dragged-right'));
+
+  // ONE TO ONE, MEASURED RATHER THAN INFERRED.
+  //
+  // "The picture follows the pointer" is two claims, and only the direction of
+  // it was ever checked here. The other one is that it follows by exactly as
+  // much: a crop that drifts at nine tenths of the pointer's speed passes a
+  // direction check and feels broken in the hand, which is the kind of thing
+  // this walkthrough exists to catch.
+  //
+  // The two are in different units, so the comparison needs the scale: the
+  // marker is measured in the canvas's OWN pixels (320 across) while the drag
+  // is in the CSS pixels the canvas is displayed at. One CSS pixel of pointer
+  // travel must move the picture one CSS pixel, so the marker must move
+  // DRAG_BY x (canvas.width / displayed width) of its own columns. Two columns
+  // of tolerance for a marker bar eight source pixels wide being resampled.
+  p['3'].canvasPixelsPerCssPixel = start.width / canvas.width;
+  p['3'].expectedTravel = DRAG_BY * p['3'].canvasPixelsPerCssPixel;
+  p['3'].actualTravel = p['3'].barAfterDraggingRight - p['3'].barAtStart;
+  p['3'].followsOneToOne =
+    Math.abs(p['3'].actualTravel - p['3'].expectedTravel) <= 2;
 
   await d.drag(canvas.cx, canvas.cy, canvas.cx - 400, canvas.cy);
   const movedLeft = await d.stats();
@@ -382,7 +403,8 @@ async function phaseOne(win, state) {
   await d.drag(canvas.cx, canvas.cy, canvas.cx - 620, canvas.cy, 20);
   p['3'].followsThePointer = p['3'].barAfterDraggingRight > p['3'].barAtStart
     && p['3'].barAfterDraggingLeft < p['3'].barAtStart;
-  p['3'].result = p['3'].followsThePointer && p['3'].stopsAtTheEdge && p['3'].cursor === 'grab'
+  p['3'].result = p['3'].followsThePointer && p['3'].followsOneToOne
+    && p['3'].stopsAtTheEdge && p['3'].cursor === 'grab'
     ? 'pass' : 'fail';
 
   // --- 4. fit mode --------------------------------------------------------
