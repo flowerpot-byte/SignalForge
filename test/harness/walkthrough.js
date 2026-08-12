@@ -448,6 +448,73 @@ async function phaseOne(win, state) {
   p['4'].result = p['4'].allThreeDiffer && p['4'].containIsLetterboxed && p['4'].returnsToCover
     ? 'pass' : 'fail';
 
+  // --- 12. the layer stack: add, select, hide, raise, remove --------------
+  //
+  // HERE, before point 5 puts motions on the picture, and that placement is
+  // load-bearing: every check below compares the preview's own frame hash
+  // against a frame taken earlier, and a picture with a warp on it never
+  // shows the same frame twice — the first run of this point sat after the
+  // motion points and failed all three restore checks against a canvas that
+  // was simply alive. A still picture is the only honest baseline for
+  // "hidden means GONE from the pixels". The point cleans up after itself
+  // (the added layer is removed again), so every later point still meets the
+  // document it always has.
+  p['12'] = { name: 'layer stack - add a figure, hide it, raise the picture, remove it', shots: [] };
+  const stackBefore = await d.stats();
+
+  await d.js(`document.getElementById('sf-layer-add-kind').value = 'shape'`);
+  await d.clickById('sf-layer-add');
+  await d.until(
+    `document.getElementById('sf-layer-shape') !== null`,
+    'the new layer card appeared'
+  );
+  await wait(250);
+  p['12'].newLayerSelected = await d.js(
+    `document.getElementById('sf-layer-shape')?.getAttribute('aria-pressed') === 'true'`
+  );
+  const withFigure = await d.stats();
+  p['12'].figureChangedThePicture = withFigure.hash !== stackBefore.hash;
+  p['12'].shots.push(await d.shot('p12-a-figure-on-top'));
+
+  // Hidden means GONE from the pixels: back to the very frame from before.
+  await d.clickById('sf-layer-shape-visible');
+  await wait(250);
+  const hidden = await d.stats();
+  p['12'].hiddenRestoresTheFrame = hidden.hash === stackBefore.hash;
+  p['12'].shots.push(await d.shot('p12-b-figure-hidden'));
+  await d.clickById('sf-layer-shape-visible');
+  await wait(250);
+
+  // Raise the picture above the figure: a cover-fitted picture repaints
+  // every pixel, so the frame must again be exactly the frame from before —
+  // the figure is still there, drawn first, honestly underneath.
+  const pictureCardId = await d.js(
+    `[...document.querySelectorAll('.layer-pick')].map((pick) => pick.id).find((id) => id !== 'sf-layer-shape')`
+  );
+  await d.clickById(`${pictureCardId}-up`);
+  await wait(250);
+  const raised = await d.stats();
+  p['12'].raisedPictureCovers = raised.hash === stackBefore.hash;
+  p['12'].shots.push(await d.shot('p12-c-picture-raised'));
+
+  // And away again: remove the figure, the stack is one card, the frame is
+  // the one this point started from.
+  await d.clickById('sf-layer-shape-remove-stack');
+  await d.until(
+    `document.getElementById('sf-layer-shape') === null`,
+    'the removed card is gone'
+  );
+  await wait(250);
+  const cleaned = await d.stats();
+  p['12'].removeRestoresEverything = cleaned.hash === stackBefore.hash;
+  p['12'].oneCardLeft = await d.js(
+    `document.querySelectorAll('.layer-pick').length === 1`
+  );
+  p['12'].shots.push(await d.shot('p12-d-removed-again'));
+  p['12'].result = p['12'].newLayerSelected && p['12'].figureChangedThePicture
+    && p['12'].hiddenRestoresTheFrame && p['12'].raisedPictureCovers
+    && p['12'].removeRestoresEverything && p['12'].oneCardLeft ? 'pass' : 'fail';
+
   // --- 6. saturation and the colour axes (before brightness, so the
   //        measurements are taken on a picture at full strength) ------------
   p['6'] = { name: 'saturation to 0 - grey? colour axes - does the tint shift?', shots: [] };
