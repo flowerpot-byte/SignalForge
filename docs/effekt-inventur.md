@@ -656,7 +656,36 @@ einer Tastatur besonders gut ankommt, weil jede Taste eine Zelle sein kann.
 
 **Motorform:** neue Bewegungsart in `src/engine/motion/`.
 
-**Aufwand:** klein. **Grenze:** keine.
+**Aufwand:** klein. ~~**Grenze:** keine.~~
+
+**Korrektur 12.08.2026 — „Grenze: keine" war falsch, und zwar aus einem Grund, der schon
+im Motor steht.** Der Kommentar über `driftSwing` (`src/engine/motion/drift.js`) erklärt,
+warum `drift` schwingt statt zu marschieren: Ein endloser Marsch braucht eine Rampe, die
+umläuft, und der Übergang von der letzten Farbe zurück zur ersten ist **eine harte Naht,
+die quer über die Fläche wandert** — außer die beiden Farben passen zufällig zusammen. Wer
+C6 als „klein, keine Grenze" liest, baut genau in diese Naht hinein.
+
+Die Naht ist aber nicht überall ein Problem, und das entscheidet die **Form**, nicht die
+Bewegung:
+
+| Form | Marsch nahtlos? | Warum |
+| --- | --- | --- |
+| `waves` | **ja** | Die Farbe folgt `ramp(0.5 - 0.5·cos(2πu))` — bei u = 0 und u = 1 dieselbe Farbe, dieselbe Steigung. Ein Marsch ist hier vollkommen unsichtbar in der Wiederholung |
+| `stripes` | **ja** | Wiederholt sich ohnehin, und an jeder Bandgrenze steht bereits eine harte Kante. Die Nähte wandern einfach mit — genau der gewünschte Lauf |
+| `conic` | **ja, im selben Sinn wie `stripes`** | 0° und 360° sind derselbe Ort, also führt der Marsch keine NEUE Naht ein. Stehen dort verschiedene Farben, gibt es die Naht schon im Standbild; der Marsch lässt sie nur rotieren. Und das ist nicht dasselbe wie `spin`: eine Farbdrehung, keine Geometriedrehung |
+| `linear` | **nein** | Eine einzige Rampe über die Fläche; der Umlauf setzt eine sichtbare Kante hinein |
+| `radial` | **nein** | Rampe von Mitte nach Rand; der Umlauf setzt einen sichtbaren Ring hinein |
+
+Für die oberen drei ist C6 wirklich klein. Für die unteren zwei ist **erst zu entscheiden,
+was der Regler dort überhaupt bedeuten soll** — drei Möglichkeiten, alle vertretbar, keine
+offensichtlich richtig: die Bewegung dort nicht anbieten (dafür gibt es Präzedenz, siehe wie
+die Spalte die Positionsregler bei `stripes` weglässt); die Naht als gewollten Wisch
+zulassen, so wie der mitgelieferte `Side To Side` es vermutlich tut; oder die Rampe für den
+Marsch spiegeln, was nahtlos ist, aber jede Farbe zweimal zeigt.
+
+**Deshalb nicht in der Nachtschicht gebaut:** Das ist eine Geschmacksfrage über das Aussehen
+des Ergebnisses, und die gehört Max. Alles andere daran ist vorbereitet — die Formtabelle
+oben ist die Analyse, die der Bau sonst zuerst hätte machen müssen.
 
 ### C7. Nachmessen: geht `canvas.style.filter` im Wirt?
 
@@ -678,7 +707,12 @@ und welche einen Nutzer-Effekt aus `Documents\WhirlwindFX\Effects` ausführt, is
 
 **Aufwand:** ein Wegwerf-Effekt, eine halbe Stunde.
 
-### C8. Tonreaktion — **unter unseren Zusagen unmöglich**, und das ist die richtige Antwort
+### C8. Tonreaktion — **erst messen, dann bauen**
+
+> Diese Überschrift hieß bis zum 12.08.2026 „unter unseren Zusagen unmöglich, und das ist
+> die richtige Antwort". Der Abschnitt darunter ist unverändert richtig — die zwei Gründe
+> gelten weiter —, aber der Nachtrag am Ende zeigt einen Weg an ihnen vorbei. Wer nur die
+> Überschrift liest, soll nicht die überholte Antwort mitnehmen.
 
 Der Wirt bietet sie an: `engine.audio.freq`, 200 Bytes, belegt in `Hydrogen`. Trotzdem gehört
 sie nicht auf die Bauliste, und zwar aus einem Grund, der nichts mit Aufwand zu tun hat:
