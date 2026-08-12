@@ -160,6 +160,29 @@
      ramp from looking like a sticker. */
   --tile-ink-edge:  0 1px 2px rgba(6, 11, 17, 0.85);
 
+  /* ---------------------------------------------------------------------
+     The one thing in this window that floats over the rest: the list a
+     <select> pops open.
+
+     Nothing else here casts a shadow, and that is measured — the reference
+     raises nothing off its own surface, which is why cards are told apart by a
+     gap rather than by a lift. A dropdown's list is the exception on purpose
+     and it is not decoration: it is drawn OVER whatever card it belongs to, in
+     a window where every surface is a near-black step of the same family, so
+     without an edge that says "this is in front" it reads as a panel that has
+     replaced the card rather than one covering it. The page's own colour at
+     three quarters, so what it darkens is the window's own near-black rather
+     than a grey nobody chose.
+
+     Used only by the styled picker (see `select` in app.css), which exists
+     only where the platform supports it. */
+  --popup-shadow:   0 10px 28px rgba(6, 11, 17, 0.76);
+
+  /* The mark on the row a dropdown's list is standing on: the accent at the
+     same whisper the drop target uses, so a hovered or highlighted option is
+     picked out without a second colour being introduced. */
+  --accent-wash:    rgba(255, 0, 102, 0.22);
+
   /* A line that merely separates: the rule under the left column's caption,
      the edge between the stage and the settings column. Measured at the
      reference's own sidebar edge (200,600): #212d3a — the same value as a card fill,
@@ -206,6 +229,16 @@
      the stage's now, and the token is gone rather than left standing at a
      value nothing reads. */
   --settings-width: 300px;
+
+  /* A tile on the shelf, 16:10 — the shape of everything this app makes, so a
+     tile is a true miniature of the stage rather than a differently
+     proportioned crop of it. Tokens rather than two numbers in app.css because
+     the shelf is a WRAPPING GRID now: the column width and the row height are
+     the same two numbers, said once, and the grid is built out of them (see
+     .gallery-rail). Change one and the other has to follow, which is exactly
+     what a pair of tokens is for. */
+  --tile-width:     168px;
+  --tile-height:    105px;
 
   /* Every icon in this window is drawn on this grid, at this weight. Both are
      tokens because "one stroke weight" is a rule, not a habit. */

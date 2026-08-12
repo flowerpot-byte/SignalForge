@@ -75,6 +75,16 @@ html, body {
   grid-area: stage;
   display: grid;
   grid-template-rows: minmax(0, 1fr);
+  /* Both axes, and named, so the block at the foot of this section can ask the
+     one question the wide-window layout turns on: is this column WIDER than
+     the picture in it can ever be? That is a question about width against
+     height, i.e. an aspect ratio, and an aspect-ratio container query needs a
+     container that knows both of its own dimensions.
+     Safe to contain: this column is a grid area sized `minmax(0, 1fr)` by
+     #app on both axes, so its size never depended on its contents in the first
+     place. */
+  container-type: size;
+  container-name: stage;
   /* Measured off the reference rather than chosen: its stage runs from x=213
      to x=1257, with the reference's OWN sidebar ending at x=200 and the settings cards
      beginning at x=1268 — 13px of margin on the left and 11px on the right,
@@ -95,11 +105,22 @@ html, body {
    gallery. The notice is absent most of the time (it is `hidden`, i.e.
    display:none, whenever an effects folder is known) and a track with nothing
    in it has to collapse to nothing — which is why the rows are spaced by
-   margins rather than by `gap`. */
+   margins rather than by `gap`.
+
+   Named AREAS rather than row numbers, and that is what the wide-window layout
+   at the foot of this section is built on: the same four children, in the same
+   order in the document, arranged into two columns instead of four rows by a
+   single re-declaration of the template. Nothing moves in the DOM, so the
+   reading order and the tab order are the same in both layouts. */
 #preview-body {
   position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas:
+    "first-run"
+    "stage"
+    "message"
+    "gallery";
   min-height: 0;
   border-radius: var(--radius);
   border: 1px dashed transparent;
@@ -128,12 +149,12 @@ html, body {
      as wide as the picture: one left edge (see .stage below) and one right
      edge, and the leftover collects outside the block as a single gutter.
 
-     The 238px is the height everything that is NOT the picture costs, and it
-     is the one number here that has to be maintained by hand:
+     --below-picture is the height everything that is NOT the picture costs,
+     and it is the one number here that has to be maintained by hand:
 
         48   the caption row (--meta-row below, which states the same thing)
-        38   the line of feedback  (12 margin + 8 padding + 18 min-height)
-       152   the strip             (12 margin + 22 tabs + 8 gap + 109 rail)
+        39   the line of feedback  (12 margin + 8 padding + 18 min-height)
+       147   the strip             (12 margin + 22 tabs + 8 gap + 105 rail)
 
      It was 232 while the strip's heading was a plain <h2>. The heading is a
      pair of tabs now (see the gallery below), which measures 22px against the
@@ -142,21 +163,33 @@ html, body {
      test/harness/library.js, which reports this block's width and the picture's
      side by side: 726 against 717 before, 717 against 717 after.
 
+     AND IT IS 234 NOW, for one reason: the shelf lost its horizontal
+     scrollbar. It is a wrapping grid that scrolls DOWNWARDS (see
+     .gallery-rail), so the ~10px Chromium reserved along the bottom of that
+     rail for a horizontal bar is not reserved any more — it went to the right
+     edge, where a vertical bar costs width rather than height. Read back the
+     way this comment says it should be: the first pass at the number was 227,
+     which put the block eleven pixels wider than the picture at both of the
+     narrow sizes (work/polish2-shots/notes.json reports the two side by side),
+     and eleven pixels of width is seven of height. So it is 234, and the two
+     numbers that are supposed to be equal are equal again.
+
      Both ways of getting it wrong are survivable, which is why it is allowed
      to be a constant at all: too large and the block is narrower than the
      picture could have been, too small and the picture is the narrower of the
      two — neither overflows, because the picture's own width is still derived
      from a real measurement (.stage-inner) and never from this. It is read
-     back in test/harness/shots.js, which reports the picture's width and this
-     block's width side by side, so a drift shows up as two numbers that used
-     to be equal and are not. */
+     back in test/harness/shots.js and in test/harness/polish2-shots.js, both of
+     which report the picture's width and this block's width side by side, so a
+     drift shows up as two numbers that used to be equal and are not. */
   container-type: size;
-  --content-width: min(100%, calc((100cqh - 238px) * 1.6));
+  --below-picture: 234px;
+  --content-width: min(100%, calc((100cqh - var(--below-picture)) * 1.6));
 }
-.first-run { grid-row: 1; }
-.stage { grid-row: 2; }
-.drop-message { grid-row: 3; }
-.gallery { grid-row: 4; }
+.first-run { grid-area: first-run; }
+.stage { grid-area: stage; }
+.drop-message { grid-area: message; }
+.gallery { grid-area: gallery; }
 #preview-body.drop-active { border-color: var(--accent); background: var(--accent-soft); }
 /* One gesture, not two competing rectangles: while a file is over the column,
    the frame's own edge joins in rather than sitting inside a second dashed box
@@ -451,16 +484,53 @@ html, body {
 }
 .gallery-tab.is-selected .gallery-tab-count { color: var(--text-muted); }
 .gallery-tab-count:empty { display: none; }
-/* A rail that scrolls sideways, exactly as the reference's effect strip does —
-   so a fifth tile costs no height and the row never wraps into a grid. */
+/* A GRID THAT WRAPS AND SCROLLS DOWNWARDS.
+   ---------------------------------------------------------------------------
+   It was a flex row that scrolled sideways, copied from the reference's own
+   effect strip, and it was wrong for this window for a reason no screenshot
+   shows: THE WHEEL. A mouse wheel scrolls vertically. Over a rail that only
+   moves sideways it does nothing at all — so a shelf holding twelve tiles
+   showed four and the ordinary gesture for "show me the rest" was answered by
+   nothing moving. Max's sentence is the whole argument: "die Effekt-beginnen-
+   mit-Reiter scrollen seitwärts anstatt nach unten".
+
+   Fixed 168px columns rather than `minmax(168px, 1fr)`, and that is the one
+   decision in here worth defending. A stretching column would make the tiles
+   wider without making them taller, i.e. no longer 16:10 — and a tile's whole
+   claim is that it is a true miniature of the 320 x 200 the effect actually
+   is, drawn by the engine onto a canvas of exactly those dimensions. A tile
+   at 187 x 105 would be that picture squashed, which is the one thing this
+   shelf has never done (see components/gallery.js). So the tiles keep their
+   size, the grid fits as many whole ones as there is room for, and what is
+   left over at the right end of a row is a ragged edge inside a shelf rather
+   than a lie inside a tile.
+
+   The height is one row, and that is deliberate: the picture above must not
+   lose a single pixel at the window sizes this design was already judged at
+   (--below-picture above states what the shelf costs). Where there IS room —
+   the wide layout at the foot of this file — the same grid fills a column of
+   its own and shows every row it can.
+
+   `scrollbar-gutter: stable` so that the columns do not reflow the moment the
+   twelfth tile makes a scrollbar appear. */
 .gallery-rail {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, var(--tile-width));
+  grid-auto-rows: var(--tile-height);
   gap: var(--space-2);
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding-bottom: var(--space-1);
+  justify-content: start;
+  align-content: start;
+  height: var(--tile-height);
+  overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
   scrollbar-width: thin;
+  scrollbar-gutter: stable;
 }
+/* The library's own sentence, when there is nothing on that shelf: a line of
+   prose, not a tile, so it takes the whole width of the grid rather than being
+   squeezed into a 168px column. */
+.gallery-rail > .gallery-empty { grid-column: 1 / -1; }
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
    exactly as it does on the first-start question above — without this line both
    shelves are on screen at once and the tabs do nothing whatsoever. */
@@ -540,8 +610,12 @@ html, body {
    of the stage rather than a differently proportioned crop of it. */
 .tile {
   position: relative;
-  flex: 0 0 168px;
-  height: 105px;
+  /* Its own size, not the grid's: the shelf is a grid of fixed 168px columns
+     (see .gallery-rail), so a tile fills its cell exactly and is never
+     stretched out of 16:10. It was `flex: 0 0 168px` while the shelf was a
+     row. */
+  width: var(--tile-width);
+  height: var(--tile-height);
   display: block;
   padding: 0;
   border: 0;
@@ -640,6 +714,118 @@ html, body {
   text-overflow: ellipsis;
 }
 
+
+/* ===========================================================================
+   THE WIDE WINDOW: WHERE THE LEFTOVER GOES
+   ===========================================================================
+
+   The complaint, in Max's words: "eine Menge leerer Platz nach rechts". It is
+   real and it is measurable. The stage is 16:10 and has to leave room under
+   itself for a caption, a line of feedback and the shelf, so past a certain
+   width it runs out of HEIGHT and simply cannot use the rest. Measured on this
+   machine with a picture on the stage (work/polish2-baseline/notes.json):
+
+       window        stage column    picture    unclaimed
+       1040 x 700          741 px     564 px       136 px
+       1280 x 820          981 px     756 px       184 px
+       1920 x 1080        1621 px    1172 px       408 px
+
+   Four hundred pixels of a window with nothing in them. The note further up
+   this file calls that "a single gutter on the right" and it was the right
+   answer while the number was small; at 408px it is not a gutter, it is a
+   hole, and pretending otherwise is what the complaint is about.
+
+   WHAT ACTUALLY FIXES IT, AND WHY CENTRING DOES NOT
+
+   Centring the picture would split 408px into two holes of 204. Stretching the
+   picture is not available: it is 16:10 and it is already as wide as its
+   height allows. The only way the picture gets wider is if it gets TALLER, and
+   the only height it can be given is the 139px the shelf costs it. So above a
+   certain shape of window the shelf stops sitting under the picture and stands
+   beside it instead — the leftover becomes the shelf's column, and the picture
+   grows into the height that buys.
+
+   Both halves of that trade are wins, which is what makes it the answer rather
+   than a rearrangement: the picture is ~230px wider, and the shelf, which is a
+   wrapping grid now, shows several rows at once instead of one.
+
+   WHEN IT SWITCHES, AND WHY THE TEST IS AN ASPECT RATIO
+
+   The honest condition is "there is more width here than the picture can ever
+   reach, by at least the width of one tile" — which compares a width against a
+   height, i.e. it is a question about this column's shape. Hence a container
+   query on .stage-column, which is a size container for exactly this reason.
+
+   29/20 (1.45) is where that comes out, and it is deliberately on the
+   conservative side of the true crossover (about 1.32 at 700px tall, 1.41 at
+   1000px): at 1280 x 820 the column is 1.315 and switching would buy the
+   picture eleven pixels while taking the shelf down to a single column, which
+   is not a trade worth making. The three sizes this pass is judged at measure
+   1.18, 1.32 and 1.61 — so the two Max already approved keep the layout they
+   were approved in, and only the wide one changes.
+   --------------------------------------------------------------------------- */
+@container stage (min-aspect-ratio: 29 / 20) {
+  #preview-body {
+    /* Readable back from a screenshot harness, so a photograph can say which
+       of the two layouts it is a photograph OF rather than leaving that to be
+       judged by eye (test/harness/polish2-shots.js reads this). */
+    --sf-layout: wide;
+
+    /* What the picture still has to leave room for when the shelf is not under
+       it: this element's own 1px border top and bottom, the line of feedback
+       (12 margin + 27), and the caption (48). The shelf's 139 is gone, and
+       that is the whole of the gain.
+
+       The second half of the min() is what stops the picture from eating the
+       shelf's column: one tile, its scrollbar gutter, and the gap. Whichever
+       of the two bites first, the other track takes the remainder exactly —
+       so there is no third, unclaimed number left over. */
+    grid-template-columns:
+      minmax(0, min(
+        calc((100cqh - 89px) * 1.6),
+        calc(100% - var(--tile-width) - var(--space-3) - var(--space-3))
+      ))
+      minmax(calc(var(--tile-width) + var(--space-3)), 1fr);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "first-run first-run"
+      "stage     gallery"
+      "message   gallery";
+    column-gap: var(--space-3);
+    /* Everything that is still under the picture is still as wide as the
+       picture — its column now says so, so the derived width is simply all of
+       it. */
+    --content-width: 100%;
+  }
+
+  /* A column of its own, top to bottom, with the tiles taking every row that
+     is left after the two headings. min-height: 0 on both, or the rail's
+     content sets the floor and the grid row above it gives way instead of the
+     rail scrolling. */
+  .gallery {
+    margin-top: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  /* The two headings stack. Side by side they have a tile's width to share
+     between them, which is not enough for either: photographed at 1920 x 1080,
+     "Effekt beginnen mit" and "Meine Effekte" each broke over two lines and
+     the pair read as four ragged fragments. One under the other, each on its
+     own line, is the same pair of headings with room to be read — and the
+     shelf beside a tall picture has height to spare, which is exactly the
+     thing this layout has more of. */
+  .gallery-tabs {
+    flex-direction: column;
+    align-items: start;
+    gap: var(--space-1);
+  }
+  .gallery-rail {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+  }
+}
 
 /* ---------------------------------------------------------------------------
    The first-start question. A card at the top of the stage column, not a
@@ -780,6 +966,11 @@ html, body {
   column-gap: var(--space-2);
   row-gap: var(--space-2);
 }
+/* A slider's row has a third column: the button that puts it back where a
+   fresh document would have it. Only this kind of row — a dropdown row
+   (.control-row) still has exactly two, and its own rules below place the
+   control in the second of them. */
+.control-number { grid-template-columns: minmax(0, 1fr) auto auto; }
 .control > label {
   min-width: 0;
   overflow: hidden;
@@ -1082,9 +1273,109 @@ select {
 select:hover { border-color: var(--track-empty); }
 select:disabled { color: var(--text-muted); cursor: default; }
 select:disabled:hover { border-color: var(--hairline); }
-/* The dropdown list itself is drawn by the system and does not inherit the
-   surface above it, so it needs a solid background of its own. */
+
+/* ---------------------------------------------------------------------------
+   THE LIST A DROPDOWN POPS OPEN
+   ---------------------------------------------------------------------------
+   The complaint: "Dropdowns sind alle nicht dem Design angepasst" — the closed
+   control wears this window's colours and the list that opens out of it did
+   not: a white sheet with a blue selection bar, i.e. the operating system's,
+   in the middle of a near-black tool.
+
+   The floor, and what it is worth. `color-scheme: dark` (see html, body at the
+   top of this file) and a background on the option elements is as far as the
+   OLD select goes: the list is drawn outside the page, it inherits nothing,
+   and how much of these two declarations it honours is the platform's
+   decision rather than this stylesheet's. They stay, because they are what
+   somebody on a build without the block below gets.
+
+   The ceiling, which this Chromium actually reaches. `appearance: base-select`
+   moves the list INTO the page as a real element — ::picker(select) — with
+   ordinary boxes, ordinary colours and ordinary transitions. Measured on this
+   machine rather than assumed: Chromium 150.0.7871.212, CSS.supports(
+   'appearance', 'base-select') === true (work/polish2-shots/notes.json records
+   both). It is behind @supports because it is a young feature and because the
+   fallback above has to go on being the honest answer where it is missing.
+
+   Nothing in here invents a colour: the list is --surface-step, which is the
+   step this token was already named for and already used by; the row under the
+   pointer is --surface-raise, the same lift every hovered control in this
+   window gets; and the row that is CHOSEN carries the accent, because "this is
+   the one" is exactly what this window says in pink. */
 select option { background: var(--surface-step); color: var(--text-strong); }
+
+@supports (appearance: base-select) {
+  select, ::picker(select) { appearance: base-select; }
+
+  /* The closed control keeps every measurement it already had — this only
+     restates the two things base-select hands back to the author: how the
+     selected text and the arrow sit in the box. */
+  select {
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  select::picker-icon {
+    color: var(--text-muted);
+    transition: transform var(--motion-state) var(--ease-out);
+  }
+  /* The arrow turns over while the list is open: the one piece of state the
+     closed control can still show once its list is somewhere else on screen. */
+  select:open::picker-icon { transform: rotate(180deg); }
+  select:disabled::picker-icon { color: var(--track-empty); }
+
+  ::picker(select) {
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    background: var(--surface-step);
+    /* The one shadow in this window, and tokens.css says why it is allowed. */
+    box-shadow: var(--popup-shadow);
+    padding: var(--space-1);
+    /* It arrives from the control it belongs to rather than from the middle of
+       itself: 150ms, the window's own ease-out, and four pixels of travel.
+       Short, because a dropdown is opened often — long enough to be seen as
+       the list coming out of the control, short enough that it is never a wait
+       (emil-design-eng puts a select at 150..250ms; this is the bottom of that
+       range because these are settings, touched in runs).
+       `overlay` and `display` are in the list with allow-discrete or the
+       element is simply gone on the first frame and there is nothing left to
+       fade. */
+    transition:
+      opacity var(--motion-state) var(--ease-out),
+      transform var(--motion-state) var(--ease-out),
+      overlay var(--motion-state) allow-discrete,
+      display var(--motion-state) allow-discrete;
+  }
+  @starting-style {
+    ::picker(select):popover-open { opacity: 0; transform: translateY(-4px); }
+  }
+  ::picker(select):not(:popover-open) { opacity: 0; transform: translateY(-4px); }
+
+  select option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 5px var(--space-2);
+    border-radius: calc(var(--radius) - 2px);
+    background: var(--surface-step);
+    color: var(--text-strong);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background var(--motion-press) var(--ease-out);
+  }
+  /* Under the pointer, and under the keyboard — a list walked with the arrow
+     keys has to mark where it is exactly as clearly as a pointer does. */
+  select option:hover,
+  select option:focus,
+  select option:active { background: var(--surface-raise); }
+  /* The one that is chosen. The wash rather than the accent itself, so the
+     option's own text stays --text-strong and legible; the tick beside it is
+     the accent at full strength. */
+  select option:checked { background: var(--accent-wash); }
+  select option::checkmark { color: var(--accent); }
+}
 
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
    so every element in this file that is given one has to honour the attribute
@@ -1217,14 +1508,25 @@ input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 14px;
+  /* Eighteen and not fourteen. The box has to be tall enough to hold the thumb
+     at its pressed size WITHOUT the focus ring — which is an outline two
+     pixels outside this box — cutting across it. At 14 the ring clipped the
+     top and bottom of a 14px thumb, so the one state that has to be obvious
+     everywhere was the one this control drew worst. */
+  height: 18px;
   margin: 0;
   background: transparent;
   cursor: pointer;
 }
 .field-group[data-section="colour"] input[type="range"] { --track-lead: var(--accent); }
+/* Six pixels, not four. "Die Slider sehen noch billig aus" is the complaint,
+   and a four-pixel track under an eleven-pixel thumb is most of the reason: at
+   that weight the track reads as a hairline the thumb happens to sit on rather
+   than as a thing with a filled part and an empty part. Six is the weight at
+   which the fill is a quantity you can see the size of without looking for it,
+   and it is still a track rather than a bar. */
 input[type="range"]::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 6px;
   border-radius: var(--radius-pill);
   background: linear-gradient(
     to right,
@@ -1232,20 +1534,84 @@ input[type="range"]::-webkit-slider-runnable-track {
     var(--track-empty) var(--sf-fill, 0%) 100%
   );
 }
+/* The thumb, with a ring of the card it stands on cut out around it.
+   The ring is what makes it read as an object ON the track rather than a blob
+   IN it: the track runs under the thumb, and without a gap the filled part and
+   the thumb are one continuous light shape whose end nobody can find. Two
+   pixels of --surface-card, i.e. the card's own colour, so the gap is a hole
+   rather than a stroke, and it is right on every surface a slider stands on in
+   this column (a plain card and a motion's fieldset are both --surface-card). */
 input[type="range"]::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 11px;
-  height: 11px;
-  margin-top: -3.5px;
-  border: 0;
+  width: 14px;
+  height: 14px;
+  /* (track 6 - thumb 14) / 2, so the thumb is centred on the track whatever
+     either of them is set to. */
+  margin-top: -4px;
+  border: 2px solid var(--surface-card);
   border-radius: 50%;
   background: var(--text-strong);
-  transition: transform 120ms ease-out;
+  transition: transform var(--motion-press) var(--ease-out),
+              background var(--motion-press) var(--ease-out);
 }
-input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.2); }
-input[type="range"]:active::-webkit-slider-thumb { transform: scale(1.2); background: var(--accent); }
+/* Under the pointer it grows; held down it takes the accent as well, which is
+   the one moment a slider is the thing being used and says so. Both are the
+   same size on purpose: a thumb that grew again on the press would be a second
+   change during the gesture the user is already making. */
+input[type="range"]:hover::-webkit-slider-thumb { transform: scale(1.15); }
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+  background: var(--accent);
+}
+/* Focused from the keyboard, the thumb answers as well as the ring around the
+   control: the ring says WHICH control, the accent says which end of it is
+   about to move. */
+input[type="range"]:focus-visible::-webkit-slider-thumb { background: var(--accent); }
 input[type="range"]:disabled { cursor: default; }
 input[type="range"]:disabled::-webkit-slider-thumb { background: var(--text-muted); }
+input[type="range"]:disabled::-webkit-slider-runnable-track { background: var(--track-empty); }
+
+/* ---------------------------------------------------------------------------
+   PUTTING ONE SLIDER BACK WHERE IT STARTED
+   ---------------------------------------------------------------------------
+   "Es sollte einen Zurücksetzen-Button am Slider geben." One per control, and
+   the whole design problem is that there are up to twenty of them in this
+   column: twenty buttons standing there permanently would be twenty things to
+   read past on the way to the one being looked for, in a column whose entire
+   discipline is that a control which is there can be used.
+
+   So it is quiet at rest and arrives on the two gestures that mean "I am
+   working on THIS one": the pointer over the card, or the keyboard on anything
+   inside it. It is in the layout the whole time (opacity, never display), so
+   nothing moves when it appears and nothing reflows when it goes — and it
+   stays focusable while invisible, which is what makes it reachable by Tab
+   from the slider it belongs to rather than being a pointer-only affordance.
+
+   :focus-within on the card is what covers the keyboard: tabbing onto the
+   slider shows its own reset before the user has to guess that one exists. */
+.control-reset {
+  grid-row: 1;
+  grid-column: 3;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  justify-content: center;
+  background: transparent;
+  color: var(--text-muted);
+  opacity: 0;
+  transition: opacity var(--motion-state) var(--ease-out),
+              background var(--motion-press) var(--ease-out),
+              color var(--motion-press) var(--ease-out),
+              transform var(--motion-press) var(--ease-out);
+}
+.control-reset .icon { width: 13px; height: 13px; }
+.control:hover .control-reset,
+.control:focus-within .control-reset { opacity: 1; }
+.control-reset:hover { background: var(--surface-raise); color: var(--text-strong); }
+/* Never invisible while it has the keyboard: the rule above already covers it
+   through :focus-within, and this says the same thing about the button itself
+   so that it survives any future change to the card around it. */
+.control-reset:focus-visible { opacity: 1; }
 
 /* Focus must stay obvious on every surface in the window — never remove the
    ring without a replacement that is at least as visible. */
