@@ -386,6 +386,43 @@ ihn vorgefunden hat. Eine wandernde Figur mit Schleier dahinter ist damit das er
 SignalForge eine Nachzieh-Spur aus dem Grund zeigt, aus dem es sie gibt. Gemessen im echten
 Fenster: mittlere Bildhelligkeit 1,88 ohne Schleier, 3,23 mit (`work/shape-layer-shots/`).
 
+**Nachtrag 12.08.2026 (Nachtschicht):** Vier Bausteine sind dazugekommen, und eine Zeile
+der Technik-Tabelle ist von der Wirklichkeit überholt worden.
+
+- **Seitenverhältnis-Ausgleich (`aspect`):** SignalRGB rendert jeden Effekt in einer festen
+  320×200-Ultralight-View und streckt das fertige Bild aufs Vorschau-Panel (bei Max ≈1,54×
+  breiter, gemessen am eigenen Log + Screenshot). Kein einziger der 27 gelesenen Effekte
+  gleicht das aus — unsere Figuren und Partikel können es jetzt (Regler „Aspect Fix",
+  Dokumentfeld `aspect`). Wir zeichnen damit die ersten Kreise, die in SignalRGBs Vorschau
+  wirklich rund sind.
+- **Farbwechsel zwischen GEWÄHLTEN Farben (`stops`+`cycleSpeed` an Fläche und Figur):** die
+  A4-Spielart, die der Bestand NICHT hat — dort rotiert „Color Cycle" die Farbtöne übers
+  ganze Rad; hier blendet ein Ring durch 2–4 selbst gewählte Farben. Tempo-Änderung springt
+  nicht (Anker `cyclePhase`, in der App automatisch umgeparkt — dieselbe Mechanik, die seit
+  heute auch `hueCycle` beim Verstellen still hält).
+- **Eigenes Titelbild (`cover`):** die Kachel neben der Effektdatei kann jetzt ein gewähltes
+  Bild sein (512×288, beim Wählen zugeschnitten und eingebettet); Automatik bleibt Standard.
+- **Zuletzt benutzte Farben** an jeder Farbauswahl der App (acht, überleben den Neustart).
+
+**Die überholte Zeile ist A12 (Tonreaktion): „unter unseren Zusagen unmöglich" stimmt nicht
+mehr.** SignalRGB dokumentiert offiziell ein `engine.audio`-Objekt für Lightscripts
+(`docs.signalrgb.com/developer/lightscripts/audio-visualizer`): `level` (Lautstärke),
+`density`, `freq` (200 Frequenzbänder) — vom WIRT in den Effekt hineingereicht, kein fetch,
+keine Außenwelt, also innerhalb unserer Zusagen. Die C8-Begründung galt dem Selber-Holen von
+Livedaten und bleibt für Wallpaper/Sensoren richtig; für Ton liefert der Wirt. **Ungemessen
+am echten Host** — vor einem Bau gehört `engine.audio` in den Motorcheck (Existenz, Werte,
+Verhalten ohne Ton), dann wäre der meistgewünschte Effekttyp der Community (Audio-Visualizer,
+mit Abstand) baubar, und `Hydrogen` rückt vom „braucht fehlende Bausteine"-Stapel herunter.
+
+Aus derselben Recherche, fürs Einordnen: Der meistgesehene Feature-Wunsch im offiziellen
+SignalRGB-Forum ist kein neuer Effekttyp, sondern **weichere Übergänge** — Politur schlägt
+Neuheit. Es gibt zwei kostenlose No-Code-Konkurrenten (RGBJunkie Effect Builder, SRGBmods
+Effect Creator) — SignalForge unterscheidet sich über Vorschau-Ehrlichkeit, Parität und
+Bildqualität, nicht übers bloße Existieren. Und ein Logfund am Rande: SignalRGB kappt bei
+Free-Tier-Konten „non-owned user-dir effects" bei **zehn** — falls je mehr als zehn fremde
+Effekte in Max' Ordner liegen, verschwinden welche aus der Liste, ohne dass SignalForge
+etwas dafür kann.
+
 **Zusammengerechnet:** Von 31 Effekten sind heute **etwa 6** ohne Abstriche nachbaubar
 (`Solid Color`, `Good Night!`, `Rainbow` näherungsweise, `Black Ice` ohne Tastendruck,
 `Gradient Wave`, `Neon Shift` näherungsweise) und einer ist unser eigener Bauplan
