@@ -91,6 +91,8 @@
   "inspector.speed": "Tempo",
   "inspector.amount": "Stärke",
   "inspector.trail": "Nachziehen",
+  "inspector.section.display": "Anzeige",
+  "inspector.aspect": "Breiten-Ausgleich",
   "inspector.section.background": "Hintergrund",
   "inspector.background": "Hintergrund",
   "inspector.background.none": "Keiner",

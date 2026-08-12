@@ -401,7 +401,7 @@ function tracePath(ctx, layer, figure, radius, state) {
   ctx.closePath();
 }
 
-export function render(ctx, layer, asset, timeSec, state) {
+export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   const motions = Array.isArray(layer.motions) ? layer.motions : [];
   const spin = motions.find((motion) => motion.kind === 'spin') ?? null;
   const drift = motions.find((motion) => motion.kind === 'drift') ?? null;
@@ -420,6 +420,15 @@ export function render(ctx, layer, asset, timeSec, state) {
 
   ctx.save();
   ctx.translate(centre.x, centre.y);
+  // The host-stretch compensation (aspectFactorOf in document.js): squish the
+  // figure about its own centre so the host's stretch lands it round. It has
+  // to sit OUTSIDE the spin — translate, squish, THEN rotate — because the
+  // host stretches the finished canvas, i.e. after every rotation: only
+  // squish∘rotate is the exact inverse of stretch∘(squish∘rotate) for every
+  // angle. The other order would make a spinning star wobble fat and thin
+  // twice a turn. Skipped entirely at 1, so a document that says nothing
+  // renders through the very calls it always did, byte for byte.
+  if (Number.isFinite(aspect) && aspect > 0 && aspect !== 1) ctx.scale(1 / aspect, 1);
   // Only where the turn can be seen — see the note on spin above for why
   // performing it on a circle or a ring would move bytes without moving the
   // picture.

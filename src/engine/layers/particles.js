@@ -481,7 +481,7 @@ function coloursOf(layer) {
   return stops.map((stop) => normalizeColor(stop && stop.color, DEFAULT_SOLID_COLOR));
 }
 
-export function render(ctx, layer, asset, timeSec, state) {
+export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   const colours = coloursOf(layer);
   const field = particleField(layer);
 
@@ -509,6 +509,17 @@ export function render(ctx, layer, asset, timeSec, state) {
   // One object for the whole frame — see particleAt.
   const spot = { x: 0, y: 0, radius: 0, alpha: 1, colour: 0, phase: 0 };
 
+  // The host-stretch compensation (aspectFactorOf in document.js), the same
+  // sentence the shape layer's render carries — but a swarm is up to four
+  // hundred discs, so the squish is set ONCE for the whole layer and each
+  // particle's x is pre-multiplied back out by the factor: the centre lands
+  // exactly where it always did (a * x/a = x), only the disc itself is drawn
+  // narrower. drawLayers' save/restore around every layer is what takes the
+  // transform off again. Skipped entirely at 1, so an untouched document
+  // renders through the very calls it always did, byte for byte.
+  const squish = Number.isFinite(aspect) && aspect > 0 && aspect !== 1 ? aspect : 1;
+  if (squish !== 1) ctx.scale(1 / squish, 1);
+
   // Colour by colour, so ctx.fillStyle is assigned once per stop instead of
   // once per particle. See particleCache for the measurement behind that and
   // for what it costs.
@@ -521,7 +532,7 @@ export function render(ctx, layer, asset, timeSec, state) {
       particleAt(field, cache, cache.order[slot], timeSec, spot);
       ctx.globalAlpha = base * spot.alpha;
       ctx.beginPath();
-      ctx.arc(spot.x, spot.y, spot.radius, 0, Math.PI * 2, false);
+      ctx.arc(squish === 1 ? spot.x : spot.x * squish, spot.y, spot.radius, 0, Math.PI * 2, false);
       ctx.fill();
     }
   }

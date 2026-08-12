@@ -36,8 +36,12 @@ function controlsFor(layers) {
 const propertiesOf = (layers) => controlsFor(layers).controls.map((control) => control.property);
 
 const RAIN = { id: 'front', type: 'particles', pattern: 'rain' };
+// `aspect` is in this list because every document in this file carries a
+// particle layer — the control exists exactly when something round is drawn
+// (see the aspect note in src/export/effect-controls.js).
 const DOCUMENT_WIDE = [
-  'trail', 'hueShift', 'hueCycle', 'brightness', 'saturation', 'greenMagenta', 'blueYellow'
+  'trail', 'hueShift', 'hueCycle', 'aspect',
+  'brightness', 'saturation', 'greenMagenta', 'blueYellow'
 ];
 
 test('a document with no background offers exactly what it always did', () => {

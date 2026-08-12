@@ -276,12 +276,14 @@ test('a document from before the colour layers normalises to exactly what it did
     saturation: 118,
     greenMagenta: -8,
     blueYellow: 12,
-    // The three fields a document from before this change cannot carry, at the
+    // The fields a document from before this change cannot carry, at the
     // values that mean "nothing here has been turned on": no hue rotation, no
-    // hue cycle, and the hard clear the engine has always done.
+    // hue cycle, the hard clear the engine has always done, and no host
+    // stretch to compensate for.
     hueShift: 0,
     hueCycle: 0,
     trail: 0,
+    aspect: 100,
     layers: [{
       id: 'a1',
       type: 'image',
@@ -348,6 +350,7 @@ test('a gradient from before the band count normalises to exactly what it must',
     hueShift: 0,
     hueCycle: 0,
     trail: 0,
+    aspect: 100,
     layers: [{
       id: 'a1',
       type: 'gradient',

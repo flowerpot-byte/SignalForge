@@ -136,6 +136,34 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   let lastFrame = -1e9;
   const samples = [];
 
+  // The frame follows the document's host-stretch field, so what this window
+  // shows IS what SignalRGB will show: the same 320 x 200 pixels, displayed
+  // that much wider (see MIN_ASPECT in src/engine/document.js for the
+  // measurement, and --stage-aspect in styles/app.css for the rules that
+  // read this). That is true of EVERY document, not only one with a figure to
+  // keep round — SignalRGB stretches a plain picture's canvas onto its panel
+  // exactly the same way, so the untouched 1.6 frame is the dishonest one the
+  // moment the field says otherwise. Checked each rendered frame rather than
+  // wired to the settings column, because the column writes into the live
+  // document and nothing else announces the change; one number compare a
+  // frame costs nothing, and the property is only touched when the value
+  // actually moved.
+  //
+  // Set on the CONTAINER (#preview-body), not on the stage inside it, and
+  // that placement is load-bearing: custom properties only inherit DOWNWARDS,
+  // and #preview-body's own --content-width — the width the message line and
+  // the gallery share with the picture — reads this variable too. On the
+  // stage it would have been invisible to them, and a stretched picture would
+  // have run wider than its own caption's rule (the exact "hairline over
+  // nothing" fault the --content-width note in app.css records as fixed).
+  let shownAspect = 0;
+  function followAspect() {
+    const aspect = SF.aspectFactorOf(doc);
+    if (aspect === shownAspect) return;
+    shownAspect = aspect;
+    container.style.setProperty('--stage-aspect', String((canvas.width / canvas.height) * aspect));
+  }
+
   // A plain `running` flag is not enough to kill a stale requestAnimationFrame
   // chain: between a stop() and a fast start(), a frame already pending from
   // the OLD chain would see `running === true` again (set by the new start())
@@ -180,6 +208,7 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
     if (stamp - lastFrame < FRAME_GAP) return;
     lastFrame = stamp;
 
+    followAspect();
     const began = performance.now();
     renderer.render(ctx, doc, assets, (stamp - start) / 1000);
     samples.push(performance.now() - began);

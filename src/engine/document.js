@@ -19,6 +19,17 @@ export const CANVAS_HEIGHT = 200;
  * field normalizeDocument can already fill in, clamp or substitute is NOT a
  * change to this number, because such a document opens and says what it
  * corrected.
+ *
+ * `aspect` (12.08.2026) is the field that took this rule closest to its edge,
+ * and staying at 1 was decided rather than defaulted: an older SignalForge
+ * opens a document carrying aspect without complaint, silently drops the
+ * field, and a re-save loses it — and unlike a dropped trail or hueShift,
+ * what is lost is GEOMETRY (the figures are oval again on the hardware, which
+ * is the very thing the field exists to fix). That is still "opens and makes
+ * sense of it" under the rule above, and a version bump would have traded it
+ * for something worse — every older install refusing every newer document
+ * outright over one cosmetic field. If a second geometry-bearing field ever
+ * lands here, reconsider the trade rather than citing this note as precedent.
  */
 export const DOCUMENT_VERSION = 1;
 
@@ -595,7 +606,8 @@ export const BINDABLE_DOCUMENT_FIELDS = Object.freeze([
   'blueYellow',
   'hueShift',
   'hueCycle',
-  'trail'
+  'trail',
+  'aspect'
 ]);
 
 /**
@@ -626,6 +638,54 @@ export const MAX_HUE_SHIFT = 360;
  * rather than picked — see trailAlpha in src/engine/engine.js.
  */
 export const MAX_TRAIL = 100;
+
+/**
+ * How much wider the host is known to stretch the finished canvas, in percent.
+ * 100 means "not at all" and is the default and the untouched code path.
+ *
+ * MEASURED, NOT ASSUMED (12.08.2026, work/nachtschicht_2026-08-12.md):
+ * SignalRGB renders every effect in an Ultralight view of exactly 320 x 200 —
+ * its own log says so per effect — and then stretches that finished picture
+ * onto whatever it is shown on. On Max' machine the preview panel is ~2.46:1
+ * against the canvas's 1.6:1, so every circle in every effect arrives ~1.54x
+ * wider than it is tall. All 27 corpus effects read for the inventory draw
+ * their circles naively and show up oval there; none compensates.
+ *
+ * This field is the document's answer, and it is a NUMBER THE USER SETS rather
+ * than a constant, because the true factor depends on the machine: it is the
+ * ratio of the viewer's panel (or LED layout) to the canvas, which nothing
+ * inside an exported file can measure — the host offers no way to ask (no
+ * resize events, a fixed 320 x 200 view, see docs/erkenntnisse-signalrgb-
+ * motor.md). So it ships as a control, like brightness.
+ *
+ * WHAT IT DOES is deliberately narrow: the two layer types that draw round
+ * things (shape, particles) pre-squish their FIGURES horizontally about each
+ * figure's own centre by 1/factor, so the host's stretch lands them round.
+ * Positions, travel paths, pictures, gradients and solids are left alone —
+ * they have no shape of their own to keep, and squishing a background would
+ * tear it off the canvas edge.
+ *
+ * The range is 50..250 rather than 100..250 because a layout can be TALLER
+ * than 1.6:1 as well (a single tower case), in which case the host squishes
+ * and the compensation stretches. Clamped like every other field; 0 is not in
+ * the range because a factor of 0 is not a stretch, it is no picture.
+ */
+export const MIN_ASPECT = 50;
+export const MAX_ASPECT = 250;
+export const DEFAULT_ASPECT = 100;
+
+/**
+ * The stretch factor the renderer works with: doc.aspect read the way every
+ * layer re-reads its own fields — raw, because applyControls (bind.js) writes
+ * a SignalRGB control's value straight into the live document, so what sits
+ * there is whatever the panel sent and not what normalizeDocument approved.
+ * 1 for a document that says nothing, exactly like the field's own default.
+ */
+export function aspectFactorOf(doc) {
+  const raw = Number(doc?.aspect);
+  if (!Number.isFinite(raw)) return 1;
+  return clamp(raw, MIN_ASPECT, MAX_ASPECT) / 100;
+}
 
 const IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
 const ASCII_PRINTABLE = /^[\x20-\x7E]*$/;
@@ -1279,6 +1339,10 @@ export function normalizeDocument(raw) {
     // How much of the previous frame survives into this one. 0 is the hard
     // clear this engine has always done — see MAX_TRAIL above.
     trail: clamp(num(input.trail, 0), 0, MAX_TRAIL),
+    // How much wider the host stretches the finished canvas — see MIN_ASPECT
+    // above. 100 is "not at all", which is what every document written before
+    // this field says by saying nothing.
+    aspect: clamp(num(input.aspect, DEFAULT_ASPECT), MIN_ASPECT, MAX_ASPECT),
     layers,
     controls,
     assets

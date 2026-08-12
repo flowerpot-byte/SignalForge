@@ -184,7 +184,12 @@ html, body {
      drift shows up as two numbers that used to be equal and are not. */
   container-type: size;
   --below-picture: 234px;
-  --content-width: min(100%, calc((100cqh - var(--below-picture)) * 1.6));
+  /* The same --stage-aspect the frame itself is shaped by (see .stage-inner),
+     so the message line and the gallery stay exactly as wide as a picture the
+     host-stretch setting has made wider — set by followAspect in
+     components/preview.js on THIS element, because a custom property only
+     inherits downwards and this is the highest rule that reads it. */
+  --content-width: min(100%, calc((100cqh - var(--below-picture)) * var(--stage-aspect, 1.6)));
 }
 .first-run { grid-area: first-run; }
 .stage { grid-area: stage; }
@@ -238,7 +243,13 @@ html, body {
 .stage-inner {
   --meta-row: 48px;
   display: grid;
-  width: min(100%, calc((100cqh - var(--meta-row)) * 1.6));
+  /* --stage-aspect is the frame's width-to-height ratio: the canvas's own
+     1.6 while the document says the host does not stretch, and wider when it
+     does — set from the document by followAspect in components/preview.js,
+     which is how this window shows exactly what SignalRGB will show. The 1.6
+     fallback keeps the empty window (and any test without a preview loop) at
+     the canvas's own shape. */
+  width: min(100%, calc((100cqh - var(--meta-row)) * var(--stage-aspect, 1.6)));
 }
 /* No picture, no caption about one: "320 x 200" is true of the effect but it
    is information about a preview, and there is nothing being previewed. It
@@ -260,7 +271,10 @@ html, body {
    window is that everything else is near-black, not that it is lit. */
 .viewport {
   position: relative;
-  aspect-ratio: 320 / 200;
+  /* The same ratio .stage-inner's width was derived from — see the note
+     there. One variable feeding both rules is what keeps the frame and the
+     column it sits in from ever disagreeing about the frame's shape. */
+  aspect-ratio: var(--stage-aspect, 1.6);
   border-radius: var(--radius);
   border: 1px solid var(--hairline);
   background: var(--surface-sunk);
@@ -782,7 +796,7 @@ html, body {
        so there is no third, unclaimed number left over. */
     grid-template-columns:
       minmax(0, min(
-        calc((100cqh - 89px) * 1.6),
+        calc((100cqh - 89px) * var(--stage-aspect, 1.6)),
         calc(100% - var(--tile-width) - var(--space-3) - var(--space-3))
       ))
       minmax(calc(var(--tile-width) + var(--space-3)), 1fr);

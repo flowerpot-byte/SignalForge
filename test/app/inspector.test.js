@@ -128,6 +128,7 @@ test('every slider offers exactly the range the matching exported control offers
     ['hueShift', 'hueShift'],
     ['hueCycle', 'hueCycle'],
     ['trail', 'trail'],
+    ['aspect', 'aspect'],
     // The shape layer's five. Two of them are the crossing this whole test
     // exists to catch: the exported controls are called posX and posY (a
     // control's property becomes a global in the finished effect, and `x` is

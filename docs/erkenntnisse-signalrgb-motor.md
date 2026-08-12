@@ -69,10 +69,33 @@ vendor    = Apple Computer, Inc.
 gleichzeitig ist `structuredClone` vorhanden — das gibt es erst ab Chrome 98. Die Kennung ist
 also eingefroren; der echte Motor ist neuer, wie viel neuer ist unbekannt.
 
-**Für die Architektur heißt das:** Electron als Vorschau bleibt richtig, es ist dieselbe
-Motorfamilie. Aber der Paritätstest beweist Gleichheit *innerhalb eines Motors* — er beweist
-nicht, dass sich SignalRGBs Chromium genauso verhält wie Electrons neueres. Der Motorcheck unten
-ist deshalb dauerhaft aufzuheben und bei jedem neuen Browser-Baustein erneut zu befragen.
+**Korrektur 12.08.2026 — die EFFEKTE laufen gar nicht in dem CEF:** SignalRGBs eigenes Log
+(`%LocalAppData%\WhirlwindFX\SignalRgb\Logs\`) schreibt beim Aktivieren jedes Effekts:
+
+```
+Initializing Canvas Renderer: Ultralight
+UltraLight : Ultralight: Initializing Ultralight v1.4.0 (WebKit 615.1.18.100.1) ...
+UltraLight : Ultralight: Creating View with the following configuration:
+    width: 320
+    height: 200
+    device scale: 1
+    is_accelerated: 0
+```
+
+Das CEF ist nur die **App-Oberfläche** (Marketplace, Panels). Der **Effekt-Renderer ist
+Ultralight, also WebKit** — dazu passt `vendor = Apple Computer, Inc.` von oben, das bei echtem
+Chromium `Google Inc.` hieße. Der Chrome-85-UA-String ist Ultralights Tarnkennung.
+
+**Für die Architektur heißt das, schärfer als vorher:** Electron (Blink) und der echte
+Effekt-Host (WebKit) sind NICHT dieselbe Motorfamilie. Der Paritätstest beweist weiterhin
+Preview = Exportdatei innerhalb Electrons; Antialiasing-Kanten und Rundungen können in
+Ultralight anders fallen. Funktional trägt das die Canvas-2D-Grundmenge (die Bausteine-Tabelle
+unten ist ja am echten Host gemessen), aber jeder NEUE Baustein gehört erst recht in den
+Motorcheck — WebKit-Lücken sehen anders aus als Chromium-Lücken. Und die View ist **immer
+320×200, fest** — eine andere Canvas-Größe anzubieten ist zwecklos; was der Host mit dem
+fertigen Bild macht (Vorschau-Panel, LED-Layout), streckt es außerhalb des Effekts
+(gemessen 12.08.: Panel ≈ 2,46:1 → Faktor ≈ 1,54 breiter; Kompensation = Dokumentfeld
+`aspect`, siehe `MIN_ASPECT` in src/engine/document.js).
 
 ---
 

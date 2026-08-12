@@ -77,7 +77,10 @@ test('the background layer itself is not offered a background of its own', () =>
 
 test('the background is described after the foreground moves and before the grade', () => {
   const runs = sectionsFor(choose(docOf([FRONT]), 'gradient'));
-  assert.deepEqual(runs, ['fill', 'motions', 'background', 'colour']);
+  // 'display' closes the column: the host-stretch setting is about the
+  // machine showing the picture, not the picture, so it comes after even the
+  // grade — see the aspect note in components/inspector.js.
+  assert.deepEqual(runs, ['fill', 'motions', 'background', 'colour', 'display']);
 });
 
 test('every section it builds has a heading, and it is never left and returned to', () => {

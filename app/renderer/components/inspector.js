@@ -61,6 +61,7 @@ const RANGES = Object.freeze({
   hueShift: withStep(CONTROL_RANGES.hueShift),
   hueCycle: withStep(CONTROL_RANGES.hueCycle),
   trail: withStep(CONTROL_RANGES.trail),
+  aspect: withStep(CONTROL_RANGES.aspect),
   // The shape layer's five numbers. Two of the names differ from the
   // document's, exactly as `speed`/`amount` do: the exported controls are
   // called posX and posY because their `property` becomes a global in the
@@ -176,7 +177,8 @@ export const SECTION_TITLES = Object.freeze({
   image: 'inspector.section.image',
   motions: 'inspector.motions',
   background: 'inspector.section.background',
-  colour: 'inspector.section.colour'
+  colour: 'inspector.section.colour',
+  display: 'inspector.section.display'
 });
 
 /**
@@ -196,7 +198,8 @@ export const SECTION_GLYPHS = Object.freeze({
   image: 'image',
   motions: 'motion',
   background: 'background',
-  colour: 'colour'
+  colour: 'colour',
+  display: 'settings'
 });
 
 /**
@@ -613,6 +616,20 @@ export function describeInspector(doc, layerId) {
       labelKey: `inspector.${name}`, ...RANGES[name]
     });
   }
+
+  // The host-stretch compensation, last because it is the only setting here
+  // that is not about the picture but about the machine SHOWING the picture
+  // (see MIN_ASPECT in src/engine/document.js for the measurement). Emitted
+  // whatever the layers are, exactly like trail: the preview's own frame
+  // follows this value (components/preview.js), so it is visibly doing
+  // something on every document — and a control that comes and goes with the
+  // layer type is a setting somebody can store and then not find again. The
+  // EXPORTED control is the one that is conditional (effect-controls.js),
+  // because inside SignalRGB there is no preview frame to follow it.
+  fields.push({
+    path: 'aspect', type: 'number', section: 'display',
+    labelKey: 'inspector.aspect', ...RANGES.aspect
+  });
   return fields;
 }
 

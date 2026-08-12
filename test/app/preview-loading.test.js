@@ -22,7 +22,9 @@ function fakeElement() {
   return {
     id: '',
     children: [],
-    style: {},
+    // setProperty: followAspect writes the frame's --stage-aspect custom
+    // property on the stage; the fake only has to survive it.
+    style: { setProperty() {} },
     classList: { toggle() {}, add() {}, remove() {} },
     append(...kids) { this.children.push(...kids); },
     setAttribute() {},
@@ -39,6 +41,9 @@ function fakeContainer() {
   const node = {
     id: '',
     children: [],
+    // style.setProperty: followAspect writes --stage-aspect on the CONTAINER
+    // (#preview-body), where #preview-body's own --content-width can read it.
+    style: { setProperty() {} },
     append(...kids) { node.children.push(...kids); },
     classList: {
       toggle(name, force) {
@@ -70,6 +75,7 @@ function installFakeDom() {
       createRenderer: () => ({ render: () => {} }),
       normalizeDocument: (doc) => ({ doc: doc ?? {} }),
       clamp: (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v),
+      aspectFactorOf: () => 1,
       async loadAssets() { return new Map(); }
     }
   };

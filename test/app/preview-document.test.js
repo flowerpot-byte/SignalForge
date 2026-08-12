@@ -11,7 +11,9 @@ import { createPreview } from '../../app/renderer/components/preview.js';
 // test is which document and which assets the loop is left holding.
 function fakeElement() {
   return {
-    style: {},
+    // setProperty: followAspect writes the frame's --stage-aspect custom
+    // property on the stage; the fake only has to survive it.
+    style: { setProperty() {} },
     children: [],
     classList: { toggle() {}, add() {}, remove() {} },
     append(...kids) { this.children.push(...kids); },
@@ -42,6 +44,7 @@ function installFakeDom() {
       }),
       normalizeDocument: (doc) => ({ doc: doc ?? {} }),
       clamp: (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v),
+      aspectFactorOf: () => 1,
       async loadAssets(doc) {
         state.loads += 1;
         if (state.failNextLoad) {
@@ -59,7 +62,9 @@ function installFakeDom() {
   return { frames, state };
 }
 
-const fakeContainer = { append() {} };
+// style.setProperty: followAspect writes --stage-aspect on the CONTAINER
+// (#preview-body), where #preview-body's own --content-width can read it.
+const fakeContainer = { append() {}, style: { setProperty() {} } };
 const t = (key) => key;
 const scheduler = () => {
   const queue = [];

@@ -91,6 +91,8 @@
   "inspector.speed": "Speed",
   "inspector.amount": "Strength",
   "inspector.trail": "Trail",
+  "inspector.section.display": "Display",
+  "inspector.aspect": "Aspect fix",
   "inspector.section.background": "Background",
   "inspector.background": "Background",
   "inspector.background.none": "None",

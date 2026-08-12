@@ -8,7 +8,7 @@ import {
   MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS, MIN_STAR_POINTS, MAX_STAR_POINTS,
   PARTICLE_PATTERNS, MIN_PARTICLE_COUNT, MAX_PARTICLE_COUNT,
   MIN_PARTICLE_SIZE, MAX_PARTICLE_SIZE, MIN_PARTICLE_SEED, MAX_PARTICLE_SEED,
-  MAX_PARTICLE_TILT
+  MAX_PARTICLE_TILT, MIN_ASPECT, MAX_ASPECT
 } from '../engine/document.js';
 
 /**
@@ -141,6 +141,10 @@ const FOREGROUND_RANGES = Object.freeze({
   // Same shape, same reason: 0 is not "a very short wake", it is the hard
   // clear this engine has always done, and it is where the slider starts.
   trail: Object.freeze({ min: 0, max: MAX_TRAIL }),
+  // How much wider the host stretches the finished canvas, in percent — the
+  // engine's own clamp restated (see MIN_ASPECT in src/engine/document.js for
+  // the measurement behind it). 100, the default, is "not at all".
+  aspect: Object.freeze({ min: MIN_ASPECT, max: MAX_ASPECT }),
 
   // ------------------------------------------------------------ the particles
   //
@@ -513,6 +517,18 @@ export function effectControls(doc, layerId, backgroundId = null) {
     slider('hueShift', 'Farbdrehung', 'Hue Shift', doc.hueShift, 'hueShift'),
     slider('hueCycle', 'Farbwechsel', 'Colour Cycle', doc.hueCycle, 'hueCycle')
   );
+
+  // The host-stretch compensation, offered exactly when it can do something:
+  // `aspect` is read by the two layer types that draw round things (shape,
+  // particles) and by nothing else, so a document with neither would export a
+  // slider that provably cannot change a byte — the exact fault the Motion
+  // dropdown's motionKindsFor exists to prevent. Checked against the WHOLE
+  // layer list rather than the two ids this function was handed, because a
+  // hand-written document can carry a swarm on a third layer and its slider
+  // must not vanish for sitting outside the two named slots.
+  if (doc.layers.some((entry) => entry.type === 'shape' || entry.type === 'particles')) {
+    controls.push(slider('aspect', 'Breitenausgleich', 'Aspect Fix', doc.aspect, 'aspect'));
+  }
 
   controls.push(
     slider('brightness', 'Helligkeit', 'Brightness', doc.brightness, 'brightness'),

@@ -1,7 +1,9 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import { BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT, MAX_TRAIL, clamp } from './document.js';
+import {
+  BLEND_MODES, CANVAS_WIDTH, CANVAS_HEIGHT, MAX_TRAIL, clamp, aspectFactorOf
+} from './document.js';
 import { LAYER_RENDERERS } from './layers/index.js';
 import { adjustColor, isNeutral } from './color.js';
 import { hueDegrees } from './motion/hue.js';
@@ -415,7 +417,7 @@ export function createRenderer() {
    * of the second one, cannot drift apart into two slightly different ideas of
    * what drawing a layer means.
    */
-  function drawLayers(target, layers, assets, timeSec) {
+  function drawLayers(target, layers, assets, timeSec, aspect) {
     for (const layer of layers) {
       if (!layer.visible || layer.opacity === 0) continue;
       const renderer = LAYER_RENDERERS.get(layer.type);
@@ -429,7 +431,10 @@ export function createRenderer() {
       // without restoring them; save/restore keeps that contained to this
       // layer instead of corrupting every layer (and frame) after it.
       target.save();
-      renderer.render(target, layer, asset, timeSec, stateFor(layer, renderer));
+      // `aspect` is the document's host-stretch factor (aspectFactorOf, 1 =
+      // untouched). Handed to every renderer alike; the two that draw round
+      // things read it, the rest ignore an argument they never named.
+      renderer.render(target, layer, asset, timeSec, stateFor(layer, renderer), aspect);
       target.restore();
     }
     target.globalAlpha = 1;
@@ -483,6 +488,7 @@ export function createRenderer() {
    */
   function renderOverBackground(ctx, doc, assets, timeSec, trail) {
     primed = false;                  // the other wake holds nothing now
+    const aspect = aspectFactorOf(doc);
     const target = wakeContext();
 
     target.globalAlpha = 1;
@@ -507,21 +513,21 @@ export function createRenderer() {
       && layer.opacity !== 0
       && (BLEND_MODES[layer.blend] ?? 'source-over') !== 'source-over');
 
-    if (!needsSecondPass) drawLayers(target, foreground, assets, timeSec);
+    if (!needsSecondPass) drawLayers(target, foreground, assets, timeSec, aspect);
 
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
     ctx.fillStyle = '#000';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-    drawLayers(ctx, background, assets, timeSec);
+    drawLayers(ctx, background, assets, timeSec, aspect);
 
     ctx.globalAlpha = 1;
     ctx.globalCompositeOperation = 'source-over';
     ctx.drawImage(wake, 0, 0);
 
     if (needsSecondPass) {
-      drawLayers(ctx, foreground, assets, timeSec);
-      drawLayers(target, foreground, assets, timeSec);
+      drawLayers(ctx, foreground, assets, timeSec, aspect);
+      drawLayers(target, foreground, assets, timeSec, aspect);
     }
   }
 
@@ -576,7 +582,7 @@ export function createRenderer() {
       }
       target.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      drawLayers(target, doc.layers, assets, timeSec);
+      drawLayers(target, doc.layers, assets, timeSec, aspectFactorOf(doc));
 
       // The wake stays where it accumulated and the visible canvas gets a copy
       // of it, which is then graded. drawImage rather than a pixel copy: the

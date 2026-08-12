@@ -12,7 +12,9 @@ import { createPreview } from '../../app/renderer/components/preview.js';
 // scheduling around it.
 function fakeElement() {
   return {
-    style: {},
+    // setProperty: followAspect writes the frame's --stage-aspect custom
+    // property on the stage; the fake only has to survive it.
+    style: { setProperty() {} },
     children: [],
     classList: { toggle() {}, add() {}, remove() {} },
     append(...kids) { this.children.push(...kids); },
@@ -32,6 +34,7 @@ function installFakeDom(renderCalls) {
       createRenderer: () => ({ render: () => { renderCalls.push(true); } }),
       normalizeDocument: (doc) => ({ doc: doc ?? {} }),
       clamp: (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v),
+      aspectFactorOf: () => 1,
       loadAssets: async () => { assetLoads.push(true); return new Map(); }
     }
   };
@@ -59,7 +62,9 @@ function makeFakeScheduler() {
   };
 }
 
-const fakeContainer = { append() {} };
+// style.setProperty: followAspect writes --stage-aspect on the CONTAINER
+// (#preview-body), where #preview-body's own --content-width can read it.
+const fakeContainer = { append() {}, style: { setProperty() {} } };
 const t = (key) => key;
 
 test('stop() then a fast start() leaves exactly one live requestAnimationFrame chain', async () => {
