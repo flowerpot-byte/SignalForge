@@ -29,11 +29,20 @@
  * here calls show(), focus() or maximize() — the machine's owner is at his
  * desk while this runs.
  *
- * The gestures are REAL pointer events through the debugger (d.click on a
- * measured box), not element.click(). That distinction is the whole point of a
- * harness about reachability: element.click() fires on a button that is
- * scrolled out of sight, covered by another element, or a pixel tall, and
- * would report every one of those as working.
+ * Every gesture this run makes a CLAIM about is a real pointer event through
+ * the debugger — d.click on a box measured the moment before. That distinction
+ * is the whole point of a harness about reachability: element.click() fires on
+ * a button that is scrolled out of sight, covered by another element, or a
+ * pixel tall, and would report every one of those as working.
+ *
+ * Two presses are NOT real pointer events, and saying so here is the honest
+ * version of that sentence: answering the first-run question and starting an
+ * effect from a gallery tile both go through element.click(). Neither is
+ * something this harness claims anything about — they are how it gets a stack
+ * to look at — and the gallery's own reachability by pointer and by keyboard
+ * is proved in the walkthrough (point 11), which is where that question
+ * belongs. Anything below the setup, every arrow, pick and remove, is a
+ * pointer.
  */
 import { BrowserWindow } from 'electron';
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -125,6 +134,10 @@ const READ_STACK = `(() => {
     sectionsBelow: [...document.querySelectorAll('#inspector .field-group[data-section]')]
       .map((g) => g.dataset.section)
       .filter((name) => name !== 'layers'),
+    // How many buttons there are at all, so that "the smallest is fine" cannot
+    // be answered by a stack that has none — see the note on the threshold
+    // below, where Math.min of nothing would otherwise say Infinity.
+    buttonCount: rows.reduce((sum, r) => sum + r.buttons.length, 0),
     // Smallest button in the whole stack: the arrows and the minus are the
     // controls that shrink first when a row gets crowded.
     smallestButton: Math.min(...rows.flatMap((r) => r.buttons.map((b) => Math.min(b.w, b.h))))
@@ -207,8 +220,20 @@ async function main() {
     complain(`cards have ${notes.piled.widths.length} different widths at ${PILE} layers: ${notes.piled.widths.join(', ')}`);
   }
   if (notes.piled.count !== PILE) complain(`expected ${PILE} cards, counted ${notes.piled.count}`);
-  if (notes.piled.smallestButton < 16) {
-    complain(`smallest button in the stack is ${notes.piled.smallestButton}px — under a pointer's reach`);
+  // Four buttons per card — pick, up, down, remove — so anything less means the
+  // row lost a control and the size check below is measuring the wrong thing.
+  // Without this, an empty buttons array would make Math.min() report Infinity,
+  // Infinity would pass any threshold, and the check would go quiet exactly
+  // when a row had fallen apart.
+  if (notes.piled.buttonCount < notes.piled.count * 4) {
+    complain(`${notes.piled.count} cards carry only ${notes.piled.buttonCount} buttons between them`);
+  }
+  // 24 px, from WCAG 2.2's minimum target size, and not a number picked to sit
+  // just under today's value: the stylesheet gives .icon-button 26 px, so this
+  // has two pixels of room. A threshold of 16 — the first version here — had
+  // ten, which meant a control could shrink by a third before anything said so.
+  if (notes.piled.smallestButton < 24) {
+    complain(`smallest button in the stack is ${notes.piled.smallestButton}px — under the 24px target size`);
   }
   // Cards below the fold are fine ONLY if the column scrolls to them.
   const hidden = notes.piled.rows.filter((r) => !r.visibleInColumn).map((r) => r.id);
@@ -216,9 +241,15 @@ async function main() {
     complain(`cards out of view (${hidden.join(', ')}) and the column does not scroll`);
   }
   notes.cardsBelowTheFold = hidden;
-  // The sections under the stack must still be in the document.
-  if (notes.piled.sectionsBelow.length < 2) {
-    complain(`only ${notes.piled.sectionsBelow.length} section heading(s) left below a full stack`);
+  // The sections under the stack must still be in the document — and by name,
+  // not by count. These three are built for EVERY document (inspector.js
+  // renders motions, colour and display unconditionally), so a count of "at
+  // least two" would let exactly one of them disappear silently, which is the
+  // failure this line exists to catch.
+  const MUST_STAY = ['motions', 'colour', 'display'];
+  const missing = MUST_STAY.filter((name) => !notes.piled.sectionsBelow.includes(name));
+  if (missing.length > 0) {
+    complain(`a full stack pushed out section(s) that every document has: ${missing.join(', ')}`);
   }
 
   // -------------------------------------------- still workable at six layers
@@ -288,10 +319,44 @@ async function main() {
   );
   if (notes.lastRemoveDisabled !== true) complain('the last stack card can still be removed');
   if (lastRemove) {
-    await d.click(lastRemove.x + lastRemove.w / 2, lastRemove.y + lastRemove.h / 2);
-    await wait(180);
-    const after = await d.js(READ_STACK);
-    if (after.count !== 1) complain('clicking the disabled remove button emptied the stack anyway');
+    // Pressing a disabled button and finding the stack unchanged proves
+    // nothing on its own: a click that MISSED leaves the stack unchanged too,
+    // and both look identical from the outside. So the point is asked what is
+    // under it BEFORE the press — elementFromPoint on freshly measured
+    // coordinates — and the run only claims anything if the answer is that
+    // button. The coordinates are re-read here rather than reused from
+    // notes.atEnd for the same reason: that reading is several awaits old.
+    const stillThere = await exists(`#${lastRemove.id}`);
+    if (!stillThere) complain(`the last card's remove button (${lastRemove.id}) vanished`);
+    else {
+      const at = await d.box(`#${lastRemove.id}`);
+      // What is under the point has to be resolved to its BUTTON, not compared
+      // as-is. The middle of an icon button is the icon: elementFromPoint
+      // returns the <svg> inside it, which is a hit, because a press on the
+      // icon is a press on the button. Asking closest('button') is the
+      // question that was meant.
+      //
+      // Not el.className either — on an SVG element that is an
+      // SVGAnimatedString object, not a string, and it serialises into the
+      // report as an empty {}. The first version did exactly that and reported
+      // a miss on a press that had landed perfectly.
+      const under = await d.js(`(() => {
+        const el = document.elementFromPoint(${at.cx}, ${at.cy});
+        if (!el) return { hit: null, button: null };
+        const button = el.closest('button');
+        return { hit: el.id || el.tagName.toLowerCase(), button: button ? button.id : null };
+      })()`);
+      notes.disabledPress = { aimedAt: lastRemove.id, ...under };
+      if (under.button !== lastRemove.id) {
+        complain(`aimed at the disabled remove button but the pointer is over ${String(under.button ?? under.hit)}`);
+      } else {
+        await d.click(at.cx, at.cy);
+        await wait(180);
+        const after = await d.js(READ_STACK);
+        notes.disabledPress.countAfter = after.count;
+        if (after.count !== 1) complain('a press that landed on the disabled remove button emptied the stack anyway');
+      }
+    }
   }
   await shot('05-back-to-one');
 
