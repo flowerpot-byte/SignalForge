@@ -169,3 +169,37 @@ test('a harness keeps its own exit code, so a failing run stays red', async () =
   const { code } = await runMode('code', { watchdogMs: 20_000 });
   assert.equal(code, 3, 'the code a harness returns is the code it exits with');
 });
+
+test('the walkthrough without SF_WALK_OUT says so on stderr and exits — no dialog, ever', async () => {
+  // The incident this pins: walkthrough.js used to THROW on its module level
+  // when SF_WALK_OUT was missing, and a module-level throw in an Electron
+  // main process opens Electron's own error DIALOG — a box that sat on the
+  // machine owner's screen in the middle of the night (12.08.2026, seen and
+  // complained about) over a process nothing could end but a human hand.
+  //
+  // What proves the dialog is gone is the EXIT: a process showing that box
+  // does not end until someone clicks it away, so "ended by itself, quickly,
+  // non-zero, with the reason on stderr" is exactly the sentence a dialog
+  // cannot say. The real walkthrough is spawned, not a fixture — the fault
+  // was in its own module body, so only its own module body can prove the
+  // fix.
+  const startedAt = Date.now();
+  const { code, stderr } = await runElectron(
+    require_('electron'),
+    [join(root, 'test', 'harness', 'walkthrough.js')],
+    {
+      // '' is falsy, so this is "not set" as walkthrough.js reads it — and it
+      // shields the check from any SF_WALK_OUT a caller's shell exported.
+      env: { ...process.env, SF_WALK_OUT: '' },
+      timeoutMs: 30_000,
+      label: 'the walkthrough with no SF_WALK_OUT'
+    }
+  );
+  const elapsedMs = Date.now() - startedAt;
+
+  assert.notEqual(code, 0, `a walkthrough that could not even start must not report success\n${stderr}`);
+  assert.match(stderr, /SF_WALK_OUT must name a folder/,
+    `the reason has to reach whoever ran it\n${stderr}`);
+  assert.ok(elapsedMs < 15_000,
+    `a missing variable must end the process at once, not leave a box waiting on a human — took ${elapsedMs}ms`);
+});

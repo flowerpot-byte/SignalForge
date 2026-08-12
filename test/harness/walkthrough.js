@@ -64,7 +64,26 @@ import { driver, runHarness, wait } from './driver.js';
 
 const OUT = process.env.SF_WALK_OUT;
 const PHASE = process.env.SF_WALK_PHASE === '2' ? 2 : 1;
-if (!OUT) throw new Error('SF_WALK_OUT must name a folder to write the walkthrough into');
+if (!OUT) {
+  // Said on stderr and left through app.exit, NEVER thrown: a throw on the
+  // module level of an Electron main process opens Electron's own error
+  // DIALOG — a box on the machine owner's screen that keeps the process
+  // alive until a human dismisses it. That happened, on the night of
+  // 12.08.2026, and the owner saw it. The drain-then-exit shape is
+  // guardHarness's (test/harness/driver.js), for the same reason it has it:
+  // app.exit() does not flush, and an unread pipe must not become a hang.
+  const go = () => app.exit(1);
+  const forced = setTimeout(go, 1000);
+  process.stderr.write(
+    'walkthrough: SF_WALK_OUT must name a folder to write the walkthrough into.\n'
+      + '  SF_WALK_OUT=<folder> npx electron test/harness/walkthrough.js\n',
+    () => { clearTimeout(forced); go(); }
+  );
+  // Hold the module right here until the exit lands. Nothing below — the
+  // mkdirSync on a path built from undefined, app/main.js's ready handler
+  // opening the real window — may run on the way down.
+  await new Promise(() => {});
+}
 mkdirSync(OUT, { recursive: true });
 
 const STATE_FILE = join(OUT, 'state.json');
