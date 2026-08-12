@@ -659,32 +659,41 @@ einer Tastatur besonders gut ankommt, weil jede Taste eine Zelle sein kann.
 **Aufwand:** klein. ~~**Grenze:** keine.~~
 
 **Korrektur 12.08.2026 — „Grenze: keine" war falsch, und zwar aus einem Grund, der schon
-im Motor steht.** Der Kommentar über `driftSwing` (`src/engine/motion/drift.js`) erklärt,
-warum `drift` schwingt statt zu marschieren: Ein endloser Marsch braucht eine Rampe, die
-umläuft, und der Übergang von der letzten Farbe zurück zur ersten ist **eine harte Naht,
-die quer über die Fläche wandert** — außer die beiden Farben passen zufällig zusammen. Wer
-C6 als „klein, keine Grenze" liest, baut genau in diese Naht hinein.
+im Motor steht.** Ein endloser Marsch braucht eine Rampe, die umläuft, und der Übergang von
+der letzten Farbe zurück zur ersten ist **eine harte Naht, die quer über die Fläche
+wandert**. Das ist genau die Begründung, aus der `drift` schwingt statt zu marschieren
+(`src/engine/motion/drift.js`, Kommentar über `driftSwing`); den Zusatz „außer die beiden
+Farben passen zufällig zusammen" trägt die Zwillingsstelle in
+`src/engine/layers/gradient.js` (Bewegungsliste, Absatz `drift`). Wer C6 als „klein, keine
+Grenze" liest, baut genau in diese Naht hinein.
 
 Die Naht ist aber nicht überall ein Problem, und das entscheidet die **Form**, nicht die
 Bewegung:
 
 | Form | Marsch nahtlos? | Warum |
 | --- | --- | --- |
-| `waves` | **ja** | Die Farbe folgt `ramp(0.5 - 0.5·cos(2πu))` — bei u = 0 und u = 1 dieselbe Farbe, dieselbe Steigung. Ein Marsch ist hier vollkommen unsichtbar in der Wiederholung |
-| `stripes` | **ja** | Wiederholt sich ohnehin, und an jeder Bandgrenze steht bereits eine harte Kante. Die Nähte wandern einfach mit — genau der gewünschte Lauf |
-| `conic` | **ja, im selben Sinn wie `stripes`** | 0° und 360° sind derselbe Ort, also führt der Marsch keine NEUE Naht ein. Stehen dort verschiedene Farben, gibt es die Naht schon im Standbild; der Marsch lässt sie nur rotieren. Und das ist nicht dasselbe wie `spin`: eine Farbdrehung, keine Geometriedrehung |
+| `waves` | **ja** | Die Farbe folgt `ramp(0.5 - 0.5·cos(2πu))`: bei u = 0 und u = 1 dieselbe Farbe. Nicht dieselbe *Steigung* — gezeichnet wird die Kurve als 16 gerade Stücke je Bogen (`WAVE_SAMPLES`), an der Nahtstelle treffen zwei mit entgegengesetzter Neigung aufeinander, also ein Knick. Er liegt in derselben Größenordnung wie der ohnehin dokumentierte Näherungsfehler der Kurve und ist im Betrieb nicht zu sehen — aber „vollkommen unsichtbar" ist eine Behauptung über die ideale Formel, nicht über das Bild |
+| `stripes` | **ja** | Wiederholt sich ohnehin, und an jeder Bandgrenze stehen zwei Farbstopps am selben Ort — die harte Kante ist schon da. Die Nähte wandern einfach mit, genau der gewünschte Lauf |
+| `conic` | **nahtlos ja — aber überflüssig** | 0° und 360° sind derselbe Ort, es kommt also keine NEUE Naht hinzu. Nur: Ein Marsch auf einem rein winkelabhängigen Rad ist dasselbe Bild wie `g.rotate()`, und das ist `spin`, das es schon gibt. Pixelgleich, solange kein `drift` läuft; mit Drift unterscheiden sie sich, weil `spin` das wandernde Zentrum mitdreht (`driftedCentre`). Eine zweite Bewegung, die im Normalfall dasselbe tut wie eine vorhandene, gehört nicht in die Liste |
 | `linear` | **nein** | Eine einzige Rampe über die Fläche; der Umlauf setzt eine sichtbare Kante hinein |
 | `radial` | **nein** | Rampe von Mitte nach Rand; der Umlauf setzt einen sichtbaren Ring hinein |
 
-Für die oberen drei ist C6 wirklich klein. Für die unteren zwei ist **erst zu entscheiden,
-was der Regler dort überhaupt bedeuten soll** — drei Möglichkeiten, alle vertretbar, keine
-offensichtlich richtig: die Bewegung dort nicht anbieten (dafür gibt es Präzedenz, siehe wie
-die Spalte die Positionsregler bei `stripes` weglässt); die Naht als gewollten Wisch
-zulassen, so wie der mitgelieferte `Side To Side` es vermutlich tut; oder die Rampe für den
-Marsch spiegeln, was nahtlos ist, aber jede Farbe zweimal zeigt.
+Übrig bleiben damit **zwei** Formen, auf denen C6 klein und sinnvoll ist: `waves` und
+`stripes`. Für `linear` und `radial` wäre **erst zu entscheiden, was der Regler dort
+überhaupt bedeuten soll** — die Bewegung dort nicht anbieten (dafür gibt es Präzedenz: die
+Spalte lässt die Positionsregler bei `stripes` weg, `inspector.js`), die Naht als gewollten
+Wisch zulassen, oder die Rampe für den Marsch spiegeln, was nahtlos ist, aber jede Farbe
+zweimal zeigt.
 
-**Deshalb nicht in der Nachtschicht gebaut:** Das ist eine Geschmacksfrage über das Aussehen
-des Ergebnisses, und die gehört Max. Alles andere daran ist vorbereitet — die Formtabelle
+**Und der Effekt, der C6 überhaupt motiviert, will etwas anderes.** `Side To Side` marschiert
+gar nicht: Er schiebt laut A7 ein volles Rechteck über die Fläche und kehrt per Spiegeltrick
+um — ein Hin und Her mit stehenbleibender Farbe, kein umlaufender Verlauf. Als Beleg für
+„die Naht ist der gewollte Wisch" taugt er also nicht, und was ihn wirklich freischalten
+würde, ist eine wandernde Kante bzw. Fläche, nicht ein Rampen-Marsch. Wer C6 angeht, sollte
+zuerst entscheiden, welche der beiden Sachen gemeint ist.
+
+**Deshalb nicht in der Nachtschicht gebaut:** Was am Ende gut aussieht, ist eine
+Geschmacksfrage, und die gehört Max. Alles andere daran ist vorbereitet — die Formtabelle
 oben ist die Analyse, die der Bau sonst zuerst hätte machen müssen.
 
 ### C7. Nachmessen: geht `canvas.style.filter` im Wirt?

@@ -759,12 +759,18 @@ async function phaseOne(win, state) {
   // WHAT `outline` IS AND IS NOT EVIDENCE OF. It is recorded because a width
   // is easier to read in a report than a boolean, but on its own it proves
   // nothing: getComputedStyle hands back a width even when outline-style is
-  // `none` and no ring is drawn at all. Measured, not assumed — a focused
-  // button with no ring reports outlineWidth "2.85714px", the same figure a
-  // ringed one reports (scratchpad focus-visible-probe, 12.08.). A run that
-  // reads the width and concludes "the ring was there" is reading noise, and
-  // this file already led one reader down exactly that path. `outlineStyle` is
-  // therefore recorded beside it, and `focusRingShown` stays the judgement.
+  // `none` and no ring is drawn at all. Measured, not assumed, in one window
+  // in one run (scratchpad focus-visible-probe, 12.08.): a button tabbed to,
+  // ring drawn, reports 1.71429px / solid — the stylesheet's 2px scaled. The
+  // same button clicked with the mouse, no ring anywhere, reports 2.85714px /
+  // none: the initial `medium` width, which survives because outline-width is
+  // a width and not a decision about drawing.
+  //
+  // So the trap is worse than a width that merely persists. The ringless
+  // reading is the BIGGER number, which is exactly the direction that makes a
+  // reader confident the ring was there. This file already led one down that
+  // path. `outlineStyle` is therefore recorded beside it, and `focusRingShown`
+  // stays the judgement.
   const readStop = () => d.js(`(() => {
     const a = document.activeElement;
     const visible = document.querySelector(':focus-visible');
@@ -814,11 +820,30 @@ async function phaseOne(win, state) {
     // ring is still unexplained; `ringCameLate` and `firstLook` are what will
     // explain it the next time it happens instead of leaving another reader
     // to guess.
+    //
+    // 80 ms, and the number is arguable rather than derived: a frame at 60 Hz
+    // is 17 ms, so this is about five of them — long enough that a ring one
+    // paint behind has certainly arrived, short enough that eighty of these in
+    // the worst case add 6.4 s to a harness whose watchdog is 60. It is not
+    // measured off anything, and it is written down as unmeasured rather than
+    // dressed up, because every other constant in this project earns its value
+    // and this one only bounds a wait.
     if (!stop.focusRingShown) {
       await wait(80);
       const again = await readStop();
       if (again.id === stop.id && again.focusRingShown) {
         stop = { ...again, ringCameLate: true, firstLook: stop };
+      } else if (again.id !== stop.id) {
+        // Focus moved while we were waiting, so the second look is about a
+        // different element and cannot say anything about this one. Recorded
+        // rather than dropped: something took the focus without a Tab press —
+        // and a programmatic focus() is exactly the mechanism suspected behind
+        // the ringless stop this whole passage exists for. Everything after
+        // this point in the cycle then tabs on from where focus ACTUALLY is,
+        // not from `stop.id`, so a `cameBackRound` of false on a run with this
+        // field set means "focus was taken away", not "the window does not
+        // come round".
+        stop = { ...stop, focusMovedDuringSecondLook: again.id };
       }
     }
     stops.push(stop);
@@ -830,8 +855,13 @@ async function phaseOne(win, state) {
   p['11'].cameBackRound = cameBackRound;
   p['11'].everyStopShowsTheRing = stops.every((s) => s.focusRingShown);
   // Never silently: if a ring only arrived on the second look, the report says
-  // which one, even on a run that passes.
+  // which one, even on a run that passes — and likewise if focus was taken off
+  // a stop while it was being looked at a second time, which would otherwise
+  // be the one thing in this passage that vanished without trace.
   p['11'].ringsThatCameLate = stops.filter((s) => s.ringCameLate).map((s) => s.id);
+  p['11'].stopsWhereFocusMoved = stops
+    .filter((s) => s.focusMovedDuringSecondLook)
+    .map((s) => ({ from: s.id, to: s.focusMovedDuringSecondLook }));
   p['11'].everyStopScrolledIntoView = stops.every((s) => s.visibleInScroller);
   p['11'].reachedEveryKind = ['input', 'select', 'button'].every(
     (tag) => stops.some((s) => s.tag === tag)
