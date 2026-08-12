@@ -15,7 +15,7 @@ import {
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
 } from '../../../src/engine/document.js';
 import {
-  BACKGROUND_KINDS, backgroundOf, foregroundOf, offersBackground
+  BACKGROUND_KINDS, backgroundOf, foregroundOf, offersBackground, foregroundLayersOf
 } from '../../../src/engine/slots.js';
 import { CONTROL_RANGES } from '../../../src/export/effect-controls.js';
 import { createField, createMotions, createStops } from './field.js';
@@ -175,6 +175,7 @@ const DOCUMENT_FIELDS = Object.freeze([
  * checked in plain node (test/app/inspector.test.js).
  */
 export const SECTION_TITLES = Object.freeze({
+  layers: 'inspector.section.layers',
   fill: 'inspector.section.fill',
   image: 'inspector.section.image',
   motions: 'inspector.motions',
@@ -196,6 +197,7 @@ export const SECTION_TITLES = Object.freeze({
  * table names a section the other has never heard of.
  */
 export const SECTION_GLYPHS = Object.freeze({
+  layers: 'background',
   fill: 'solid',
   image: 'image',
   motions: 'motion',
@@ -563,7 +565,33 @@ export function describeInspector(doc, layerId) {
   const layer = index < 0 ? null : doc.layers[index];
   const at = `layers.${index}`;
 
-  const fields = [...fillFields(layer, at, 'fill', RANGES)];
+  const fields = [];
+
+  // The stack, above everything: which layer the rest of this column is
+  // ABOUT is the first question, so the cards that answer it come first.
+  // One field, like 'background' — the card list is one control whose value
+  // is the document's layer array; what each card SHOWS is precomputed here
+  // (arithmetic over the document belongs in this file, testable in node),
+  // what pressing its buttons DOES is field.js walking the stack functions
+  // in src/engine/slots.js. Emitted only once there is something to stack —
+  // a document mid-boot with no layers gets no empty section.
+  const stack = foregroundLayersOf(doc.layers);
+  if (stack.length > 0) {
+    fields.push({
+      path: 'layers',
+      type: 'layers',
+      section: 'layers',
+      selectedId: layerId,
+      entries: stack.map((entry) => ({
+        id: entry.id,
+        type: entry.type,
+        figure: entry.type === 'shape' ? entry.figure : null,
+        visible: entry.visible !== false
+      }))
+    });
+  }
+
+  fields.push(...fillFields(layer, at, 'fill', RANGES));
 
   if (layer && layer.type === 'image') {
     fields.push({
@@ -794,6 +822,11 @@ export function mountInspector(container, {
    */
   let previousSections = null;
 
+  // Which stack card the column is about — renderer state, validated against
+  // the live stack at the top of every render() (see the note there). null
+  // until the first build, which lands it on the stack's top.
+  let selectedId = null;
+
   /**
    * The same question one level down: which BOXES the column was holding.
    *
@@ -863,13 +896,19 @@ export function mountInspector(container, {
   function render() {
     const focused = rememberFocus();
     const doc = getDocument();
-    // The layer this column edits is the FOREGROUND, which is the last one and
-    // not the first. It was `layers[0]` for as long as there could only be one;
-    // a document with a background carries that background first, and reading
-    // index 0 would now quietly swap what the whole column is about (see
-    // src/engine/slots.js). There is still no layer list — that is a later
-    // task — there is one slot underneath.
-    const layerId = foregroundOf(doc.layers)?.id ?? null;
+    // The layer this column edits is WHICHEVER STACK CARD IS SELECTED — the
+    // layer list is here now (Bauplan 3, the "later task" this comment used
+    // to name). The selection is renderer state and never a document field:
+    // which layer somebody is looking at is not part of what the effect is.
+    // Validated against the live stack on every build, so a selection whose
+    // layer was removed, or a freshly opened document, lands on the stack's
+    // top — which is foregroundOf, exactly what this column edited when the
+    // stack could only hold one.
+    const stack = foregroundLayersOf(doc.layers);
+    if (!stack.some((entry) => entry.id === selectedId)) {
+      selectedId = foregroundOf(doc.layers)?.id ?? null;
+    }
+    const layerId = selectedId;
 
     container.replaceChildren();
 
@@ -1128,6 +1167,10 @@ export function mountInspector(container, {
         onChange: report,
         recents,
         coverPicker,
+        // The stack cards' selection gesture: no document write, only which
+        // layer this column is about — so it is a render() of this very
+        // column and nothing else.
+        onSelectLayer: (id) => { selectedId = id; render(); },
         // Only a slider has a reset, and it is asked at the moment it is
         // pressed rather than now: the answer costs a normalization of the
         // document, and this loop runs for every control in the column. The

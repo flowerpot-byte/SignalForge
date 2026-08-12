@@ -10,7 +10,9 @@ import { icon } from './icons.js';
 // here keeps every colour this file can ever write traceable back to the
 // document (test/app/color-literals.test.js).
 import { colorAtPosition } from '../../../src/engine/document.js';
-import { backgroundKindOf, withBackgroundKind } from '../../../src/engine/slots.js';
+import {
+  backgroundKindOf, withBackgroundKind, movedLayer, withoutLayer, withAddedLayer
+} from '../../../src/engine/slots.js';
 
 /**
  * A control's id, derived from the field's path so it is the same before and
@@ -437,7 +439,110 @@ export function createField(field, options) {
   if (field.type === 'color') return colorField(field, options);
   if (field.type === 'background') return backgroundField(field, options);
   if (field.type === 'cover') return coverField(field, options);
+  if (field.type === 'layers') return layersField(field, options);
   return null;
+}
+
+/**
+ * The layer stack's cards — Bauplan 3's face.
+ *
+ * One control whose value is the document's layer array, like the background
+ * combobox one type up: every structural press reports the WHOLE array
+ * (through the stack arithmetic in src/engine/slots.js) and main.js's
+ * existing array path runs it through setDocument. The one gesture that is
+ * not a document write is choosing a card — that is onSelectLayer, the
+ * column's own state, and it must never touch the document.
+ *
+ * SHOWN TOP-FIRST: `field.entries` arrive in draw order (bottom first,
+ * exactly as the engine paints), and every layer tool a person has ever used
+ * shows the stack the other way up — the thing drawn last, sitting visually
+ * on top, listed first. So the display reverses, and "up" on a card means
+ * towards the viewer: movedLayer(+1), later in draw order.
+ *
+ * The visibility toggle is a native checkbox rather than an icon button:
+ * there is no eye glyph in this window's icon set, a checkbox is the one
+ * control whose two states need no explaining, and it is keyboard-reachable
+ * for free. Its write is a single-field report (layers.N.visible), not an
+ * array — nothing structural changed.
+ */
+function layersField(field, { t, value, onChange, onSelectLayer = null }) {
+  const wrapper = row('control layer-stack');
+  const layers = Array.isArray(value) ? value : [];
+  const entries = Array.isArray(field.entries) ? field.entries : [];
+  const stack = [...entries].reverse();
+
+  for (const entry of stack) {
+    const cardRow = document.createElement('div');
+    cardRow.className = 'layer-card';
+
+    const pick = document.createElement('button');
+    pick.type = 'button';
+    pick.className = 'layer-pick';
+    pick.id = `sf-layer-${entry.id}`;
+    pick.setAttribute('aria-pressed', String(entry.id === field.selectedId));
+    const label = t(`inspector.layer.${entry.type}`);
+    pick.textContent = entry.figure
+      ? `${label} · ${t(`inspector.figure.${entry.figure}`)}`
+      : label;
+    pick.addEventListener('click', () => onSelectLayer?.(entry.id));
+
+    const seen = document.createElement('input');
+    seen.type = 'checkbox';
+    seen.id = `sf-layer-${entry.id}-visible`;
+    seen.checked = entry.visible;
+    seen.title = t('inspector.layers.visible');
+    seen.setAttribute('aria-label', `${t('inspector.layers.visible')}: ${pick.textContent}`);
+    seen.addEventListener('change', () => {
+      const at = layers.findIndex((layer) => layer && layer.id === entry.id);
+      if (at >= 0) onChange(`layers.${at}.visible`, seen.checked);
+    });
+
+    // Plain glyph buttons, not iconButton: this window's icon set has no
+    // arrows, and borrowing an unrelated glyph would be a picture that lies.
+    // The arrow characters are the label; the accessible name says the rest.
+    const step = (glyph, wordKey, direction) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'icon-button layer-step';
+      button.id = `sf-layer-${entry.id}-${direction > 0 ? 'up' : 'down'}`;
+      button.textContent = glyph;
+      button.title = `${t(wordKey)}: ${pick.textContent}`;
+      button.setAttribute('aria-label', `${t(wordKey)}: ${pick.textContent}`);
+      button.addEventListener('click', () => onChange('layers', movedLayer(layers, entry.id, direction)));
+      return button;
+    };
+    const up = step('↑', 'inspector.layers.up', +1);
+    const down = step('↓', 'inspector.layers.down', -1);
+
+    const remove = iconButton(`sf-layer-${entry.id}-remove-stack`, 'minus',
+      `${t('inspector.layers.remove')}: ${pick.textContent}`);
+    remove.disabled = entries.length <= 1;
+    remove.addEventListener('click', () => onChange('layers', withoutLayer(layers, entry.id)));
+
+    cardRow.append(pick, seen, up, down, remove);
+    wrapper.append(cardRow);
+  }
+
+  // What a new layer can be: the stack types, in the order the gallery
+  // teaches them. `image` is not here for the reason the background combobox
+  // gives — a picture arrives by being imported, and this row has no way to
+  // ask for a file.
+  const adder = document.createElement('div');
+  adder.className = 'layer-add';
+  const kind = document.createElement('select');
+  kind.id = 'sf-layer-add-kind';
+  for (const type of ['shape', 'particles', 'solid', 'gradient']) {
+    const option = document.createElement('option');
+    option.value = type;
+    option.textContent = t(`inspector.layer.${type}`);
+    kind.append(option);
+  }
+  const add = iconButton('sf-layer-add', 'plus', t('inspector.layers.add'));
+  add.addEventListener('click', () => onChange('layers', withAddedLayer(layers, kind.value)));
+  adder.append(kind, add);
+  wrapper.append(adder);
+
+  return wrapper;
 }
 
 /**
