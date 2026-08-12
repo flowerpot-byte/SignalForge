@@ -1053,6 +1053,12 @@ html, body {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+  /* .control (same specificity, earlier) sets align-items:center, and on a
+     COLUMN flex that is the cross axis: every card row shrank to content
+     width and sat centred — the pick button then stretched into a column
+     that had never grown (review traced the whole cascade). stretch is the
+     flex default this container actually needs. */
+  align-items: stretch;
 }
 .layer-card {
   display: grid;

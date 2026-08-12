@@ -347,7 +347,7 @@ exportierte Datei dieselben Pixel zeigen. Eine Hash-Funktion über den Partikel-
 | A5 Figuren (Kreis/Ring/Stern/Herz) | **Ja, ganz** (seit 11.08., siehe C4) | Ebenentyp `shape`; Kreis, Ring, Stern, Herz auf durchsichtigem Grund |
 | A6 Kachelraster | **Nein** | Ebenentyp oder Verlaufsform fehlt. Phase je Zelle aus gesätem Zufall |
 | A10 Text | **Nein** | Schriftrendering im Wirt ungeprüft |
-| A12 Ton- und Bildschirmreaktion | **Nein — und unter unseren Zusagen unmöglich** | siehe C8 |
+| A12 Ton- und Bildschirmreaktion | **Nein** | siehe C8 samt Nachtrag 12.08. — der alte Zusatz „unter unseren Zusagen unmöglich" ist überholt |
 | A13 Tastendruck | **Nein** | technisch möglich (Wirt ruft `onCanvasTapped`), aber unvorschaubar |
 | A14 Rückruf bei Reglerwechsel | **Nein, brauchen wir aber nicht** | wir lesen die Regler in jedem Bild neu (`readControls`) |
 
@@ -695,7 +695,8 @@ sich nicht in der Vorschau prüfen") — und nicht, bevor C1 bis C5 stehen. Dass
 Bildschirm-Ambiente (`engine.zone.*`): das liefert SignalRGB ohnehin schon selbst mit.
 
 **Nachtrag 12.08.2026 — C1 bis C5 stehen, die Recherche ist da, und die zwei Gründe oben
-gelten unverändert. Was sich geändert hat, ist der WEG, nicht die Absage:**
+gelten unverändert. Was sich geändert hat, ist der WEG an ihnen vorbei, nicht die Gründe —
+und damit wird aus der Absage ein „erst messen, dann bauen":**
 
 - `engine.audio` ist inzwischen **offiziell dokumentiert**
   (`docs.signalrgb.com/developer/lightscripts/audio-visualizer`: `level`, `density`,

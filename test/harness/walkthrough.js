@@ -459,6 +459,16 @@ async function phaseOne(win, state) {
   // "hidden means GONE from the pixels". The point cleans up after itself
   // (the added layer is removed again), so every later point still meets the
   // document it always has.
+  // TWO LOAD-BEARING ASSUMPTIONS, stated so a future point between 2 and 12
+  // cannot break them silently:
+  //  - doc.layers is exactly [image] here, so withAddedLayer's id for a
+  //    'shape' layer is guaranteed to BE 'shape' (the picture layer is the
+  //    hard constant 'image', starter tiles always use 'fill' — see
+  //    src/engine/slots.js and app/renderer/main.js).
+  //  - the clean-up at the end of this point is guaranteed by runHarness's
+  //    fail-fast design, not by a finally: any throw here kills the run
+  //    before point 8 ever saves. If the walkthrough ever learns to carry on
+  //    past a failed point, this point needs its own finally for the remove.
   p['12'] = { name: 'layer stack - add a figure, hide it, raise the picture, remove it', shots: [] };
   const stackBefore = await d.stats();
 
