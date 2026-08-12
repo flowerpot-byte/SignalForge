@@ -1,9 +1,17 @@
 {
   "name": "signalforge",
   "version": "0.1.0",
-  "description": "Build SignalRGB lighting effects from images, videos, gradients and shapes.",
+  "description": "Build SignalRGB lighting effects from images, gradients, shapes and particles.",
   "license": "GPL-3.0-or-later",
   "author": "Max Leopold Blumenschein",
+  "homepage": "https://github.com/flowerpot-byte/SignalForge#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/flowerpot-byte/SignalForge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/flowerpot-byte/SignalForge/issues"
+  },
   "type": "module",
   "private": true,
   "main": "app/main.js",

@@ -1,11 +1,10 @@
 # SignalForge
 
-Build your own SignalRGB lighting effects from **images and video** — not just
+Build your own SignalRGB lighting effects from **your own pictures** — not just
 geometric shapes.
 
 SignalRGB can play effects but not create them. The community tools that exist only
-handle shapes; nothing lets you turn a photo or a video clip into lighting.
-SignalForge does.
+handle shapes; nothing lets you turn a photograph into lighting. SignalForge does.
 
 ## Why images matter
 
@@ -15,8 +14,8 @@ your own photos included.
 
 ## What it can do
 
-- **Pictures and video** as the effect itself: dropped in, cropped on the stage,
-  fitted the way you choose.
+- **Pictures** as the effect itself (`png`, `jpg`, `webp`, `gif`, `bmp`): dropped
+  in, cropped on the stage, fitted the way you choose.
 - **Shapes** — circle, ring, star, heart, triangle, hexagon, diamond, cross,
   moon — with size, position, rotation and a zoom that breathes.
 - **Gradients** in five shapes (linear, radial, conic, stripes, waves) and
@@ -30,6 +29,19 @@ your own photos included.
 - A **live preview** that is the same engine the exported effect runs, so what
   you see is what SignalRGB plays.
 - Your own **tile picture** for the effect, and your **name** on it.
+
+## What it cannot do: video
+
+Not a missing feature — a wall. SignalRGB runs effects in a browser engine built
+**without media support**: asking a `<video>` element to play there answers
+`TypeError: v.play is not a function`. An effect cannot play a video clip, and no
+amount of work on this side changes that.
+
+What is possible in principle is turning a clip into frames beforehand and
+playing those back inside the effect. That is a real feature nobody has built
+here yet, and it is not the same thing as "supports video" — the frames would
+have to fit in the effect file, which is a hard budget. Until somebody builds
+it, treat video as out of scope.
 
 ## Building it yourself
 

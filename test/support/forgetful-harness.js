@@ -1,4 +1,4 @@
-// SignalForge — build SignalRGB effects from images, video, gradients and shapes.
+// SignalForge — build SignalRGB effects from images, gradients, shapes and particles.
 // Copyright (C) 2026 Max Leopold Blumenschein
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { app } from 'electron';
