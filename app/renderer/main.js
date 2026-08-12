@@ -221,7 +221,16 @@ async function boot() {
    * one the user is working on. See src/engine/slots.js for the whole
    * position-and-id decision.
    */
-  const editedLayer = (doc = preview.document()) => foregroundOf(doc.layers);
+  // Which stack card the settings column is about — rebound to the real
+  // inspector once it is mounted (the crop mounts first, so this cannot be a
+  // direct reference). Until then, and whenever the inspector has no answer,
+  // the stack's top is the edited layer, exactly as before the layer list.
+  let selectedLayerIdOf = () => null;
+
+  const editedLayer = (doc = preview.document()) => {
+    const chosen = doc.layers.find((layer) => layer.id === selectedLayerIdOf());
+    return chosen ?? foregroundOf(doc.layers);
+  };
 
   /** That layer, but only when it is a picture — otherwise nothing. */
   const pictureLayer = (doc = preview.document()) => {
@@ -439,6 +448,10 @@ async function boot() {
     getDocument: () => preview.document(),
     recents,
     coverPicker,
+    // Choosing a card reaches no onChange, so the crop's tab stop follows
+    // the selection through this hook — the same refresh every document
+    // change already runs.
+    onSelectionChange: () => crop.refresh(),
     // The effect time of the frame on screen, for the one control whose
     // change must not move the picture: the Farbwechsel tempo re-parks the
     // hue at this very moment's angle (see the hueCycle note in
@@ -505,6 +518,9 @@ async function boot() {
       showMessage(`${i18n.t('inspector.changeFailed')}: ${err.message || err}`, true);
     }
   });
+  // The crop asked "which layer is edited" before the inspector existed to
+  // answer — rebind the reference now that it does (see editedLayer above).
+  selectedLayerIdOf = inspector.selectedLayerId;
 
   /**
    * Take a picture in, from wherever it came.

@@ -118,6 +118,15 @@ test('up, down, remove and add report whole arrays through the stack arithmetic'
   assert.equal(grown.at(-1).type, 'particles');
 });
 
+test('adding selects the new layer — the thing the person is about to shape', () => {
+  const { wrapper, selections } = mountStack();
+  const byId = (id) => findAll(wrapper, (n) => n.id === id)[0];
+  byId('sf-layer-add-kind').value = 'solid';
+  byId('sf-layer-add').fire('click');
+  assert.deepEqual(selections, ['solid'],
+    'the new layer is the selection, set before the write rebuilds the column');
+});
+
 test('the visibility toggle reports the one field it changed, not an array', () => {
   const { wrapper, changes } = mountStack();
   const toggle = findAll(wrapper, (n) => n.id === 'sf-layer-fig-visible')[0];

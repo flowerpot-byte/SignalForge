@@ -465,9 +465,19 @@ export function createField(field, options) {
  * for free. Its write is a single-field report (layers.N.visible), not an
  * array — nothing structural changed.
  */
-function layersField(field, { t, value, onChange, onSelectLayer = null }) {
+function layersField(field, { t, value, onChange, onSelectLayer = null, liveLayers = null }) {
   const wrapper = row('control layer-stack');
-  const layers = Array.isArray(value) ? value : [];
+  // EVERY handler asks for the layers at the moment it fires, never the
+  // array this build was drawn from: setDocument awaits a real asset reload
+  // for any picture in the document, and during that window the old cards
+  // are still clickable — two structural presses computed from the same
+  // stale capture would silently lose the first one (review measured the
+  // window; it is real for exactly the picture-under-figures documents this
+  // feature exists for). The capture below is only the DRAWING's input.
+  const layersNow = () => {
+    const live = liveLayers ? liveLayers() : value;
+    return Array.isArray(live) ? live : [];
+  };
   const entries = Array.isArray(field.entries) ? field.entries : [];
   const stack = [...entries].reverse();
 
@@ -493,7 +503,7 @@ function layersField(field, { t, value, onChange, onSelectLayer = null }) {
     seen.title = t('inspector.layers.visible');
     seen.setAttribute('aria-label', `${t('inspector.layers.visible')}: ${pick.textContent}`);
     seen.addEventListener('change', () => {
-      const at = layers.findIndex((layer) => layer && layer.id === entry.id);
+      const at = layersNow().findIndex((layer) => layer && layer.id === entry.id);
       if (at >= 0) onChange(`layers.${at}.visible`, seen.checked);
     });
 
@@ -508,7 +518,7 @@ function layersField(field, { t, value, onChange, onSelectLayer = null }) {
       button.textContent = glyph;
       button.title = `${t(wordKey)}: ${pick.textContent}`;
       button.setAttribute('aria-label', `${t(wordKey)}: ${pick.textContent}`);
-      button.addEventListener('click', () => onChange('layers', movedLayer(layers, entry.id, direction)));
+      button.addEventListener('click', () => onChange('layers', movedLayer(layersNow(), entry.id, direction)));
       return button;
     };
     const up = step('↑', 'inspector.layers.up', +1);
@@ -517,7 +527,7 @@ function layersField(field, { t, value, onChange, onSelectLayer = null }) {
     const remove = iconButton(`sf-layer-${entry.id}-remove-stack`, 'minus',
       `${t('inspector.layers.remove')}: ${pick.textContent}`);
     remove.disabled = entries.length <= 1;
-    remove.addEventListener('click', () => onChange('layers', withoutLayer(layers, entry.id)));
+    remove.addEventListener('click', () => onChange('layers', withoutLayer(layersNow(), entry.id)));
 
     cardRow.append(pick, seen, up, down, remove);
     wrapper.append(cardRow);
@@ -538,7 +548,16 @@ function layersField(field, { t, value, onChange, onSelectLayer = null }) {
     kind.append(option);
   }
   const add = iconButton('sf-layer-add', 'plus', t('inspector.layers.add'));
-  add.addEventListener('click', () => onChange('layers', withAddedLayer(layers, kind.value)));
+  add.addEventListener('click', () => {
+    const grown = withAddedLayer(layersNow(), kind.value);
+    // The new layer is what the person is about to shape, so it is the
+    // selection — set WITHOUT a rerender (second argument false): the write
+    // below rebuilds the column once the document really carries the layer,
+    // and rendering before that would find the id in no stack and throw the
+    // selection away again.
+    onSelectLayer?.(grown[grown.length - 1].id, false);
+    onChange('layers', grown);
+  });
   adder.append(kind, add);
   wrapper.append(adder);
 

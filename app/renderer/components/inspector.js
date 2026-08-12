@@ -800,7 +800,11 @@ export function mountInspector(container, {
   // The cover picker ({ choose, clear } — main.js owns the dialog, the crop
   // and the document change), handed to the tile row. Optional again: a
   // caller without one gets the row with its buttons disabled.
-  coverPicker = null
+  coverPicker = null,
+  // Told whenever the stack selection changes — the crop's tab stop follows
+  // the selected layer, and choosing a card is the one gesture that reaches
+  // no onChange for it to piggyback on. Optional like everything above.
+  onSelectionChange = null
 }) {
   const SF = window.SignalForgeEngine;
 
@@ -857,7 +861,10 @@ export function mountInspector(container, {
     const remove = /^(.*)-remove-\d+$/.exec(id);
     if (remove) { document.getElementById(`${remove[1]}-add`)?.focus(); return; }
     const reset = /^(.*)-reset$/.exec(id);
-    if (reset) document.getElementById(`${reset[1]}-choose`)?.focus();
+    if (reset) { document.getElementById(`${reset[1]}-choose`)?.focus(); return; }
+    // A removed stack card takes its own remove button with it — land on the
+    // add control, the same answer the motion list's vanished remove gets.
+    if (/-remove-stack$/.test(id)) document.getElementById('sf-layer-add')?.focus();
   }
 
   /**
@@ -1168,9 +1175,19 @@ export function mountInspector(container, {
         recents,
         coverPicker,
         // The stack cards' selection gesture: no document write, only which
-        // layer this column is about — so it is a render() of this very
-        // column and nothing else.
-        onSelectLayer: (id) => { selectedId = id; render(); },
+        // layer this column is about. `rerender` is false for exactly one
+        // caller — the add button, whose following array write rebuilds the
+        // column itself once the document really carries the new layer.
+        // Either way whoever outside cares about the selection (the crop's
+        // tab stop does) hears about it.
+        onSelectLayer: (id, rerender = true) => {
+          selectedId = id;
+          if (rerender) render();
+          onSelectionChange?.();
+        },
+        // The layers as they are AT THE MOMENT a card's button fires — see
+        // layersField for the measured stale-closure window this closes.
+        liveLayers: () => getDocument().layers,
         // Only a slider has a reset, and it is asked at the moment it is
         // pressed rather than now: the answer costs a normalization of the
         // document, and this loop runs for every control in the column. The
@@ -1243,5 +1260,15 @@ export function mountInspector(container, {
   }
 
   render();
-  return { refresh: render };
+  return {
+    refresh: render,
+    /**
+     * Which stack card the column is about right now — what main.js's crop
+     * asks so its drag can serve the layer the person is actually editing,
+     * not blindly the top of the stack (review found a picture moved under a
+     * figure whose crop went dead: the fit dropdown followed the selection,
+     * the drag did not).
+     */
+    selectedLayerId: () => selectedId
+  };
 }
