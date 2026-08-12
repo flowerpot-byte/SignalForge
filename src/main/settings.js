@@ -17,7 +17,14 @@ export const SETTING_TYPES = Object.freeze({
   language: 'string',
   effectsFolder: 'string',
   lastProjectFolder: 'string',
-  recentColors: 'colours'
+  recentColors: 'colours',
+  // Who to name as the author of an effect. A SETTING and not merely a
+  // document field, because it is the same person every time: typing one's
+  // own name into every new effect is the kind of small tax that ends with
+  // the field left empty, which is exactly the state this was added to fix.
+  // The document still carries its own `publisher` — this is only what a new
+  // document starts with.
+  author: 'string'
 });
 
 /** Exactly the string a colour input produces — lowercase #rrggbb. */
@@ -63,7 +70,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   // Frozen so the shared default cannot be mutated through a leaked
   // reference; every write replaces the array wholesale (rememberColor in
   // app/renderer/components/recent-colors.js returns fresh lists).
-  recentColors: Object.freeze([])
+  recentColors: Object.freeze([]),
+  // Empty until somebody types their name once. Empty and not a placeholder
+  // like "Unknown": the exported file's publisher line is better blank than
+  // filled with a word nobody chose.
+  author: ''
 });
 
 export function createSettings({ file, readFile, writeFile }) {

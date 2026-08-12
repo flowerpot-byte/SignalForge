@@ -24,6 +24,20 @@ const LAYER_ID = 'a1';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 
+/**
+ * What the installed app calls itself, read from the one place that decides
+ * it rather than typed a second time here — electron-builder's productName is
+ * what names the settings folder on disk, so a copy of the string here would
+ * be a copy that can go stale without anything noticing.
+ */
+const PRODUCT_NAME = (() => {
+  try {
+    return JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).build.productName;
+  } catch {
+    return 'SignalForge';
+  }
+})();
+
 const USAGE = `Usage:
   node bin/sfexport.js --image <file> [options]
   node bin/sfexport.js --solid <colour> [options]
@@ -45,6 +59,9 @@ Options:
   --bands <count>    ${MIN_BANDS}..${MAX_BANDS} repeats of the ramp, read by conic, stripes and waves;
                      linear and radial are one traversal of it and ignore it
                      (default: ${DEFAULT_BANDS}, --gradient only)
+  --by <name>        Who made it. SignalRGB prints this under the effect's
+                     title. Default: the name saved in the app's settings, and
+                     nothing at all if none has been saved yet.
   --out <folder>     Where to write. Default: the detected SignalRGB folder.
   --force            Overwrite an existing effect of the same name.
 
@@ -54,7 +71,8 @@ A colour is written the way a colour usually is: #rrggbb, #rgb or rrggbb.
 // Flags that take a value. --force is handled separately as the one
 // value-less flag.
 const VALUE_FLAGS = new Set([
-  'image', 'solid', 'gradient', 'project', 'name', 'motion', 'fit', 'shape', 'angle', 'bands', 'out'
+  'image', 'solid', 'gradient', 'project', 'name', 'motion', 'fit', 'shape', 'angle', 'bands', 'out',
+  'by'
 ]);
 
 /**
@@ -212,12 +230,48 @@ function resolveNameAndProject(options) {
   throw new Error(USAGE);
 }
 
+/**
+ * Who to name as the author, for a build started from the command line.
+ *
+ * `--by` if it was given; otherwise the name the app has saved, so that the
+ * same person's effects are signed the same way whichever of the two built
+ * them; otherwise nothing.
+ *
+ * WHY IT READS THE APP'S SETTINGS FILE DIRECTLY. There is no Electron here to
+ * ask for the userData folder, so the path is rebuilt from the same rule
+ * Electron uses on this platform (APPDATA/<productName> on Windows, and the
+ * usual two elsewhere) with the app name out of package.json's build block —
+ * not a second copy of the string. Every step is best-effort: a missing file,
+ * an unreadable one, junk inside it or a settings shape from a newer version
+ * all end at the same place, which is an unsigned effect. Nothing here is
+ * allowed to stop an export.
+ *
+ * This used to be the literal 'SignalForge', which is a program and not a
+ * person; SignalRGB printed it under the title as though the tool had made
+ * the effect by itself.
+ */
+function publisherFor(options) {
+  if (typeof options.by === 'string') return options.by;
+  try {
+    const home = homedir();
+    const folder = process.platform === 'win32'
+      ? join(process.env.APPDATA || join(home, 'AppData', 'Roaming'), PRODUCT_NAME)
+      : process.platform === 'darwin'
+        ? join(home, 'Library', 'Application Support', PRODUCT_NAME)
+        : join(process.env.XDG_CONFIG_HOME || join(home, '.config'), PRODUCT_NAME);
+    const saved = JSON.parse(readFileSync(join(folder, 'settings.json'), 'utf8'));
+    return typeof saved.author === 'string' ? saved.author : '';
+  } catch {
+    return '';
+  }
+}
+
 async function buildImageDocument(options, name) {
   const asset = await prepareImageFile(options.image);
   const raw = {
     name,
     description: `Built from ${basename(options.image)} with SignalForge.`,
-    publisher: 'SignalForge',
+    publisher: publisherFor(options),
     assets: { picture: asset },
     layers: [{
       id: LAYER_ID,
@@ -316,7 +370,7 @@ function buildColourDocument(options, name) {
     description: gradient
       ? `A ${options.shape} gradient built with SignalForge.`
       : `A single colour built with SignalForge.`,
-    publisher: 'SignalForge',
+    publisher: publisherFor(options),
     layers: [layer]
   }).doc;
   return { ...doc, controls: effectControls(doc, LAYER_ID) };

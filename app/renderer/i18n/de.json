@@ -124,6 +124,8 @@
   "inspector.cover.custom": "Eigenes Bild",
   "inspector.cover.choose": "Bild wählen…",
   "inspector.cover.reset": "Automatisch verwenden",
+  "inspector.publisher": "Von",
+  "inspector.publisherHint": "Dein Name",
   "inspector.coverFailed": "Titelbild konnte nicht übernommen werden",
   "footer.exporting": "Speichert…",
   "footer.exported": "Gespeichert",

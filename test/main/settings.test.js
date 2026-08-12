@@ -79,6 +79,21 @@ test('recentColors starts out empty', () => {
   assert.deepEqual(createSettings(fake(null)).get('recentColors'), []);
 });
 
+// The author's name, added 12.08. for the same reason recentColors was: a
+// setting nobody drives with the real key is a setting that can be missing from
+// SETTING_TYPES without a single test going red — which is exactly how the
+// swatches shipped dead. Driven here through the real store.
+test('the author name round-trips through a reload', async () => {
+  const io = fake(null);
+  await createSettings(io).set('author', 'Max Leopold Blumenschein');
+  assert.equal(createSettings(io).get('author'), 'Max Leopold Blumenschein');
+});
+
+test('the author name starts out empty, and a non-string one is dropped', () => {
+  assert.equal(createSettings(fake(null)).get('author'), '');
+  assert.equal(createSettings(fake('{"author": 42}')).get('author'), '');
+});
+
 test('a hand-edited recentColors that is not a dense list of colours is dropped on load', () => {
   for (const junk of [
     '{"recentColors": {"0": "#112233"}}',

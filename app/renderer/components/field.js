@@ -203,6 +203,37 @@ function numberField(field, { t, value, onChange, defaultValue = null }) {
  * `input` fires while the picker is open, so the preview follows the colour as
  * it is being chosen rather than only when the dialog is dismissed.
  */
+/**
+ * A line of text the person types — today, exactly one: who made the effect.
+ *
+ * WHY IT COMMITS ON EVERY KEYSTROKE. `input` and not `change`, the same event
+ * the colour picker and the sliders report on, because everything in this
+ * column is live: the document is the thing being edited, and a name that only
+ * arrived on blur would be a field that behaves unlike every other field
+ * beside it. Nothing expensive hangs off it — the name is not painted — so
+ * there is no reason to make the person press anything to confirm.
+ *
+ * `spellcheck` off and `autocomplete` off: this is a name, and the browser
+ * underlining somebody's surname in red or offering them a saved email address
+ * would both be wrong.
+ */
+function textField(field, { t, value, onChange }) {
+  const wrapper = row('control control-row');
+  const id = fieldId(field.path);
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.id = id;
+  input.value = String(value ?? '');
+  input.spellcheck = false;
+  input.setAttribute('autocomplete', 'off');
+  if (field.placeholderKey) input.placeholder = t(field.placeholderKey);
+  input.addEventListener('input', () => onChange(field.path, input.value));
+
+  wrapper.append(labelFor(id, t(field.labelKey)), input);
+  return wrapper;
+}
+
 function colorField(field, { t, value, onChange, recents = null }) {
   const wrapper = row('control control-row');
   const id = fieldId(field.path);
@@ -437,6 +468,7 @@ export function createField(field, options) {
   if (field.type === 'number') return numberField(field, options);
   if (field.type === 'select') return selectField(field, options);
   if (field.type === 'color') return colorField(field, options);
+  if (field.type === 'text') return textField(field, options);
   if (field.type === 'background') return backgroundField(field, options);
   if (field.type === 'cover') return coverField(field, options);
   if (field.type === 'layers') return layersField(field, options);

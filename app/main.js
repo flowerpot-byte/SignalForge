@@ -130,7 +130,7 @@ function currentTarget() {
 // exactly as it refuses it for anything else). recentColors joined language
 // here because it names no file: a list of colour swatches is the window's
 // own business, unlike the two folder paths this allowlist exists to protect.
-const RENDERER_SETTINGS = new Set(['language', 'recentColors']);
+const RENDERER_SETTINGS = new Set(['language', 'recentColors', 'author']);
 
 ipcMain.handle('sf:version', () => app.getVersion());
 ipcMain.handle('sf:settings:all', () => settings.all());

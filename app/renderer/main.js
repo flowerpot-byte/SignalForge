@@ -417,6 +417,14 @@ async function boot() {
   let recentColors = Array.isArray(settings.recentColors)
     ? settings.recentColors.filter(isRecentColor)
     : [];
+  // Who signs the effects. Kept the same way the swatches are: a working copy
+  // seeded from the settings this window already loaded, written back through
+  // remember(). It is not a list and needs no arithmetic, so it is two lines
+  // rather than an object — but it follows the same rule about a failed write,
+  // which is that the session keeps the value anyway.
+  let author = typeof settings.author === 'string' ? settings.author : '';
+  const authorName = () => author;
+
   const recents = {
     list: () => recentColors,
     remember(color) {
@@ -499,6 +507,15 @@ async function boot() {
       // even if the reload below then fails, because setByPath wrote into the
       // live document itself and that change is already on screen.
       markChanged();
+      // Typing one's name into the author field also tells the app who that
+      // is, so the NEXT effect starts with it already filled in. Written on
+      // every keystroke, which is the same rate the field reports at and
+      // cheap enough (one small file); a debounce here would only add a way
+      // for the last few letters to be lost by closing the window.
+      if (path === 'publisher') {
+        author = String(value);
+        remember('author', author);
+      }
       if (Array.isArray(value)) await preview.setDocument(doc);
       // The fit dropdown decides whether anything is croppable at all, so the
       // canvas's tab stop has to follow it. Called for every change rather
@@ -577,6 +594,9 @@ async function boot() {
           // followed for --image (see bin/sfexport.js). file.name is already
           // just the leaf name, so there is no path to split here.
           name: file.name.replace(/\.[^.]+$/, ''),
+          // Signed like every other new document — a picture dropped on the
+          // stage is as much a new effect as one begun from a tile.
+          publisher: authorName(),
           layers: [{ id: IMAGE_LAYER, type: 'image', asset: 'image', fit: 'cover', motions: [] }],
           assets: { image: result.asset }
         });
@@ -721,6 +741,11 @@ async function boot() {
     const starter = STARTERS[kind];
     if (!starter) return null;
     return {
+      // The remembered author, so a new effect is already signed. First in the
+      // object so that a tile which ever wants to say something else about the
+      // publisher still can — and empty when nothing is remembered yet, which
+      // is exactly what normalizeDocument defaults it to anyway.
+      publisher: authorName(),
       // Whatever this tile says about the document as a whole (the wake, for
       // the swarm), then its one layer. Before `layers` rather than after so
       // that a table entry can never overwrite it by accident.

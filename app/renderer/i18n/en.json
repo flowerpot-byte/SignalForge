@@ -124,6 +124,8 @@
   "inspector.cover.custom": "Own picture",
   "inspector.cover.choose": "Choose picture…",
   "inspector.cover.reset": "Use automatic",
+  "inspector.publisher": "By",
+  "inspector.publisherHint": "Your name",
   "inspector.coverFailed": "The tile picture could not be used",
   "footer.exporting": "Saving…",
   "footer.exported": "Saved",

@@ -726,6 +726,19 @@ export function describeInspector(doc, layerId) {
   fields.push({
     path: 'cover', type: 'cover', section: 'display', labelKey: 'inspector.cover'
   });
+  // Who made it. SignalRGB shows this under the effect's name on its own
+  // page — "Stern / von ..." — and until now there was no way to fill it in
+  // from anywhere, so every effect this app has ever exported arrived there
+  // with an empty line under its title. The document field existed the whole
+  // time (`publisher`, written into the file's head by build-effect.js);
+  // what was missing was somewhere to type it.
+  //
+  // Under this heading because it is the same kind of thing as the tile: not
+  // what the effect IS, but what shows around it once it is somewhere else.
+  fields.push({
+    path: 'publisher', type: 'text', section: 'display',
+    labelKey: 'inspector.publisher', placeholderKey: 'inspector.publisherHint'
+  });
   return fields;
 }
 
