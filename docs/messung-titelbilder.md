@@ -9,7 +9,7 @@
 
 **Geprüft am:** 10.08.2026 · Rein lesend, am laufenden System von Max, ohne SignalRGB zu starten
 oder zu bedienen. Kein Sondiereffekt wurde installiert; die beiden Dateien in
-`C:\Users\Max\Documents\WhirlwindFX\Effects` (`MaxAmbient.html`, `SF Bergabend.html`) wurden nur
+`C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects` (`MaxAmbient.html`, `SF Bergabend.html`) wurden nur
 gelesen, nicht verändert.
 
 Anlass: Abschnitt 9c, Wunsch 3 des Entwurfs — „Wie SignalRGB an das Vorschaubild kommt, ist
@@ -28,7 +28,7 @@ Dokumentenlage. Der Unterschied zu einer echten Probe steht unten bei jedem Punk
 
 ## Kurzfassung
 
-Die stärkste vorhandene Spur — SignalRGBs **eigene, mitgelieferte** Effekte auf Max' Rechner —
+Die stärkste vorhandene Spur — SignalRGBs **eigene, mitgelieferte** Effekte auf dem Rechner, an dem gemessen wurde —
 zeigt ein klares Muster: **eine PNG-Datei mit genau demselben Dateinamen wie die HTML-Datei, im
 selben Ordner.** Kein `<meta>`-Tag, kein `<link>`, kein JSON-Feld in der HTML-Datei verweist darauf.
 Das war am 10.08.2026 an eingebauten Effekten beobachtet, nicht an einem selbst abgelegten Effekt im
@@ -52,7 +52,7 @@ Effektbild zu kommen, und sie dürfen nicht verwechselt werden.
 
 ### 1a. Marktplatz-Effekte: ein Bild-Feld im Katalog-JSON, nichts in der HTML-Datei
 
-`C:\Users\Max\AppData\Local\WhirlwindFX\SignalRgb\cache\catalog_en.json` (248 KB, auf Max' Rechner)
+`C:\Users\<Benutzer>\AppData\Local\WhirlwindFX\SignalRgb\cache\catalog_en.json` (248 KB, auf dem Rechner, an dem gemessen wurde)
 ist der heruntergeladene Katalog aller Marktplatz-Effekte („Liquid", „Lightning", „Rainbow Pulse", …).
 Jeder Eintrag trägt ein eigenes Feld:
 
@@ -83,7 +83,7 @@ lokal abgelegte Dateien tut. Abschnitt 2 befasst sich nur noch mit diesem Weg.
 
 Woraus das folgt — die Beweiskette, Schritt für Schritt:
 
-1. Am 10.08.2026 wurden drei Wegwerf-Dateien in `C:\Users\Max\Documents\WhirlwindFX\Effects` gelegt
+1. Am 10.08.2026 wurden drei Wegwerf-Dateien in `C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects` gelegt
    (Protokoll: `work/titelbild-probe.md`): `SF Probe Mit Bild.html` **plus** `SF Probe Mit Bild.png`
    (512 × 288, vollflächig Magenta mit riesigem weißem „SF" — in einer Liste unverwechselbar), und
    `SF Probe Ohne Bild.html` **ohne** Bilddatei. Beide HTML-Dateien mit `bin/sfexport.js` gebaut,
@@ -123,8 +123,8 @@ Dateien (per Verzeichnisauflistung geprüft). Nichts von der Probe bleibt liegen
 
 ### Belegt (Stand 10.08.2026, Indizienlage vor der Probe)
 
-SignalRGB 2.5.74 ist auf Max' Rechner installiert unter
-`C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\` (Registry-Eintrag
+SignalRGB 2.5.74 ist auf dem Rechner, an dem gemessen wurde installiert unter
+`C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\` (Registry-Eintrag
 `HKLM\...\Uninstall\SignalRgb`, `InstallLocation`, `DisplayVersion 2.5.74` — deckt sich mit der
 Version aus `erkenntnisse-signalrgb-motor.md`). Im Unterordner
 `Signal-x64\Effects\` liegen SignalRGBs **eigene, mitgelieferte** Effekte, in zwei
@@ -178,7 +178,7 @@ Namenskonvention.
 Mehrere voneinander unabhängige, nicht-offizielle Quellen beschreiben denselben Ablauf für
 heruntergeladene Community-Effekte: „Custom effects go in
 `%userprofile%\Documents\WhirlwindFX\Effects\`. Both the `.html` file and its `.png` preview go
-directly into that folder." Das deckt sich mit dem, was auf Max' Rechner in SignalRGBs eigenem
+directly into that folder." Das deckt sich mit dem, was auf dem Rechner, an dem gemessen wurde in SignalRGBs eigenem
 Installationsordner liegt (Abschnitt „Belegt" oben). Keine dieser Quellen nennt aber ausdrücklich
 die Regel „gleicher Dateiname" — das ist eine Schlussfolgerung aus dem Beispiel, keine zitierte
 Aussage.
@@ -464,15 +464,15 @@ diese Messung trifft.
 
 **Dateien auf diesem Rechner (belegt):**
 
-- `C:\Users\Max\Documents\WhirlwindFX\Effects\MaxAmbient.html` (gelesen, nicht verändert)
-- `C:\Users\Max\Documents\WhirlwindFX\Effects\SF Bergabend.html` (gelesen, nicht verändert)
-- `C:\Users\Max\AppData\Local\WhirlwindFX\SignalRgb\cache\catalog_en.json`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Dynamic\Screen Ambience.html` / `.png`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Rainbow.html` / `.png`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Neon Shift.html` / `.png`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Side To Side.html` / `Side to Side.png`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Solid Color.html` / `.png`
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Qt6WebEngineCore.dll`, `QtWebEngineProcess.exe`, `Ultralight.dll`, `UltralightCore.dll`, `WebCore.dll`, `webp.dll`, `imageformats\qwebp.dll`
+- `C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects\MaxAmbient.html` (gelesen, nicht verändert)
+- `C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects\SF Bergabend.html` (gelesen, nicht verändert)
+- `C:\Users\<Benutzer>\AppData\Local\WhirlwindFX\SignalRgb\cache\catalog_en.json`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Dynamic\Screen Ambience.html` / `.png`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Rainbow.html` / `.png`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Neon Shift.html` / `.png`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Side To Side.html` / `Side to Side.png`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Solid Color.html` / `.png`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Qt6WebEngineCore.dll`, `QtWebEngineProcess.exe`, `Ultralight.dll`, `UltralightCore.dll`, `WebCore.dll`, `webp.dll`, `imageformats\qwebp.dll`
 - Registry `HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\SignalRgb`
 
 **Offizielle Dokumentation:**

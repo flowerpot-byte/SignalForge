@@ -16,9 +16,9 @@ Das hier ist die **Bestandsaufnahme**, nicht der Bau. Gemessen wird an echtem Qu
 
 | Quelle | Anzahl | Pfad |
 |---|---|---|
-| SignalRGBs eigene, mitgelieferte Effekte | 5 | `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\{Static,Dynamic}\` |
-| Vom Markt geladene Effekte im Zwischenspeicher | 26 | `C:\Users\Max\AppData\Local\WhirlwindFX\SignalRgb\cache\effects\<ID>\effect.html` |
-| Max' eigener, behaltener Effekt | 1 | `C:\Users\Max\Documents\WhirlwindFX\Effects\MaxAmbient.html` |
+| SignalRGBs eigene, mitgelieferte Effekte | 5 | `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\{Static,Dynamic}\` |
+| Vom Markt geladene Effekte im Zwischenspeicher | 26 | `C:\Users\<Benutzer>\AppData\Local\WhirlwindFX\SignalRgb\cache\effects\<ID>\effect.html` |
+| Max' eigener, behaltener Effekt | 1 | `C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects\MaxAmbient.html` |
 
 Die 26 aus dem Zwischenspeicher, mit Titel und Größe:
 
@@ -36,6 +36,15 @@ Die fünf mitgelieferten: `Rainbow`, `Neon Shift`, `Side To Side`, `Solid Color`
 **Nicht mitgezählt**, weil sie SignalForge selbst geschrieben hat: `SF Bergabend.html`,
 `Verlauf.html`, `Verlaufizughuiz.html`, `Verlaufizughuizhjikhgu.html` im selben Ordner wie
 MaxAmbient.
+
+**Warum hier kein fremder Code steht.** Diese Untersuchung liest 31 Effekte, die anderen
+Leuten gehören — fünf davon SignalRGB selbst, 26 Autorinnen und Autoren aus dem Markt. Was
+sie tun, ist unten ausführlich beschrieben; **abgedruckt ist ihr Quelltext nirgends**.
+Jede Stelle, an der früher ein Ausschnitt stand, ist durch eine Beschreibung in eigenen
+Worten ersetzt, mit Fundstelle daneben, damit die Aussage nachprüfbar bleibt. Techniken
+sind frei — der Text, in dem jemand sie aufgeschrieben hat, ist es nicht, und für eine
+Veröffentlichung dieses Repositoriums ist der Unterschied wichtig. Codeblöcke in diesem
+Dokument zeigen ab hier ausschließlich **SignalForge-eigenen** Code oder Pseudocode.
 
 **Eine Lücke, ehrlich benannt:** In Max' Screenshot der Effektliste standen auch *Rain*,
 *Rainbow Pulse*, *Cubes*, *Nebula*, *Snake*, *Bars Visualizer*, *Eye of Sauron*, *Touch
@@ -68,18 +77,12 @@ Funktionsnamen (`InitSquare`, `Square`, `UpSquare`), gleiche Schleife, gleiche M
 geändert sind Titel, Farbvorgaben und gelegentlich eine zusätzliche Sinuslinie. Der Kern ist
 jedes Mal dieser:
 
-```js
-this.Draw = function () {
-  ctx.strokeStyle = colors[this.ssi] + "88";
-  ctx.lineWidth = this.size;
-  ctx.beginPath();
-  ctx.arc(this.x, this.y, this.radius, 0, 2 * Math.PI);
-  ctx.stroke();
-  this.x += this.speedX * (speedRaw / 50);
-  this.y += this.speedY * (speedRaw / 50);
-  if (speedRaw > 0) this.radius += (Math.random() / 1.3) * (speedRaw / 50);
-};
-```
+> **In eigenen Worten** (der Bestand wird durchweg beschrieben statt abgedruckt —
+> siehe die Anmerkung in Abschnitt 0): Jedes Teilchen zeichnet
+> sich selbst als **gestrichenen Kreisbogen**. Die Strichfarbe ist ein Eintrag aus einer
+> kleinen Farbliste, an den zwei Hex-Ziffern für die Deckkraft angehängt werden — knapp
+> über der Hälfte, also halbdurchsichtig. Die Strichstärke ist die eigene Größe des
+> Teilchens, der Radius sein eigener Radius; gefüllt wird nichts.
 (`cache\effects\-Mir7bKkFQmd2LF_9Leg\effect.html`, „Poison")
 
 Ein wachsender, halbdurchsichtiger **Ring**, der langsam driftet. Mehr ist es nicht. Wer
@@ -99,12 +102,12 @@ Statt die Fläche zu löschen, wird jedes Bild ein **halbdurchsichtiges Rechteck
 Was vorher da war, verblasst, statt zu verschwinden. Das ist es, was Partikel überhaupt erst
 wie Funken, Regen oder Nordlicht aussehen lässt.
 
-```js
-ctx.fillStyle = bgColor + "22";   ctx.fillRect(0, 0, width, height);   // Poison-Familie
-ctx.fillStyle = "rgba(0,0,0,0.15)";                                    // Terminal
-ctx.fillStyle = 'hsla(' + iHue + ', 100%, ' + iLit/2 + '%, .05)';      // Neon Shift
-ctx.fillStyle = `hsla(${proBack[0]},…%,…%,${(100 - trail)/100})`;      // Radar (regelbar!)
-```
+> **In eigenen Worten:** Alle vier Familien machen dasselbe und unterscheiden sich nur
+> darin, WOMIT sie übermalen. Die Poison-Familie legt die eigene Hintergrundfarbe mit
+> etwa 13 % Deckkraft über die ganze Fläche; `Terminal` nimmt Schwarz mit 15 %;
+> `Neon Shift` eine Farbe aus dem laufenden Farbton mit 5 %; `Radar` dieselbe Idee, aber
+> mit einer **regelbaren** Deckkraft — der Nutzer stellt die Länge der Spur selbst ein.
+> Das ist der einzige der vier, der die Spur zur Einstellung macht.
 
 `Radar` macht die Schleierstärke sogar zum Bedienelement („trail"). `Aurora` benutzt `.04` —
 so schwach, dass ein Streifen über Sekunden nachglüht.
@@ -135,10 +138,11 @@ Der verbreitetste *Regler* des Bestandes. Immer nach demselben Rezept: Hex-Farbe
 nach HSL umrechnen, einen laufenden Offset auf den Farbton addieren, als `hsl(...)`
 zurückschreiben.
 
-```js
-globalColorCycle < 360 ? globalColorCycle += colorCycleSpeed / 50 : globalColorCycle %= 360;
-realColor1 = `hsl(${proColor1[0] + globalColorCycle}, ${proColor1[1]}%, ${proColor1[2]}%)`
-```
+> **In eigenen Worten:** Ein **einziger globaler Zähler** wächst pro Bild um das
+> eingestellte Tempo geteilt durch 50 und schlägt bei 360 wieder auf 0 um. Jede Farbe des
+> Effekts wird dann in HSL gebildet, indem dieser Zähler auf ihren eigenen Farbton addiert
+> wird — Sättigung und Helligkeit bleiben, wie sie waren. Alle Farben drehen sich also
+> gemeinsam und behalten ihre Abstände zueinander.
 (`cache\effects\-Me3BsMN_hIlzeJwFbMs\effect.html`, „Gradient Wave")
 
 In `Gradient Wave`, `Aurora`, `Arctic`, `Radar`, `Rick and Morty`, `Spin`, `Side to Side`
@@ -165,12 +169,11 @@ der Fingerabdruck dieser Technik.
 Ein Gitter gleicher Zellen, jede mit eigener Startphase; die Helligkeit jeder Zelle ist eine
 Sinuskurve.
 
-```js
-grid = MakeGrid(320 / hexWidth, 200 / hexWidth, hexWidth)
-…
-this.counter = 0 + Math.random() * 20;          // Startphase je Zelle
-this.colorVal = (Math.sin(this.counter) + 1) / 2
-```
+> **In eigenen Worten:** Aus Zellbreite und Zeichenfläche wird ein Gitter gebaut (320
+> und 200 geteilt durch die Zellbreite). Jede Zelle bekommt bei ihrer Erzeugung **einen
+> eigenen zufälligen Startwert** zwischen 0 und 20. Ihre Helligkeit ist dann der Sinus
+> dieses Werts, von −1…1 auf 0…1 umgerechnet; der Wert wächst pro Bild weiter. Weil jede
+> Zelle woanders startet, atmet das Gitter versetzt statt im Gleichtakt.
 (`cache\effects\-NIt9RINI5HwQ4_FjILd\effect.html`, „Dark Magic" — Sechsecke)
 
 `Electric` macht dasselbe mit Quadraten plus herabfallenden „rainCubes". `Biohazard` legt
@@ -182,9 +185,10 @@ schickt Wellen hindurch.
 `Side To Side` schiebt ein volles Rechteck über die Fläche und lässt die Farbe stehen. Der
 Spiegeltrick für die Gegenrichtung ist hübsch und typisch für den Bestand:
 
-```js
-ctx.translate(160, 100); ctx.scale(1 - this.mod * 2, 1); ctx.translate(-160, -100);
-```
+> **In eigenen Worten:** Der Nullpunkt wird in die Mitte der Fläche geschoben, dann wird
+> waagerecht mit einem Faktor skaliert, der von 1 nach −1 läuft, und der Nullpunkt wieder
+> zurückgeschoben. Ein negativer Faktor ist eine **Spiegelung**: derselbe Wisch läuft
+> damit auf dem Rückweg andersherum, ohne dass ein zweiter Zeichenweg nötig wäre.
 
 ### A8. Regenbogen als Spaltenschleife (1, mitgeliefert — mit einer Warnung darin)
 
@@ -203,10 +207,10 @@ Installationsordner liegt (siehe `docs/messung-titelbilder.md`).
 `Solid Color` ist der Lehrbuchfall — und zugleich der einfachste Effekt, den SignalRGB
 ausliefert:
 
-```js
-gAlpha = Math.sin(gCount) * .5 + .5
-gCount += Math.PI / 4 * speed / 1000
-```
+> **In eigenen Worten:** Die Deckkraft ist ein Sinus, von −1…1 auf 0…1 umgerechnet. Der
+> Zähler dahinter wächst pro Bild um ein Achtel einer vollen Umdrehung, mal Tempo, geteilt
+> durch tausend — also eine sehr langsame Schwingung, deren Geschwindigkeit am Regler
+> hängt.
 
 `Vibe` pulsiert den Radius statt der Deckkraft, `Magma` einen Helligkeitszähler auf und ab.
 
@@ -234,12 +238,11 @@ an Mixed Content und fremder Herkunft) und stimmt dafür weiterhin.
 Der Bestand zeigt aber: **SignalRGB schiebt Live-Daten von innen hinein**, über ein globales
 Objekt `engine`.
 
-```js
-let freqs = engine.audio.freq;
-if (freqs === 'undefined' || freqs === null || !freqs || freqs.byteLength !== 200) { … }
-let freqView = new DataView(freqs);
-… freqView.getUint8(i) / 255 …
-```
+> **In eigenen Worten:** Der Effekt holt sich vom Wirt einen Puffer mit dem Frequenzbild
+> des Tons, prüft ihn misstrauisch (nicht vorhanden, leer, oder nicht genau **200 Byte**
+> lang → nichts tun) und liest ihn dann Byte für Byte als Zahl von 0…255, die er durch 255
+> teilt. Also 200 Bänder, jedes ein Wert zwischen 0 und 1. Die Sorgfalt bei der Prüfung
+> ist bemerkenswert: Der Wirt liefert diesen Puffer offenbar nicht immer.
 (`cache\effects\-NIc4SbcPndIx2dhVy9O\effect.html`, „Hydrogen" — Beat-Erkennung)
 
 Also: **ein 200-Byte-Frequenzband, jeder Wert 0–255.** `Hydrogen` bildet daraus Energie und
@@ -247,12 +250,11 @@ Varianz der letzten zwölf Bilder und erkennt so Schläge.
 
 Und in `Screen Ambience` (mitgeliefert):
 
-```js
-const lightness = new Int8Array(engine.zone.lightness);
-const sat       = new Int8Array(engine.zone.saturation);
-const zhue      = new Int16Array(engine.zone.hue);
-const src       = new Uint8ClampedArray(engine.zone.imagedata);   // Modus "HD"
-```
+> **In eigenen Worten:** Der Wirt reicht den Bildschirminhalt in vier getrennten Puffern
+> herüber — Helligkeit, Sättigung und Farbton je als eigene Zahlenreihe, dazu im
+> hochauflösenden Modus die rohen Bildpunkte. Der Effekt legt über jeden Puffer die
+> passende typisierte Sicht (vorzeichenbehaftete Bytes für Helligkeit und Sättigung,
+> größere Zahlen für den Farbton, begrenzte Bytes für die Bilddaten) und liest daraus.
 
 560 Bildschirmzonen (28 × 20). Der Satz in unseren Notizen ist damit **zu weit gefasst
 formuliert und muss beim nächsten Anfassen präzisiert werden**: verboten ist der Weg nach
@@ -262,9 +264,10 @@ außen, nicht die Fütterung von innen.
 
 Der Wirt ruft eine frei benannte Funktion auf, wenn eine Taste gedrückt wird:
 
-```js
-function onCanvasTapped(x, y) { if (tapEffects) effects.push(new Ripple(x, y, "black")); }
-```
+> **In eigenen Worten:** Der Wirt ruft bei einem Tastendruck eine Funktion mit den
+> Koordinaten der betroffenen Stelle auf. Der Effekt legt dort — sofern der Schalter dafür
+> an ist — eine neue Welle in seine Liste laufender Wellen. Mehr ist es nicht: eine
+> Rückrufstelle und eine Liste.
 (`cache\effects\-MTwqhnV_LPbIrkfZOfo\effect.html`, „Black Ice")
 
 In `Black Ice`, `Enigma`, `Magma`, `Nuclear`, `Peach`, `Crimson`, `Rick and Morty`,
@@ -702,10 +705,12 @@ Kein Bau, sondern eine Messung, die vor jedem weiteren Filter-Gedanken fällig i
 Notizen sagen: **`ctx.filter` fehlt** (gemessen 09.08.). SignalRGBs eigener `Screen Ambience`
 benutzt aber den **CSS**-Filter auf dem Element:
 
-```js
-canvas.style.filter = "hue-rotate(…deg) brightness(…%) saturate(…%) contrast(…%) blur(…px)"
-// blur(0px) causes a black-screen compositing bug in Ultralight — omit it entirely at zero.
-```
+> **In eigenen Worten:** Der Effekt setzt die Filterkette nicht auf den Zeichenkontext,
+> sondern als **CSS-Eigenschaft auf das Canvas-Element** — Farbdrehung, Helligkeit,
+> Sättigung, Kontrast und Weichzeichnen in einer Zeichenkette. Daneben steht in seinem
+> Auslieferungscode eine Warnung: Ein Weichzeichnen von **null** Pixeln löst in Ultralight
+> einen Fehler aus, bei dem der Bildschirm schwarz bleibt; der Filter muss bei null also
+> ganz weggelassen werden statt auf 0 gesetzt.
 
 Wenn das im Wirt wirkt, wären Weichzeichnen und Farbdrehung fast umsonst zu haben statt
 pixelweise. Der Kommentar über den Ultralight-Fehler bei `blur(0px)` steht im Auslieferungs-
@@ -861,8 +866,8 @@ Max' eigener `MaxAmbient` geht schon heute, als Bild wie als Verlauf.
 
 Alle nur gelesen, keine verändert.
 
-- `C:\Users\Max\Documents\WhirlwindFX\Effects\MaxAmbient.html`
-- `C:\Users\Max\AppData\Local\WhirlwindFX\SignalRgb\cache\effects\<ID>\effect.html` für die
+- `C:\Users\<Benutzer>\Documents\WhirlwindFX\Effects\MaxAmbient.html`
+- `C:\Users\<Benutzer>\AppData\Local\WhirlwindFX\SignalRgb\cache\effects\<ID>\effect.html` für die
   26 IDs: `-M0UK0pcnuXzoqaS7-48` (Terminal), `-M6kb-ZFTdoKW5tRxV8Y` (Aurora),
   `-M6ojVXsfMF8BhRkGk9f` (Biohazard), `-MDRF1yNuxmbjNg7jjX5` (Starlight),
   `-MO8liV7Dy1JZC5l7nfQ` (Custom Sunrise), `-MTsd7Nkp20-S4uV_geE` (Enigma),
@@ -876,7 +881,7 @@ Alle nur gelesen, keine verändert.
   `-N5HOxzFzULHR89qt0CA` (Crimson), `-NC1t0Cs_BFxL8Quq5Ry` (Rick and Morty),
   `-NIc4SbcPndIx2dhVy9O` (Hydrogen), `-NIt9RINI5HwQ4_FjILd` (Dark Magic),
   `-NVpCeOFFNWNd41pKVF9` (Electric), `-NyghEBs8-mYkxU6qRFv` (Vibe)
-- `C:\Users\Max\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Rainbow.html`
+- `C:\Users\<Benutzer>\AppData\Local\VortxEngine\app-2.5.74\Signal-x64\Effects\Static\Rainbow.html`
 - `…\Static\Neon Shift.html`, `…\Static\Side To Side.html`, `…\Static\Solid Color.html`
 - `…\Dynamic\Screen Ambience.html`
 - Eigener Stand: `src/engine/document.js`, `src/engine/engine.js`,

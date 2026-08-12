@@ -1,5 +1,5 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
-// Copyright (C) 2026 Max
+// Copyright (C) 2026 Max Leopold Blumenschein
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
   CANVAS_WIDTH, CANVAS_HEIGHT, clamp,
@@ -53,7 +53,7 @@ import { cyclePaint } from '../motion/color-cycle.js';
  * ===========================================================================
  *
  * The star and the heart are `Vibe`'s, the one effect in the corpus that draws
- * figures for their own sake — `C:\Users\Max\AppData\Local\WhirlwindFX\
+ * figures for their own sake — `C:\Users\<Benutzer>\AppData\Local\WhirlwindFX\
  * SignalRgb\cache\effects\-NyghEBs8-mYkxU6qRFv\effect.html`, its `drawStar`
  * (ten lineTo in and out between two radii) and `drawHeart` (four
  * bezierCurveTo). docs/effekt-inventur.md A5 names both and A15 records that

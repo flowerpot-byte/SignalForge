@@ -1,5 +1,5 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
-// Copyright (C) 2026 Max
+// Copyright (C) 2026 Max Leopold Blumenschein
 // SPDX-License-Identifier: GPL-3.0-or-later
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../document.js';
 import { createWarpField, WARP_PEAK_FACTOR } from '../motion/warp.js';

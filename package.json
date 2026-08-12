@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Build SignalRGB lighting effects from images, videos, gradients and shapes.",
   "license": "GPL-3.0-or-later",
-  "author": "Max",
+  "author": "Max Leopold Blumenschein",
   "type": "module",
   "private": true,
   "main": "app/main.js",
@@ -27,7 +27,7 @@
   "build": {
     "appId": "de.maxblu.signalforge",
     "productName": "SignalForge",
-    "copyright": "Copyright (C) 2026 Max. Licence GPL-3.0-or-later.",
+    "copyright": "Copyright (C) 2026 Max Leopold Blumenschein. Licence GPL-3.0-or-later.",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -37,7 +37,8 @@
       "src/**/*",
       "dist/engine.bundle.js",
       "package.json",
-      "LICENSE"
+      "LICENSE",
+      "ADDITIONAL-TERMS.md"
     ],
     "win": {
       "target": [

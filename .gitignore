@@ -17,3 +17,14 @@ release/
 # in the history for ever. Nothing in it is tracked, which was checked before
 # this line was written.
 work/
+
+# Working notes that belong to this machine, not to the project.
+#
+# SNAPSHOT.md is the handover note between working sessions — where the work
+# stands, what to pick up next, which files somebody else is holding right now.
+# It is written for whoever continues the work here and reads as noise to
+# anybody who arrives at the repository, so it stays on disk and out of the
+# history. The build plans it refers to live in .superpowers/, ignored above
+# for the same reason: they are instructions to the workers, not documentation
+# of the program.
+SNAPSHOT.md
