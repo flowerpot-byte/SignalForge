@@ -1422,6 +1422,34 @@ input[type="color"]::-webkit-color-swatch {
 /* The colour card puts its swatch where a dropdown would be. */
 .control-row > input[type="color"] { grid-column: 2; justify-self: end; }
 
+/* A name is not a number, and it must not be given a number's box.
+   `justify-self: stretch` and a min-width of 0 so the field takes the whole
+   second column instead of shrink-wrapping: measured on "Max Leopold
+   Blumenschein", which showed as "...Leopold Blumenschein" with the beginning
+   scrolled out of sight while it was being typed. min-width:0 is the load-
+   bearing half — a grid item's automatic minimum is its content, so without it
+   the field would push the column wider rather than accept it. */
+.control-row > input[type="text"] {
+  /* Its OWN row, under the label, spanning the card. The value column is
+     sized for numbers and swatches; stretching a name inside it was still
+     "...Leopold Blumenschein" with the start scrolled away (measured twice,
+     at 1280 wide). A name is the one value in this column that is as wide as
+     the card, so it gets the card. */
+  grid-column: 1 / -1;
+  grid-row: 2;
+  justify-self: stretch;
+  min-width: 0;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--surface-sunk);
+  color: var(--text-strong);
+}
+.control-row > input[type="text"]::placeholder { color: var(--text-muted); }
+.control-row > input[type="text"]:focus-visible { border-color: var(--accent); }
+
 select {
   font: inherit;
   font-size: 12px;
