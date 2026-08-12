@@ -6,11 +6,36 @@
  * Every setting the app has, with its default and its type. Anything not
  * listed here cannot be read or written — a stored file from a newer version
  * therefore cannot smuggle keys into an older one.
+ *
+ * A "type" here is a name in CHECKS below, not a typeof string — `typeof`
+ * alone could never say "an array of colour strings" (typeof [] is 'object',
+ * which would wave any object through). One predicate, used by the loader
+ * and by set() alike, so what survives a reload and what set() accepts can
+ * never be two different rules.
  */
 export const SETTING_TYPES = Object.freeze({
   language: 'string',
   effectsFolder: 'string',
-  lastProjectFolder: 'string'
+  lastProjectFolder: 'string',
+  recentColors: 'colours'
+});
+
+/** Exactly the string a colour input produces — lowercase #rrggbb. */
+const RECENT_COLOR = /^#[0-9a-f]{6}$/;
+
+const CHECKS = Object.freeze({
+  string: (value) => typeof value === 'string',
+  /**
+   * A short, DENSE array of colour strings. The Object.keys length comparison
+   * is the sparse-array gate: `every` skips holes, so a seven-hole array with
+   * one valid entry would otherwise pass and JSON.stringify would then write
+   * seven nulls into the file. It also refuses arrays carrying named extra
+   * properties, which is stricter than needed and exactly as intended.
+   */
+  colours: (value) => Array.isArray(value)
+    && value.length <= 8
+    && Object.keys(value).length === value.length
+    && value.every((entry) => typeof entry === 'string' && RECENT_COLOR.test(entry))
 });
 
 /**
@@ -34,7 +59,11 @@ export const FALLBACK_LANGUAGE = 'de';
 export const DEFAULT_SETTINGS = Object.freeze({
   language: '',
   effectsFolder: '',
-  lastProjectFolder: ''
+  lastProjectFolder: '',
+  // Frozen so the shared default cannot be mutated through a leaked
+  // reference; every write replaces the array wholesale (rememberColor in
+  // app/renderer/components/recent-colors.js returns fresh lists).
+  recentColors: Object.freeze([])
 });
 
 export function createSettings({ file, readFile, writeFile }) {
@@ -43,7 +72,7 @@ export function createSettings({ file, readFile, writeFile }) {
   try {
     const parsed = JSON.parse(readFile(file));
     for (const [key, type] of Object.entries(SETTING_TYPES)) {
-      if (Object.prototype.hasOwnProperty.call(parsed, key) && typeof parsed[key] === type) {
+      if (Object.prototype.hasOwnProperty.call(parsed, key) && CHECKS[type](parsed[key])) {
         values[key] = parsed[key];
       }
     }
@@ -60,7 +89,7 @@ export function createSettings({ file, readFile, writeFile }) {
       if (!Object.prototype.hasOwnProperty.call(SETTING_TYPES, key)) {
         throw new Error(`unknown setting: ${key}`);
       }
-      if (typeof value !== SETTING_TYPES[key]) {
+      if (!CHECKS[SETTING_TYPES[key]](value)) {
         throw new Error(`setting ${key} must be a ${SETTING_TYPES[key]}`);
       }
       // Write first, mutate `values` only once the write has actually

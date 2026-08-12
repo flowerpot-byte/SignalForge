@@ -64,6 +64,45 @@ test('a wrongly typed stored value falls back to the default', () => {
   assert.equal(s.get('language'), DEFAULT_SETTINGS.language);
 });
 
+// Finding 1 (recent-colours review, 12.08.): the swatch feature shipped with
+// recentColors missing from SETTING_TYPES entirely — every set() threw
+// "unknown setting" and the loader silently dropped the key, so the whole
+// point of the feature (surviving a restart) was dead, and no test noticed
+// because none drove this store with the real key. These four do.
+test('recentColors round-trips through a reload', async () => {
+  const io = fake(null);
+  await createSettings(io).set('recentColors', ['#112233', '#aabbcc']);
+  assert.deepEqual(createSettings(io).get('recentColors'), ['#112233', '#aabbcc']);
+});
+
+test('recentColors starts out empty', () => {
+  assert.deepEqual(createSettings(fake(null)).get('recentColors'), []);
+});
+
+test('a hand-edited recentColors that is not a dense list of colours is dropped on load', () => {
+  for (const junk of [
+    '{"recentColors": {"0": "#112233"}}',
+    '{"recentColors": ["#112233", "red"]}',
+    '{"recentColors": ["#112233", "#AABBCC"]}',
+    '{"recentColors": [null, "#112233"]}',
+    '{"recentColors": ["#112233","#112233","#112233","#112233","#112233","#112233","#112233","#112233","#112233"]}'
+  ]) {
+    const s = createSettings(fake(junk));
+    assert.deepEqual(s.get('recentColors'), [], `should have dropped: ${junk}`);
+  }
+});
+
+test('set refuses a recentColors that is junk — sparse arrays included', async () => {
+  const s = createSettings(fake(null));
+  await assert.rejects(() => s.set('recentColors', 'not a list'), /must be a colours/);
+  await assert.rejects(() => s.set('recentColors', ['#112233', 'junk']), /must be a colours/);
+  // The sparse-array gate: `every` skips holes, so without the density check
+  // seven holes and one valid entry would pass and be written as seven nulls.
+  const sparse = [];
+  sparse[7] = '#112233';
+  await assert.rejects(() => s.set('recentColors', sparse), /must be a colours/);
+});
+
 // Finding 1 (task-4 review): `set()` used to mutate the in-memory `values`
 // object before the write to disk had actually succeeded. If `writeFile`
 // then failed, `get()`/`all()` would go on reporting the new value as saved

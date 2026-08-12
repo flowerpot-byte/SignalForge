@@ -746,7 +746,11 @@ export function mountInspector(container, {
   // the hueCycle note beside `report` below. Optional, like defaultAt and
   // for the same reason: a caller with no preview to hand (the unit tests)
   // simply gets a column whose cycle slider behaves as it always did.
-  previewTime = null
+  previewTime = null,
+  // The keeper of the remembered swatches ({ list, remember } — see
+  // components/recent-colors.js), handed to every colour field. Optional for
+  // the same reason again: without one there is simply no swatch row.
+  recents = null
 }) {
   const SF = window.SignalForgeEngine;
 
@@ -1096,6 +1100,7 @@ export function mountInspector(container, {
         t,
         value,
         onChange: report,
+        recents,
         // Only a slider has a reset, and it is asked at the moment it is
         // pressed rather than now: the answer costs a normalization of the
         // document, and this loop runs for every control in the column. The

@@ -201,7 +201,7 @@ function numberField(field, { t, value, onChange, defaultValue = null }) {
  * `input` fires while the picker is open, so the preview follows the colour as
  * it is being chosen rather than only when the dialog is dismissed.
  */
-function colorField(field, { t, value, onChange }) {
+function colorField(field, { t, value, onChange, recents = null }) {
   const wrapper = row('control control-row');
   const id = fieldId(field.path);
 
@@ -212,6 +212,65 @@ function colorField(field, { t, value, onChange }) {
   input.addEventListener('input', () => onChange(field.path, input.value));
 
   wrapper.append(labelFor(id, t(field.labelKey)), input);
+
+  // The remembered swatches, when a keeper of them was handed over (see
+  // components/recent-colors.js for the list's arithmetic and app/main.js
+  // for its persistence). Two moments feed the list and one reads it:
+  //
+  //  - the picker CLOSING ('change') is when a colour counts as used — the
+  //    'input' stream while it is open is every shade the pointer crosses,
+  //    and remembering those would fill all eight slots with one drag;
+  //  - a swatch being pressed re-remembers that colour (it moves back to the
+  //    front) and hands it to the document through the input's own 'input'
+  //    path, so the readout, the document and the unsaved mark all move
+  //    exactly as if the picker had chosen it.
+  //
+  // The row redraws itself on both; sibling colour fields pick the new list
+  // up when the column next rebuilds, which is the next structural change —
+  // a staleness of minutes that costs nothing, against cross-field wiring
+  // that would cost real complexity.
+  if (recents) {
+    const swatches = document.createElement('div');
+    swatches.className = 'recent-colours';
+    swatches.id = `${id}-recents`;
+
+    const redraw = () => {
+      const colours = recents.list();
+      swatches.replaceChildren();
+      if (!colours.length) {
+        swatches.setAttribute('hidden', '');
+        return;
+      }
+      swatches.removeAttribute('hidden');
+      for (const colour of colours) {
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.className = 'recent-colour';
+        // The colour IS the button face. A document/settings value, not a
+        // palette of the window's own — the rule test/app/color-literals
+        // keeps is about colours this code names, and this code names none.
+        swatch.style.setProperty('--swatch', colour);
+        swatch.title = `${t('inspector.recentColour')}: ${colour}`;
+        swatch.setAttribute('aria-label', `${t('inspector.recentColour')}: ${colour}`);
+        swatch.addEventListener('click', () => {
+          input.value = colour;
+          input.dispatchEvent(new Event('input'));
+          recents.remember(colour);
+          redraw();
+        });
+        swatches.append(swatch);
+      }
+    };
+
+    input.addEventListener('change', () => {
+      recents.remember(input.value);
+      redraw();
+    });
+
+    redraw();
+    wrapper.append(swatches);
+  }
+
   return wrapper;
 }
 

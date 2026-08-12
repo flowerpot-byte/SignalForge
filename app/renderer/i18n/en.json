@@ -95,6 +95,7 @@
   "inspector.aspect": "Aspect fix",
   "inspector.cycleSpeed": "Cycle tempo",
   "inspector.cycleColour": "Cycle colour",
+  "inspector.recentColour": "Recently used",
   "inspector.addCycleColour": "Add cycle colour",
   "inspector.section.background": "Background",
   "inspector.background": "Background",

@@ -124,7 +124,13 @@ function currentTarget() {
  * `lastProjectFolder` only by rememberProjectFolder (from the path a file
  * dialog returned), both of them here in the main process.
  */
-const RENDERER_SETTINGS = new Set(['language']);
+// Which settings the window may WRITE; what a legal value looks like is the
+// settings store's own one rule (SETTING_TYPES/CHECKS in
+// src/main/settings.js — set() refuses junk for the renderer-writable keys
+// exactly as it refuses it for anything else). recentColors joined language
+// here because it names no file: a list of colour swatches is the window's
+// own business, unlike the two folder paths this allowlist exists to protect.
+const RENDERER_SETTINGS = new Set(['language', 'recentColors']);
 
 ipcMain.handle('sf:version', () => app.getVersion());
 ipcMain.handle('sf:settings:all', () => settings.all());

@@ -95,6 +95,7 @@
   "inspector.aspect": "Breiten-Ausgleich",
   "inspector.cycleSpeed": "Wechseltempo",
   "inspector.cycleColour": "Wechselfarbe",
+  "inspector.recentColour": "Zuletzt benutzt",
   "inspector.addCycleColour": "Wechselfarbe hinzufügen",
   "inspector.section.background": "Hintergrund",
   "inspector.background": "Hintergrund",

@@ -12,6 +12,7 @@ import { mountFirstRun } from './components/firstrun.js';
 import { mountGallery } from './components/gallery.js';
 import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
+import { rememberColor, isRecentColor } from './components/recent-colors.js';
 import { enter } from './components/motion.js';
 import { decodeAsset as decodeImage } from './components/decode.js';
 // Pure arithmetic over the document's own layer list, the same kind of import
@@ -395,9 +396,32 @@ async function boot() {
     announce: (message) => { cropAnnouncement.textContent = message; }
   });
 
+  // The remembered swatches under every colour input. The list's arithmetic
+  // is components/recent-colors.js; what is here is only its keeping — the
+  // working copy seeded once from the settings the window already loaded,
+  // and every change written back through remember(), the same road the
+  // language switch takes, so a write that fails shows the one visible
+  // settings line instead of vanishing into the console. The working copy is
+  // updated regardless: the colour stays remembered for this session even
+  // when the disk said no.
+  let recentColors = Array.isArray(settings.recentColors)
+    ? settings.recentColors.filter(isRecentColor)
+    : [];
+  const recents = {
+    list: () => recentColors,
+    remember(color) {
+      const next = rememberColor(recentColors, color);
+      if (next.length === recentColors.length
+        && next.every((entry, index) => entry === recentColors[index])) return;
+      recentColors = next;
+      remember('recentColors', next);
+    }
+  };
+
   const inspector = mountInspector(regions.inspector, {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
+    recents,
     // The effect time of the frame on screen, for the one control whose
     // change must not move the picture: the Farbwechsel tempo re-parks the
     // hue at this very moment's angle (see the hueCycle note in

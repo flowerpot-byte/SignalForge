@@ -1009,6 +1009,35 @@ html, body {
 }
 .control-row > select { grid-column: 2; justify-self: end; max-width: 100%; }
 
+/* The remembered swatches under a colour input: a third row of the control's
+   own grid, spanning both columns. Each face IS the remembered colour (the
+   --swatch custom property, set from the settings value — no colour is named
+   here); the border is what keeps a swatch the colour of the page's own
+   surface visible as a thing to press. */
+.recent-colours {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+.recent-colour {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: var(--swatch);
+  cursor: pointer;
+  transition: transform var(--motion-press) var(--ease-out),
+              border-color var(--motion-press) var(--ease-out);
+}
+.recent-colour:hover { border-color: var(--text-muted); }
+.recent-colour:active { transform: scale(0.92); }
+.recent-colour:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
 /* One motion: the kind it is, and the two sliders that steer it, in one card.
    Two motions produce two of these, and that is right — they are the same kind
    of thing, told apart by their own legend and by the kind each is set to. */
