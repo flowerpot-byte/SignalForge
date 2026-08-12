@@ -79,7 +79,7 @@ export function effectFileName(name) {
  * a hidden window fetching a path a document named is a different kind of
  * problem altogether.
  */
-function withoutFileAssets(doc) {
+export function withoutFileAssets(doc) {
   const assets = doc.assets && typeof doc.assets === 'object' ? doc.assets : {};
   return {
     ...doc,

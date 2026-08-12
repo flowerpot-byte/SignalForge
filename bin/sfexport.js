@@ -11,6 +11,7 @@ import { effectControls } from '../src/export/effect-controls.js';
 import { findEffectsFolders } from '../src/main/effects-folder.js';
 import { prepareImageFile } from '../src/main/prepare-image.js';
 import { renderCoverPng } from '../src/main/cover-image.js';
+import { withoutFileAssets } from '../src/main/export-effect.js';
 import { writeFileAtomic } from '../src/main/write-file-atomic.js';
 import {
   MOTION_KINDS, FIT_MODES, GRADIENT_SHAPES, MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS,
@@ -364,7 +365,13 @@ async function main() {
   const coverTarget = join(folder, `${name}.png`);
   let cover = null;
   try {
-    cover = await renderCoverPng(doc);
+    // The same stripping the app's export applies before ITS cover render:
+    // a hand-written --project can name file-shaped assets, and the hidden
+    // render window must never be handed a URL to fetch — for a layer or
+    // for the cover. What the strip orphans, the script's own re-normalize
+    // recovers from (a cover pointing at a removed asset falls back to the
+    // automatic tile).
+    cover = await renderCoverPng(withoutFileAssets(doc));
   } catch (error) {
     console.error(`No cover image: ${String(error.message || error)}`);
     console.error('The effect itself is unaffected; SignalRGB will show its usual placeholder tile.');

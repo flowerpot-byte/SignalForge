@@ -8,6 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { COVER_WIDTH, COVER_HEIGHT, renderCoverPng } from '../../src/main/cover-image.js';
+import { withoutFileAssets } from '../../src/main/export-effect.js';
 import { runJobs } from '../harness/render.js';
 import { pixelAt, maxDifference } from '../harness/pixels.js';
 
@@ -109,6 +110,21 @@ test('a chosen cover becomes the tile, and no cover keeps the automatic render',
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('a file-shaped cover is stripped before the render window ever sees it', async () => {
+  // The CLI's --project route reads raw JSON, so a hand-written document can
+  // name a cover asset by URL. withoutFileAssets (the same strip the app's
+  // export applies) must orphan it, and the script's own re-normalize must
+  // then land on the automatic tile — the hidden window fetches nothing.
+  const stripped = withoutFileAssets(coverDoc({
+    cover: 'net',
+    assets: { net: { kind: 'image', mime: 'image/png', file: 'http://127.0.0.1:1/x.png' } }
+  }));
+  assert.deepEqual(stripped.assets, {}, 'a file-shaped asset must not survive the strip');
+  const { doc, problems } = normalizeDocument(stripped);
+  assert.equal(doc.cover, null, 'the orphaned cover falls back to automatic');
+  assert.equal(problems.length, 1);
 });
 
 test('a cover whose asset cannot be decoded falls back to the automatic tile', async () => {
