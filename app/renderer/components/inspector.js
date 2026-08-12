@@ -282,6 +282,20 @@ function fillFields(layer, at, section, R) {
       path: `${at}.cycleSpeed`, type: 'number', section,
       labelKey: 'inspector.cycleSpeed', ...R.cycleTempo
     });
+    // The colours appear WITH the cycle and not before it.
+    //
+    // Reported 12.08.2026: the palette knobs were turned in SignalRGB and
+    // nothing happened. Nothing was broken — cyclePaint returns the resting
+    // colour while the tempo is 0 and never reads the palette
+    // (src/engine/motion/color-cycle.js) — but a knob that quietly does
+    // nothing is indistinguishable from a knob that is broken, and the person
+    // it happened to is the one who wrote the engine.
+    //
+    // The tempo slider is directly above, so the way to make them appear is
+    // the same gesture that makes them mean something. The export follows the
+    // same rule (src/export/effect-controls.js), which is what keeps the panel
+    // and this column saying the same thing.
+    if (!(Number(layer.cycleSpeed) > 0)) return;
     // The cards carry the cycle's OWN words — "Wechselfarbe", the same name
     // the exported controls already use — rather than inheriting the
     // gradient's "Farbstopp": there is no ramp here and nothing for a stop to

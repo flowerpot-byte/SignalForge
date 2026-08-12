@@ -46,16 +46,34 @@ const pathsOf = (layer) => fieldsOf(layer).map((field) => field.path);
 
 test('a solid layer offers one colour, its motions and the document colours', () => {
   const fields = fieldsOf({ type: 'solid' });
-  // The resting colour, then the cycle: its tempo, the stop list itself
-  // (path = the layer, exactly like the gradient's) and one colour per stop.
+  // The resting colour and the cycle's TEMPO. No palette: the cycle is off at
+  // tempo 0, and a colour that cannot reach the picture is not offered — see
+  // the next test for the moment it appears.
   assert.deepEqual(fields.filter((f) => f.section === 'fill').map((f) => f.path), [
-    'layers.0.color', 'layers.0.cycleSpeed', 'layers.0',
-    'layers.0.stops.0.color', 'layers.0.stops.1.color'
+    'layers.0.color', 'layers.0.cycleSpeed'
   ]);
   assert.equal(fields.find((f) => f.path === 'layers.0.color').type, 'color');
   // No picture means no "Bild" section at all — not an empty one.
   assert.equal(fields.filter((f) => f.section === 'image').length, 0);
   assert.ok(fields.some((f) => f.section === 'colour'));
+});
+
+test('the cycle colours appear with the cycle, and only then', () => {
+  // The bug this rule comes from (12.08.2026): the palette knobs were turned
+  // in SignalRGB and nothing happened, because cyclePaint never reads the
+  // palette while the tempo is 0. Nothing was broken; a knob that cannot move
+  // a pixel was simply on offer. Now the gesture that gives them meaning is
+  // the same gesture that shows them.
+  const off = fieldsOf({ type: 'solid', cycleSpeed: 0 })
+    .filter((f) => f.section === 'fill').map((f) => f.path);
+  assert.deepEqual(off, ['layers.0.color', 'layers.0.cycleSpeed']);
+
+  const on = fieldsOf({ type: 'solid', cycleSpeed: 30 })
+    .filter((f) => f.section === 'fill').map((f) => f.path);
+  assert.deepEqual(on, [
+    'layers.0.color', 'layers.0.cycleSpeed', 'layers.0',
+    'layers.0.stops.0.color', 'layers.0.stops.1.color'
+  ], 'tempo above zero brings the stop list and one colour per stop');
 });
 
 test('a solid layer is offered only the motions a flat colour can perform', () => {

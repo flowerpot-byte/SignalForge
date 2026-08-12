@@ -372,19 +372,35 @@ export function effectControls(doc, layerId, backgroundId = null) {
    * control's property becomes a global in the finished effect, and the
    * gradient's and the particles' stop colours already answer to `colorN`.
    * The tempo is offered whatever it currently is — 0 included — because it
-   * is the on switch, and the colours are offered even at tempo 0 for the
-   * reason the gradient's angle is offered on a radial: the switch sits in
-   * this very panel, and a colour that only appeared once the cycle ran
-   * would leave somebody who turned it on with no way to say what it cycles
-   * through.
+   * is the on switch.
+   *
+   * THE COLOURS ARE ONLY OFFERED WHEN THE CYCLE IS ACTUALLY RUNNING, and this
+   * paragraph used to argue the opposite. The old reasoning was that the
+   * switch sits in this same panel, so somebody who turns the cycle on should
+   * find colours to set. It reads well and it cost a real afternoon: reported
+   * 12.08.2026, the palette knobs were turned in SignalRGB and nothing
+   * happened at all, because cyclePaint returns the resting colour while the
+   * tempo is 0 and never looks at the palette
+   * (src/engine/motion/color-cycle.js). A panel that offers a knob which
+   * cannot move a pixel is worse than a panel that offers one knob fewer —
+   * the person turning it has no way to tell "does nothing here" from
+   * "broken", and reasonably assumes the second.
+   *
+   * What the old argument was right about is that the colours must be
+   * settable somewhere. They are: the app's own column shows them the moment
+   * the tempo leaves zero, and an effect exported with a running cycle brings
+   * all of them along. Turning the cycle on inside SignalRGB still works and
+   * still cycles — through the palette the document was saved with.
    */
   const cycleControls = (target, id) => {
     if (!Array.isArray(target.stops)) return;
-    target.stops.forEach((stop, index) => {
-      const at = index + 1;
-      controls.push(colour(`cycleColor${at}`, `Wechselfarbe ${at}`, `Cycle Colour ${at}`,
-        stop.color, `${id}.stops.${index}.color`));
-    });
+    if (Number(target.cycleSpeed) > 0) {
+      target.stops.forEach((stop, index) => {
+        const at = index + 1;
+        controls.push(colour(`cycleColor${at}`, `Wechselfarbe ${at}`, `Cycle Colour ${at}`,
+          stop.color, `${id}.stops.${index}.color`));
+      });
+    }
     controls.push(slider('cycleTempo', 'Wechseltempo', 'Cycle Tempo',
       target.cycleSpeed, `${id}.cycleSpeed`));
   };

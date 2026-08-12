@@ -27,9 +27,12 @@ const docWith = (layer) => normalizeDocument({ name: 'Controls', layers: [{ id: 
 
 test('a solid effect offers its colour, the motions it can perform, and the document colours', () => {
   const doc = withLiveMotion(docWith({ type: 'solid' }), 'a1');
+  // No cycleColor entries: this document's cycle stands still at tempo 0, and
+  // the palette is only offered once it runs (src/export/effect-controls.js —
+  // a knob that cannot move a pixel is not a knob).
   assert.deepEqual(
     effectControls(doc, 'a1').map((control) => control.property),
-    ['color', 'cycleColor1', 'cycleColor2', 'cycleTempo', 'motion', 'tempo', 'strength',
+    ['color', 'cycleTempo', 'motion', 'tempo', 'strength',
       'trail', 'hueShift', 'hueCycle', 'brightness', 'saturation', 'greenMagenta', 'blueYellow']
   );
 });

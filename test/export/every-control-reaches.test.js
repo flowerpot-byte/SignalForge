@@ -120,9 +120,11 @@ function ringOnSolidWithCycle() {
 const CANNOT_MOVE = {
   'star on a gradient': new Map([
     ['thickness', 'a star is filled — there is no wall to thin (the ring shape covers it)'],
-    ['bgBands', 'this background is linear, which repeats once (the stripes case would cover it)'],
-    ['cycleColor1', 'the cycle is off at tempo 0, so the palette is not read (the cycling shape covers it)'],
-    ['cycleColor2', 'the cycle is off at tempo 0, so the palette is not read (the cycling shape covers it)']
+    ['bgBands', 'this background is linear, which repeats once (the stripes case would cover it)']
+    // No cycleColor entries here any more: this document's cycle stands at
+    // tempo 0, and since 12.08. the palette is not offered at all while it
+    // stands. There is nothing to exempt because there is nothing on offer —
+    // which is the whole point of that change.
   ]),
   'ring on a solid, cycling': new Map()
 };

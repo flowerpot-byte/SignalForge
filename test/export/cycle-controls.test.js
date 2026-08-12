@@ -46,7 +46,7 @@ test('a solid offers its cycle colours and the tempo, bound to the layer', () =>
 });
 
 test('a figure offers them too, right after its resting colour', () => {
-  const doc = docWith([{ id: 'f', type: 'shape', figure: 'star' }]);
+  const doc = docWith([{ id: 'f', type: 'shape', figure: 'star', cycleSpeed: 40 }]);
   const names = effectControls(doc, 'f').map((control) => control.property);
   const colourAt = names.indexOf('color');
   const cycleAt = names.indexOf('cycleColor1');
@@ -55,6 +55,19 @@ test('a figure offers them too, right after its resting colour', () => {
   assert.ok(colourAt !== -1 && cycleAt !== -1 && tempoAt !== -1, names.join(', '));
   assert.ok(colourAt < cycleAt && cycleAt < tempoAt && tempoAt < figureAt,
     `the cycle sits between the colour and the figure: ${names.join(', ')}`);
+});
+
+test('a standing cycle offers its tempo and NOT its colours', () => {
+  // Where the report of 12.08.2026 landed. cyclePaint returns the resting
+  // colour while the tempo is 0 and never reads the palette, so palette knobs
+  // in the panel could not move a single pixel — indistinguishable, from the
+  // outside, from knobs that are broken. The tempo stays: it is the on switch,
+  // and it works.
+  const doc = docWith([{ id: 'f', type: 'shape', figure: 'star', cycleSpeed: 0 }]);
+  const names = effectControls(doc, 'f').map((control) => control.property);
+  assert.ok(names.includes('cycleTempo'), `the on switch must stay: ${names.join(', ')}`);
+  assert.deepEqual(names.filter((name) => name.startsWith('cycleColor')), [],
+    `a standing cycle must offer no palette: ${names.join(', ')}`);
 });
 
 test('a gradient and a swarm are untouched — their stops already have names', () => {
