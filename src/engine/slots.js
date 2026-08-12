@@ -220,6 +220,84 @@ export function withBackgroundKind(layers, kind) {
   return [{ id: freeId(list), type: kind, motions: [] }, ...list];
 }
 
+// ===========================================================================
+// THE LAYER STACK — Bauplan 3's arithmetic, and only its arithmetic
+// ===========================================================================
+//
+// Everything the layer list can DO to a document, as pure array operations:
+// which layers it shows, and what the stack becomes when one is added, moved
+// or removed. The list itself (cards, buttons, selection) is the window's;
+// the selection especially is renderer STATE and never a document field —
+// which layer somebody is looking at is not part of what the effect is.
+//
+// The background slot stays exactly what it has always been, and every
+// operation here treats it by the same reading withBackgroundKind settled on:
+// backgroundKindOf, not backgroundOf. A hand-written document whose first
+// layer is a picture has NO background — that picture is simply the bottom of
+// the stack, which also, at last, gives the "middle layer" the top of this
+// file admits to having no words for a card of its own.
+
+/**
+ * The layers the stack shows, bottom first — everything above the background
+ * slot, or everything there is when nothing holds that slot.
+ */
+export function foregroundLayersOf(layers) {
+  const list = Array.isArray(layers) ? layers : [];
+  return backgroundKindOf(list) !== 'none' ? list.slice(1) : [...list];
+}
+
+/** Where the stack begins in the document's own array. */
+function stackStart(list) {
+  return backgroundKindOf(list) !== 'none' ? 1 : 0;
+}
+
+/**
+ * The same layers with `id` moved one step through the stack. `direction` is
+ * +1 towards the foreground (drawn later, shown higher) and -1 towards the
+ * background. A step that would leave the stack — past the top, into the
+ * background slot — hands the list back untouched, exactly as
+ * withBackgroundKind answers a request that means nothing.
+ */
+export function movedLayer(layers, id, direction) {
+  const list = Array.isArray(layers) ? [...layers] : [];
+  const at = list.findIndex((layer) => layer && layer.id === id);
+  const to = at + (direction > 0 ? 1 : -1);
+  if (at < stackStart(list) || to < stackStart(list) || to >= list.length) return list;
+  [list[at], list[to]] = [list[to], list[at]];
+  return list;
+}
+
+/**
+ * The same layers without `id` — for a layer of the STACK. The background
+ * slot is withBackgroundKind's to empty (one responsibility each), and the
+ * last stack layer stays: a document whose only remaining layer was removed
+ * would promote the background to foreground by pure position, silently
+ * changing what every slot word means.
+ */
+export function withoutLayer(layers, id) {
+  const list = Array.isArray(layers) ? [...layers] : [];
+  const at = list.findIndex((layer) => layer && layer.id === id);
+  if (at < stackStart(list)) return list;
+  if (list.length - stackStart(list) <= 1) return list;
+  list.splice(at, 1);
+  return list;
+}
+
+/**
+ * The same layers with a fresh layer of `type` on top of the stack. The id
+ * follows freeId's own convention ("<type>", then "<type>-2", climbing), and
+ * the layer names nothing but its type — normalizeDocument fills in every
+ * field, exactly as withBackgroundKind's new background lets it.
+ */
+export function withAddedLayer(layers, type) {
+  const list = Array.isArray(layers) ? [...layers] : [];
+  const taken = new Set(list.map((layer) => (layer && typeof layer === 'object' ? layer.id : null)));
+  let id = type;
+  let n = 2;
+  while (taken.has(id)) { id = `${type}-${n}`; n += 1; }
+  return [...list, { id, type, motions: [] }];
+}
+
 /**
  * The foreground types that leave ground for a background to be seen on.
  *
