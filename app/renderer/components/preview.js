@@ -156,6 +156,12 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
   // stage it would have been invisible to them, and a stretched picture would
   // have run wider than its own caption's rule (the exact "hairline over
   // nothing" fault the --content-width note in app.css records as fixed).
+  // The moment (in effect seconds) the frame on screen was rendered at — what
+  // the settings column needs to keep the hue angle steady when the cycle
+  // tempo changes (see rebasedHueShift in src/engine/motion/hue.js). 0 until
+  // the first frame, which is also the moment nothing has turned yet.
+  let shownTime = 0;
+
   let shownAspect = 0;
   function followAspect() {
     const aspect = SF.aspectFactorOf(doc);
@@ -210,7 +216,8 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
 
     followAspect();
     const began = performance.now();
-    renderer.render(ctx, doc, assets, (stamp - start) / 1000);
+    shownTime = (stamp - start) / 1000;
+    renderer.render(ctx, doc, assets, shownTime);
     samples.push(performance.now() - began);
     if (samples.length > COST_WINDOW) samples.shift();
 
@@ -279,6 +286,22 @@ export function createPreview(container, t, requestFrame = (cb) => window.reques
      * writes goes through the engine's own setByPath for exactly that reason.
      */
     document() { return doc; },
+    /**
+     * The effect time of the frame currently on screen, in seconds — the `t`
+     * the settings column hands to rebasedHueShift so that changing the
+     * cycle's tempo re-parks the hue at exactly the angle the person is
+     * looking at.
+     *
+     * Deliberately NOT interpolated forwards, and the honest price of that,
+     * measured: the answer is up to one frame (33 ms) old, so the re-parked
+     * angle can land up to ~8 degrees off at the fastest cycle (240.6°/s at
+     * tempo 100), ~2-3 at everyday tempos, 0 at rest — against the up to
+     * 180 the fix removes. Estimating the next frame's time from the wall
+     * clock would shave that off but would put a wall-clock read into the
+     * one component whose whole neighbourhood is built on not having one;
+     * take that trade only if the residue is ever actually seen.
+     */
+    currentTime() { return shownTime; },
     /**
      * Move one image layer's crop window, in place.
      *

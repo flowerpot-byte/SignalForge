@@ -78,7 +78,7 @@ export {
   createRenderer, loadAssets, trailAlpha, TRAIL_STRONGEST_VEIL, TRAIL_WEAKEST_VEIL
 } from './engine.js';
 export { adjustColor, isNeutral, NEUTRAL_COLOR, hueCoefficients } from './color.js';
-export { hueDegrees } from './motion/hue.js';
+export { hueDegrees, rebasedHueShift } from './motion/hue.js';
 export { LAYER_RENDERERS, registerLayer } from './layers/index.js';
 export { computeSourceRect } from './util/fit.js';
 export { createWarpField, WARP_PEAK_FACTOR } from './motion/warp.js';

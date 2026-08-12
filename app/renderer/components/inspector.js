@@ -703,7 +703,14 @@ export function widenToInclude(field, value) {
  * the document's first one.
  */
 export function mountInspector(container, {
-  getDocument, onChange, t, onError, defaultAt = null
+  getDocument, onChange, t, onError, defaultAt = null,
+  // The effect time of the frame on screen (components/preview.js's
+  // currentTime), asked at the moment the Farbwechsel tempo changes so the
+  // hue can be re-parked at the very angle the person is looking at — see
+  // the hueCycle note beside `report` below. Optional, like defaultAt and
+  // for the same reason: a caller with no preview to hand (the unit tests)
+  // simply gets a column whose cycle slider behaves as it always did.
+  previewTime = null
 }) {
   const SF = window.SignalForgeEngine;
 
@@ -917,6 +924,35 @@ export function mountInspector(container, {
       return box;
     };
 
+    /** The first range input inside a built field, in real DOM and fake alike. */
+    const rangeOf = (element) => {
+      if (!element) return null;
+      if (String(element.tagName ?? '').toLowerCase() === 'input' && element.type === 'range') {
+        return element;
+      }
+      for (const kid of element.children ?? []) {
+        const found = rangeOf(kid);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    // The hueShift slider of THIS build, remembered as it is built (hueShift
+    // sits before hueCycle in DOCUMENT_FIELDS, so it exists by the time the
+    // cycle's first change can arrive) — the hueCycle handler below re-parks
+    // it. Per build rather than looked up by id, so a rebuild can never leave
+    // this pointing at a control that is no longer in the document.
+    let hueShiftSlider = null;
+    // The unrounded shift the re-parking chain is really standing at. The
+    // document and the slider carry the rounded display value; a drag rebases
+    // once per input tick FROM THE PREVIOUS TICK'S RESULT, and a chain of
+    // rounded steps was measured drifting by up to 177 degrees (see
+    // rebasedHueShift in src/engine/motion/hue.js). Reset per build like the
+    // slider itself; checked against the document before every use, because
+    // an exact figure whose rounding the document no longer shows describes a
+    // value somebody has since replaced.
+    let hueShiftExact = null;
+
     for (const field of fields) {
       if (field.section !== sectionName) {
         closeList();
@@ -941,6 +977,34 @@ export function mountInspector(container, {
 
       const value = SF.getByPath(doc, field.path);
       const report = (path, next) => {
+        // The one control whose change is answered by moving a SECOND control
+        // first: a new cycle tempo re-prices the whole elapsed time at the
+        // new speed, so with nothing else moving the colour JUMPS (Max,
+        // 12.08.2026). Re-park hueShift at the angle the person is looking at
+        // — rebasedHueShift in src/engine/motion/hue.js holds the arithmetic
+        // and the reasoning — BEFORE the cycle is written, while the document
+        // still says what the old tempo was. The slider is set and its own
+        // 'input' event dispatched, so the write, the readout, the painted
+        // fill and markChanged all travel the one path every change takes;
+        // report() below then writes the cycle itself. Skipped when the
+        // re-parked value is the one already showing (a cycle change at t=0
+        // turns nothing), and entirely absent without a preview to ask.
+        if (path === 'hueCycle' && previewTime && hueShiftSlider) {
+          const live = getDocument();
+          const base = hueShiftExact !== null
+            && Math.round(hueShiftExact) % 360 === Number(live.hueShift)
+            ? hueShiftExact
+            : live.hueShift;
+          const exact = SF.rebasedHueShift(base, live.hueCycle, next, previewTime());
+          hueShiftExact = exact;
+          // Rounded ONCE, for the step-1 slider and the document it writes —
+          // the chain above keeps the exact figure.
+          const shown = Math.round(exact) % 360;
+          if (shown !== Number(hueShiftSlider.value)) {
+            hueShiftSlider.value = String(shown);
+            hueShiftSlider.dispatchEvent(new Event('input'));
+          }
+        }
         const result = onChange(path, next);
         // A slider must never pull the ground out from under the drag it is in
         // the middle of, and neither must a colour picker: the native one
@@ -984,6 +1048,7 @@ export function mountInspector(container, {
           : null
       });
       if (!element) continue;
+      if (field.path === 'hueShift') hueShiftSlider = rangeOf(element);
 
       // An entry of a repeating list is one card: for a motion, the dropdown
       // that says what kind it is and the two sliders that steer it; for a

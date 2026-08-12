@@ -398,6 +398,11 @@ async function boot() {
   const inspector = mountInspector(regions.inspector, {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
+    // The effect time of the frame on screen, for the one control whose
+    // change must not move the picture: the Farbwechsel tempo re-parks the
+    // hue at this very moment's angle (see the hueCycle note in
+    // mountInspector, and rebasedHueShift in src/engine/motion/hue.js).
+    previewTime: () => preview.currentTime(),
     /**
      * What a fresh document would carry at one field's path — which is what
      * every slider's reset button puts it back to.
