@@ -1065,6 +1065,11 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* The sheet's base button rule is inline-flex with centred content, where
+     text-align does nothing — without this the card's word floats to the
+     middle of its stretched button (photographed doing it: the first
+     walkthrough shot of the stack had "Bild" adrift mid-card). */
+  justify-content: flex-start;
   text-align: left;
   padding: 4px 8px;
   font-size: 12px;
