@@ -237,9 +237,24 @@ async function phaseOne(win, state) {
   p['1'] = { name: 'start fresh, switch the language to English and back', shots: [] };
 
   // --- 1. language --------------------------------------------------------
+  // Every section heading in the column, keyed by the section's own name.
+  //
+  // It used to be one heading, found as "the first .field-group > h2" — and
+  // that broke the moment the column's sections were reordered, reporting a
+  // language failure for a language switch that had worked perfectly (the
+  // first heading was simply Motions now, not Colour). A section's identity is
+  // its `data-section`, which inspector.js sets and which does not move; the
+  // position of a heading in a column is not an identity at all.
+  //
+  // Reading all of them at once is also strictly more than the old check saw:
+  // whatever sections the current document puts up, every one of their names
+  // is now on the record in both languages.
   const words = () => d.js(`({
     settings: document.getElementById('footer-settings').getAttribute('aria-label'),
-    section: document.querySelector('#inspector-body .field-group > h2').textContent,
+    sections: Object.fromEntries(
+      Array.from(document.querySelectorAll('#inspector-body .field-group'))
+        .map((group) => [group.dataset.section, group.querySelector('h2 span').textContent])
+    ),
     exportButton: document.getElementById('footer-export').textContent,
     brightness: document.querySelector('label[for="sf-brightness"]').textContent,
     hint: document.getElementById('preview-empty-title').textContent,
@@ -266,12 +281,24 @@ async function phaseOne(win, state) {
   p['1'].backInGerman = await words();
   p['1'].shots.push(await d.shot('p1-c-german-again'));
   p['1'].storedAfterwards = await d.js(`window.sf.settings.all().then((s) => s.language)`);
+
+  // Not one heading but all of them, and the same list on both sides: a
+  // section that quietly stopped being translated would keep its German word
+  // in the English reading, which is exactly what this catches.
+  const sectionNames = Object.keys(p['1'].inEnglish.sections);
+  p['1'].sectionsSeen = sectionNames;
+  p['1'].everySectionTranslated = sectionNames.length > 0 && sectionNames.every(
+    (name) => p['1'].inEnglish.sections[name] !== p['1'].backInGerman.sections[name]
+  );
   p['1'].result =
     p['1'].inEnglish.settings === 'Settings' &&
-    p['1'].inEnglish.section === 'Colour' &&
+    p['1'].inEnglish.sections.motions === 'Motions' &&
+    p['1'].inEnglish.sections.colour === 'Colour' &&
     p['1'].inEnglish.brightness === 'Brightness' &&
     p['1'].backInGerman.settings === 'Einstellungen' &&
-    p['1'].backInGerman.section === 'Farbe' &&
+    p['1'].backInGerman.sections.motions === 'Bewegungen' &&
+    p['1'].backInGerman.sections.colour === 'Farbe' &&
+    p['1'].everySectionTranslated &&
     p['1'].storedAfterwards === 'de' ? 'pass' : 'fail';
 
   // --- 2. drag a picture in ----------------------------------------------
@@ -587,27 +614,73 @@ async function phaseOne(win, state) {
     name: 'operate it with the keyboard alone - focus visible everywhere, and the crop movable?',
     shots: []
   };
-  await d.js(`document.getElementById('footer-name').focus()`);
+  // ONE WHOLE CYCLE, NOT A FIXED NUMBER OF PRESSES.
+  //
+  // This used to press Tab eighteen times, which was one full round of the
+  // window it was written against. It is not any more: the tile rail alone is
+  // twelve stops now, and eighteen presses got as far as the last tile and
+  // stopped — so the settings column was never reached and the check reported
+  // that a text field and a dropdown could not be tabbed to, in a window where
+  // both plainly can be.
+  //
+  // A magic number was the wrong instrument for the same reason a magic
+  // position was in point 1: it encodes what the window happened to contain on
+  // the day it was written. Tabbing until focus comes back to where it started
+  // asks the real question — "is the whole window reachable, and does every
+  // stop of the whole round show its ring" — and it keeps answering it as
+  // controls are added and removed. The cap is a runaway guard, not an
+  // expectation; a window that never comes back round is itself a failure.
+  //
+  // `visibleInScroller` is here because of the rail: a stop that is focusable
+  // but sitting outside its own scroll container is not reachable in any sense
+  // a person would accept, and tiles 11 and 12 are past the right-hand edge at
+  // this window size until focus scrolls them in.
+  const CYCLE_CAP = 80;
+  const startedAt = 'footer-name';
+  await d.js(`document.getElementById(${JSON.stringify(startedAt)}).focus()`);
+  const readStop = () => d.js(`(() => {
+    const a = document.activeElement;
+    const visible = document.querySelector(':focus-visible');
+    if (!a) return { id: null, tag: null, focusRingShown: false, outline: null };
+    const scroller = a.closest('#gallery-rail, #gallery-library, #inspector');
+    let visibleInScroller = true;
+    if (scroller) {
+      const box = a.getBoundingClientRect();
+      const frame = scroller.getBoundingClientRect();
+      visibleInScroller = box.right > frame.left + 1 && box.left < frame.right - 1
+        && box.bottom > frame.top + 1 && box.top < frame.bottom - 1;
+    }
+    return {
+      id: a.id || null,
+      tag: a.tagName.toLowerCase(),
+      focusRingShown: visible === a,
+      outline: getComputedStyle(a).outlineWidth,
+      scroller: scroller ? scroller.id : null,
+      visibleInScroller
+    };
+  })()`);
+
   const stops = [];
-  for (let i = 0; i < 18; i += 1) {
+  let cameBackRound = false;
+  for (let i = 0; i < CYCLE_CAP && !cameBackRound; i += 1) {
     await d.key('Tab', 'Tab', 9);
-    stops.push(await d.js(`(() => {
-      const a = document.activeElement;
-      const visible = document.querySelector(':focus-visible');
-      return {
-        id: a ? a.id : null,
-        tag: a ? a.tagName.toLowerCase() : null,
-        focusRingShown: visible === a,
-        outline: a ? getComputedStyle(a).outlineWidth : null
-      };
-    })()`));
+    const stop = await readStop();
+    stops.push(stop);
     if (i === 2) p['11'].shots.push(await d.shot('p11-a-focus-ring'));
+    cameBackRound = stop.id === startedAt;
   }
   p['11'].stops = stops;
+  p['11'].tabPressesForOneCycle = stops.length;
+  p['11'].cameBackRound = cameBackRound;
   p['11'].everyStopShowsTheRing = stops.every((s) => s.focusRingShown);
+  p['11'].everyStopScrolledIntoView = stops.every((s) => s.visibleInScroller);
   p['11'].reachedEveryKind = ['input', 'select', 'button'].every(
     (tag) => stops.some((s) => s.tag === tag)
   );
+  // The tile rail, called out on its own: the eleventh and twelfth tiles are
+  // the ones past the right-hand edge, and reaching them by keyboard at all
+  // was an open question until this run.
+  p['11'].tilesReachedByTab = stops.filter((s) => s.scroller === 'gallery-rail').map((s) => s.id);
 
   // And a control actually operated from the keyboard, not merely focused.
   await d.js(`document.getElementById('sf-brightness').focus()`);
@@ -742,6 +815,7 @@ async function phaseOne(win, state) {
   await slider('sf-layers-0-motions-1-amount', 100);
 
   p['11'].result = p['11'].everyStopShowsTheRing && p['11'].reachedEveryKind
+    && p['11'].cameBackRound && p['11'].everyStopScrolledIntoView
     && Number(afterKeys) === Number(beforeKeys) - 5
     && p['11'].nameFieldStillTakesArrows
     && p['11'].canvasReachedByTab && p['11'].canvas.focusRingShown
@@ -995,6 +1069,23 @@ runHarness('walkthrough', async () => {
     report.ok = false;
     report.error = String(error.stack || error);
     process.stderr.write(`${report.error}\n`);
+  }
+
+  // A POINT THAT SAID "fail" USED TO COST NOTHING.
+  //
+  // `ok` was set purely by whether the run threw, so a walkthrough that
+  // completed with two of its eleven points reporting `result: 'fail'` printed
+  // "finished" and exited 0. The only thing standing between that and a green
+  // run nobody questions was a human opening report-N.json and reading it. The
+  // note four lines below has always said a failing walkthrough must exit
+  // non-zero; this is what makes it true.
+  report.failedPoints = Object.entries(report.points)
+    .filter(([, point]) => point.result === 'fail')
+    .map(([number]) => number)
+    .sort((a, b) => Number(a) - Number(b));
+  if (report.failedPoints.length > 0) {
+    report.ok = false;
+    process.stderr.write(`walkthrough points failed: ${report.failedPoints.join(', ')}\n`);
   }
 
   writeFileSync(join(OUT, `report-${PHASE}.json`), JSON.stringify(report, null, 2), 'utf8');
