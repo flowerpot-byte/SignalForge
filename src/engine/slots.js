@@ -128,21 +128,31 @@ export function foregroundOf(layers) {
 /**
  * The background underneath it, or null.
  *
- * Two layers or more means the first one is the background. One layer is the
- * foreground alone — which is what every document this app has ever written
- * before now looks like, so an old project opens with no background and the
- * combobox saying "none" without anything having to be stored to say so.
+ * Two layers or more, AND a first layer of a kind the slot can actually hold
+ * — one gate, not two readings. This function used to answer by position
+ * alone (any first layer of any two-layer document), while withBackgroundKind
+ * had already learned the hard way that position alone lies for a
+ * hand-written document whose first layer is a picture (see its note below:
+ * "Kein Hintergrund" DELETED that picture once). Every consumer that asked
+ * the positional question then dressed a picture in background controls the
+ * engine never honoured — review caught export-effect.js doing exactly that.
+ * Now the two readings are one: a first layer that is not a background KIND
+ * is not a background, it is the bottom of the stack (foregroundLayersOf).
+ *
+ * One layer is the foreground alone — which is what every document this app
+ * ever wrote before the slot existed, so an old project opens with no
+ * background without anything having to be stored to say so.
  */
 export function backgroundOf(layers) {
   const list = Array.isArray(layers) ? layers : [];
-  return list.length >= 2 ? list[0] : null;
+  if (list.length < 2) return null;
+  const first = list[0];
+  return first && BACKGROUND_KINDS.includes(first.type) ? first : null;
 }
 
 /** Which entry of BACKGROUND_KINDS the document is currently showing. */
 export function backgroundKindOf(layers) {
-  const background = backgroundOf(layers);
-  if (!background) return 'none';
-  return BACKGROUND_KINDS.includes(background.type) ? background.type : 'none';
+  return backgroundOf(layers)?.type ?? 'none';
 }
 
 /**
@@ -260,8 +270,11 @@ function stackStart(list) {
  */
 export function movedLayer(layers, id, direction) {
   const list = Array.isArray(layers) ? [...layers] : [];
+  // Only the two documented steps ARE steps: a 0 or a NaN out of some future
+  // caller's arithmetic must mean nothing, not quietly mean "down".
+  if (direction !== 1 && direction !== -1) return list;
   const at = list.findIndex((layer) => layer && layer.id === id);
-  const to = at + (direction > 0 ? 1 : -1);
+  const to = at + direction;
   if (at < stackStart(list) || to < stackStart(list) || to >= list.length) return list;
   [list[at], list[to]] = [list[to], list[at]];
   return list;
@@ -288,6 +301,13 @@ export function withoutLayer(layers, id) {
  * follows freeId's own convention ("<type>", then "<type>-2", climbing), and
  * the layer names nothing but its type — normalizeDocument fills in every
  * field, exactly as withBackgroundKind's new background lets it.
+ *
+ * `layers` must come from a NORMALIZED document, like every input in this
+ * file: hand it a list already carrying duplicate ids and normalizeDocument's
+ * own left-to-right rename can afterwards collide with the id chosen here
+ * and move it on ("shape-2" becoming "shape-2-2"). The app never holds an
+ * un-normalized document, so this is a contract stated rather than a branch
+ * defended.
  */
 export function withAddedLayer(layers, type) {
   const list = Array.isArray(layers) ? [...layers] : [];

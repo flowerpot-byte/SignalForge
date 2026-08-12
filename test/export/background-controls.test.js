@@ -188,12 +188,14 @@ test('a background with no motion still gets three live motion controls', () => 
 });
 
 test('a layer type that cannot be a background gets no controls of its own', () => {
-  // A hand-edited document may put anything underneath and the engine will draw
-  // it; what it does not get is a block of knobs this file has no vocabulary
-  // for. The foreground's and the document's own controls are untouched.
+  // A hand-edited document may put anything underneath and the engine will
+  // draw it — but a first layer that is no background KIND is not a
+  // background at all any more, it is the bottom of the stack (backgroundOf
+  // carries the kind gate since the stack arithmetic landed; the earlier
+  // reading dressed this heart in bgMotion/bgTempo/bgStrength knobs bound to
+  // a layer the engine never treated as a background).
   const properties = propertiesOf([{ id: 'behind', type: 'shape', figure: 'heart' }, RAIN]);
-  assert.deepEqual(properties.filter((name) => name.startsWith('bg')),
-    ['bgMotion', 'bgTempo', 'bgStrength'],
-    'only the motions, which every layer with a motions list has');
+  assert.deepEqual(properties.filter((name) => name.startsWith('bg')), [],
+    'no background, no background knobs — the heart is stack, not slot');
   assert.deepEqual(properties.slice(-DOCUMENT_WIDE.length), DOCUMENT_WIDE);
 });

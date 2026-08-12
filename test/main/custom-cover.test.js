@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { COVER_WIDTH, COVER_HEIGHT, renderCoverPng } from '../../src/main/cover-image.js';
 import { withoutFileAssets, exportEffect } from '../../src/main/export-effect.js';
+import { readEffectDocument } from '../../src/main/effect-document.js';
 import { runJobs } from '../harness/render.js';
 import { pixelAt, maxDifference } from '../harness/pixels.js';
 
@@ -166,12 +167,13 @@ test('the whole export: the chosen picture becomes the PNG on disk, and survives
     rmSync(dir, { recursive: true, force: true });
   }
 
-  // And the round trip: the effect file itself still carries cover + asset,
-  // so the library can reopen it with the chosen tile intact.
+  // And the round trip THROUGH THE REAL READER — readEffectDocument is what
+  // the library actually calls to reopen an effect, so it is the only reader
+  // whose agreement with the writer proves anything (review caught the first
+  // version re-implementing the extraction as its own regex, which could
+  // stay green while the real path broke).
   const html = files.get('X:\\Effects\\Chosen Tile.html');
-  const embedded = html.match(/<script id="sf-document" type="application\/json">([\s\S]*?)<\/script>/);
-  assert.ok(embedded, 'the effect embeds its document');
-  const reopened = JSON.parse(embedded[1].replace(/<\\\//g, '</'));
+  const { doc: reopened } = readEffectDocument(html);
   assert.equal(reopened.cover, 'art');
   assert.equal(reopened.assets.art.data, QUADRANTS);
 });
