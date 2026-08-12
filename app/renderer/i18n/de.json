@@ -102,6 +102,8 @@
   "inspector.cover.choose": "Bild wählen…",
   "inspector.cover.reset": "Automatisch verwenden",
   "inspector.coverFailed": "Titelbild konnte nicht übernommen werden",
+  "footer.exporting": "Speichert…",
+  "footer.exported": "Gespeichert",
   "inspector.addCycleColour": "Wechselfarbe hinzufügen",
   "inspector.section.background": "Hintergrund",
   "inspector.background": "Hintergrund",

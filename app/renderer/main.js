@@ -1053,11 +1053,27 @@ async function boot() {
   async function exportEffect(force = false) {
     footer.askOverwrite(false);
 
-    let result = await window.sf.exportEffect(preview.document(), { force });
-    if (result.reason === 'folder') {
-      showTarget(await window.sf.chooseFolder());
-      result = await window.sf.exportEffect(preview.document(), { force });
+    // The button itself says what is happening: pressed -> "Speichert...",
+    // finished -> a short "Gespeichert" that folds back on its own. The
+    // message line below still carries path and size; the button is the
+    // glance-level half of the same answer, on the very control that was
+    // pressed. Cleared in finally so no exit path can leave it stuck busy.
+    footer.setExportState('busy');
+    try {
+      let result = await window.sf.exportEffect(preview.document(), { force });
+      if (result.reason === 'folder') {
+        showTarget(await window.sf.chooseFolder());
+        result = await window.sf.exportEffect(preview.document(), { force });
+      }
+      footer.setExportState(result.ok ? 'done' : 'idle');
+      return finishExport(result);
+    } catch (error) {
+      footer.setExportState('idle');
+      throw error;
     }
+  }
+
+  function finishExport(result) {
 
     if (result.ok) {
       // Path and size, because "saved" without them is a claim the user

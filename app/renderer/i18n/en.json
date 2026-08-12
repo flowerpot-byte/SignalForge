@@ -102,6 +102,8 @@
   "inspector.cover.choose": "Choose picture…",
   "inspector.cover.reset": "Use automatic",
   "inspector.coverFailed": "The tile picture could not be used",
+  "footer.exporting": "Saving…",
+  "footer.exported": "Saved",
   "inspector.addCycleColour": "Add cycle colour",
   "inspector.section.background": "Background",
   "inspector.background": "Background",

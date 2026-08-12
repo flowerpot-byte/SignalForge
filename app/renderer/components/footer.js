@@ -191,6 +191,30 @@ export function mountFooter(container, {
   const exportButton = button('footer-export', 'spark', 'primary');
   exportButton.element.addEventListener('click', onExport);
 
+  // What the export button SAYS: idle its own word, busy "saving", done a
+  // short "saved" that folds back to idle on its own. The state lives here
+  // (not in main.js) so relabel() can keep the current state's word through
+  // a language switch, and so the fold-back timer cannot outlive a newer
+  // state — setExportState always clears it first. Disabled while busy: the
+  // second press an impatient double-click produces would start a second
+  // export into the same file.
+  let exportState = 'idle';
+  let exportStateTimer = null;
+  const exportWord = () => t(exportState === 'busy' ? 'footer.exporting'
+    : exportState === 'done' ? 'footer.exported' : 'footer.export');
+  function setExportState(state) {
+    clearTimeout(exportStateTimer);
+    exportStateTimer = null;
+    exportState = state;
+    exportButton.element.disabled = state === 'busy';
+    exportButton.element.classList.toggle('is-busy', state === 'busy');
+    exportButton.element.classList.toggle('is-done', state === 'done');
+    exportButton.word.textContent = exportWord();
+    if (state === 'done') {
+      exportStateTimer = setTimeout(() => setExportState('idle'), 1600);
+    }
+  }
+
   const actions = document.createElement('div');
   actions.className = 'transport-actions';
   // The order is the reading order and the tab order at once, running outwards
@@ -216,7 +240,7 @@ export function mountFooter(container, {
     settings.setAttribute('aria-label', t('inspector.title'));
     settings.title = t('inspector.title');
     unsaved.setAttribute('aria-label', t('project.unsaved.marker'));
-    exportButton.word.textContent = t('footer.export');
+    exportButton.word.textContent = exportWord();
     overwrite.word.textContent = t('export.overwrite');
     save.word.textContent = t('footer.save');
     open.word.textContent = t('footer.open');
@@ -250,6 +274,7 @@ export function mountFooter(container, {
   return {
     relabel,
     setTarget,
+    setExportState,
     /** Show the document's name; called after a drop or an opened project. */
     setName(text) { name.value = text ?? ''; },
     /** Offer, or withdraw, the answer to "that file already exists". */
