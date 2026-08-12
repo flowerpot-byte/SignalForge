@@ -408,11 +408,12 @@ der Technik-Tabelle ist von der Wirklichkeit überholt worden.
 mehr.** SignalRGB dokumentiert offiziell ein `engine.audio`-Objekt für Lightscripts
 (`docs.signalrgb.com/developer/lightscripts/audio-visualizer`): `level` (Lautstärke),
 `density`, `freq` (200 Frequenzbänder) — vom WIRT in den Effekt hineingereicht, kein fetch,
-keine Außenwelt, also innerhalb unserer Zusagen. Die C8-Begründung galt dem Selber-Holen von
-Livedaten und bleibt für Wallpaper/Sensoren richtig; für Ton liefert der Wirt. **Ungemessen
-am echten Host** — vor einem Bau gehört `engine.audio` in den Motorcheck (Existenz, Werte,
-Verhalten ohne Ton), dann wäre der meistgewünschte Effekttyp der Community (Audio-Visualizer,
-mit Abstand) baubar, und `Hydrogen` rückt vom „braucht fehlende Bausteine"-Stapel herunter.
+keine Außenwelt. **C8s eigene zwei Gründe (Vorschau kann es nicht zeigen; Parität bricht)
+gelten weiter** — der Nachtrag BEI C8 beschreibt den ehrlichen Weg daran vorbei
+(deterministisches Probesignal in der Vorschau, Parität als „gleiches Signal → gleiche
+Pixel", Motorcheck zuerst). Dann wäre der meistgewünschte Effekttyp der Community
+(Audio-Visualizer, mit Abstand) baubar, und `Hydrogen` rückt vom „braucht fehlende
+Bausteine"-Stapel herunter.
 
 Aus derselben Recherche, fürs Einordnen: Der meistgesehene Feature-Wunsch im offiziellen
 SignalRGB-Forum ist kein neuer Effekttyp, sondern **weichere Übergänge** — Politur schlägt
@@ -692,6 +693,28 @@ sie nicht auf die Bauliste, und zwar aus einem Grund, der nichts mit Aufwand zu 
 Wenn es je gebaut wird, dann als bewusst gekennzeichneter Sonderfall („dieser Effekt lässt
 sich nicht in der Vorschau prüfen") — und nicht, bevor C1 bis C5 stehen. Dasselbe gilt für
 Bildschirm-Ambiente (`engine.zone.*`): das liefert SignalRGB ohnehin schon selbst mit.
+
+**Nachtrag 12.08.2026 — C1 bis C5 stehen, die Recherche ist da, und die zwei Gründe oben
+gelten unverändert. Was sich geändert hat, ist der WEG, nicht die Absage:**
+
+- `engine.audio` ist inzwischen **offiziell dokumentiert**
+  (`docs.signalrgb.com/developer/lightscripts/audio-visualizer`: `level`, `density`,
+  `freq[200]`) — nicht mehr nur aus `Hydrogen` herausgelesen. Und es ist der mit Abstand
+  meistgewünschte Effekttyp der Community (Forum, alle Vergleichs-Tools).
+- Die Vorschau-Absage lässt sich ehrlich auflösen statt umgehen: Die App zeigt eine
+  tonreaktive Ebene mit einem **eingebauten, deterministischen Probesignal** (eine feste
+  „Musik" aus der Dose, Funktion von `t`) und sagt dazu, dass der echte Ton erst in
+  SignalRGB kommt. Parität heißt dann: **gleiches Signal rein → gleiche Pixel raus**, in
+  der App wie in der exportierten Datei mit injiziertem Signal testbar — die Zusage wird
+  umformuliert, nicht gebrochen.
+- **Vor jedem Bau der Motorcheck** (`tools/motorcheck/`, wie immer): Existiert
+  `engine.audio` wirklich in Max' SignalRGB-Version? Welche Form haben `level` (−100..0?),
+  `density`, `freq` (Länge, Wertebereich, Aktualisierungsrate)? Was steht drin, wenn NICHTS
+  spielt — und was im Exclusive-Mode (ASIO/WASAPI), der SignalRGB das Signal kappt (bekannter
+  Community-Stolperstein, gehört als Hinweis in jede Audio-Bedienfläche)?
+
+Erst wenn der Motorcheck die Antworten hat, gehört eine Audio-Ebene auf die Bauliste — dann
+aber als das wertvollste einzelne Stück, das dieses Projekt noch bauen kann.
 
 ### C9. Tastendruck-Reaktion
 
