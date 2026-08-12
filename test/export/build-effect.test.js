@@ -107,7 +107,7 @@ test('a control property that is not a valid identifier throws naming it, and a 
 
 test('build-effect.js decides a control property is fatal by calling document.js\'s shared isValidIdentifier, not by reading normalizeDocument\'s advisory problems[] array', () => {
   // This is a structural test in the style of test/engine/boundary.test.js
-  // (see docs/superpowers/plans/2026-08-09-signalforge-motor-und-export.md,
+  // (see .superpowers/plans/2026-08-09-signalforge-motor-und-export.md,
   // task 11): it reads the source file itself, because no behavioural test
   // against buildEffectHtml's output can tell these two implementations
   // apart. normalizeDocument's problems[] array records the exact same

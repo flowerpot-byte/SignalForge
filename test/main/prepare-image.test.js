@@ -12,7 +12,7 @@ import { ENGINE_HOST, prepareImageFile, resolveElectronBin } from '../../src/mai
 const BLUE_60x20 = 'iVBORw0KGgoAAAANSUhEUgAAADwAAAAUCAIAAABeYcl+AAAAKklEQVR42u3OAQ0AAAgDoGv/zlpDN0hAJZNvOg9JS0tLS0tLS0tLS0vftzy0ASdQ1Ru5AAAAAElFTkSuQmCC';
 
 // Regression test for a bug a real drag-and-drop through the built app
-// found (see docs/superpowers/sdd/task-7-report.md): require('electron')
+// found (see .superpowers/sdd/task-7-report.md): require('electron')
 // returns a path string under plain Node.js but the Electron API namespace
 // object under the real Electron runtime, because Electron's own require
 // hook shadows the npm package. Handing that object to child_process.spawn()

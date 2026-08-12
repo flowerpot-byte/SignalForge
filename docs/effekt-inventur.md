@@ -46,6 +46,13 @@ sind frei — der Text, in dem jemand sie aufgeschrieben hat, ist es nicht, und 
 Veröffentlichung dieses Repositoriums ist der Unterschied wichtig. Codeblöcke in diesem
 Dokument zeigen ab hier ausschließlich **SignalForge-eigenen** Code oder Pseudocode.
 
+Wo die Grenze liegt, ausdrücklich: Kein **abgedruckter Ausschnitt** aus einem fremden
+Effekt, nirgends — weder hier noch in den Kommentaren des Motors. Einzelne **Zahlen und
+Namen** als Beleg dagegen bleiben stehen (`spikes = 5`, `this.x += speed / 50`): Das sind
+Tatsachenangaben über ein Programm, so wie eine Dateigröße oder eine Versionsnummer, und
+ohne sie wäre keine Behauptung dieser Untersuchung nachprüfbar. Wer die Linie enger ziehen
+will, muss die Belege streichen und bekommt dafür ein Dokument, das man glauben muss.
+
 **Eine Lücke, ehrlich benannt:** In Max' Screenshot der Effektliste standen auch *Rain*,
 *Rainbow Pulse*, *Cubes*, *Nebula*, *Snake*, *Bars Visualizer*, *Eye of Sauron*, *Touch
 Grass*, *Waves*. Die liegen **nicht** im Zwischenspeicher — der enthält nur, was tatsächlich
@@ -192,11 +199,10 @@ Spiegeltrick für die Gegenrichtung ist hübsch und typisch für den Bestand:
 
 ### A8. Regenbogen als Spaltenschleife (1, mitgeliefert — mit einer Warnung darin)
 
-`Rainbow` malt 320 Streifen à 1 px, jeder ein anderer Farbton. Bemerkenswert ist der
-Kommentar der SignalRGB-Entwickler selbst:
-
-> `// Using ctx.fillRect on Ultralight is causing significant (250x) increases in frame render`
-> `// time after the height goes above 100.`
+`Rainbow` malt 320 Streifen à 1 px, jeder ein anderer Farbton. Bemerkenswert ist eine
+Warnung, die die SignalRGB-Entwickler selbst als Kommentar hinterlassen haben — **in
+eigenen Worten:** Ein gefülltes Rechteck über die übliche Kurzform zu zeichnen koste auf
+Ultralight ab einer Höhe von rund hundert Pixeln das **250-fache** an Zeit pro Bild.
 
 Deshalb malt die waagerechte Variante mit `ctx.rect()` + `ctx.fill()` statt `fillRect`. Das
 ist ein gemessener Hinweis auf den **Ultralight**-Motor, der neben Qt6WebEngine im

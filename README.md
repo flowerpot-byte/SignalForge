@@ -51,6 +51,18 @@ time you run it ("Windows protected your PC"). That warning means "nobody paid
 for a certificate", not "this is malware". Choose *More info* → *Run anyway*, or
 build it yourself with the two commands above.
 
+## A note on references to `.superpowers/`
+
+Comments here and there point at files under `.superpowers/` — build plans and
+measurement reports written while the program was being built. They are **not in
+this repository**: they are instructions and working notes addressed to the
+people and tools that did the building, they name paths on the machine they were
+written on, and they say nothing a reader of the code needs.
+
+Where such a reference appears, everything needed to understand the code is in
+the comment beside it; the reference only records where the measurement or the
+decision originally came from. Nothing is hidden — nothing is missing either.
+
 ## Licence
 
 **GPL-3.0-or-later**, with one additional term under GPL section 7(b):
