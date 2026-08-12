@@ -277,6 +277,25 @@ runHarness('unsaved-changes harness', async () => {
      * character is it, what does a screen reader get, and — the part a class
      * check can never answer — does the row around it stay exactly where it
      * was when the dot comes and goes.
+     *
+     * TWO WIDTHS, AND WHY BOTH ARE HERE.
+     *
+     * `width` is the PAINTED box (getBoundingClientRect), which includes the
+     * `transform: scale()` the marker fades in with. `layoutWidth` is the
+     * LAYOUT box (offsetWidth), which by definition ignores transforms and is
+     * therefore the only one of the two that answers "does the dot take the
+     * same room whether or not it is showing".
+     *
+     * Reading only the painted box was wrong in a way that hid itself for as
+     * long as nobody looked at the window: a window Chromium is not showing
+     * gets no animation frames, so the entrance transition never advances, so
+     * both readings came back at the resting scale(0.7) and agreed. Shown, the
+     * transition finishes and the visible dot is genuinely 1/0.7 wider —
+     * painted, not in the layout — and the check that was meant to be about
+     * reflow failed on an animation. Measured on the first visible run of
+     * `npm run test:import`: 5.69 painted while shown against 3.98 hidden,
+     * with the name field at exactly the same x and exactly the same width in
+     * both.
      */
     const marker = () => d.js(`(() => {
       const dot = document.getElementById('footer-unsaved');
@@ -291,6 +310,7 @@ runHarness('unsaved-changes harness', async () => {
         glyph: dot.textContent.trim(),
         label: dot.getAttribute('aria-label'),
         width: round(box.width),
+        layoutWidth: dot.offsetWidth,
         fieldLeft: round(field.x),
         fieldWidth: round(field.width)
       };

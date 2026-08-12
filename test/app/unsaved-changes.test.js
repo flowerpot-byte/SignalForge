@@ -153,11 +153,31 @@ test('unsaved work is known about, and asked about before it is thrown away', as
     );
 
     // The half a class check cannot make: appearing must cost the row nothing.
+    //
+    // The dot is measured by its LAYOUT width (offsetWidth), not by its
+    // painted one, and that distinction is the whole of this assertion's
+    // instrument. The marker fades in with a `transform: scale()`, and a
+    // transform changes what is painted while costing the layout nothing —
+    // so the painted box is genuinely wider while the dot is showing, and
+    // comparing painted boxes here would be asserting that the entrance
+    // animation does not exist. offsetWidth ignores transforms, which is
+    // exactly the question being asked, and it still fails every wrong
+    // implementation this check was written for: `display: none` makes it 0
+    // while the row closes up, and a marker that only takes space when
+    // visible differs between the two readings.
+    //
+    // Nothing is weakened by the swap: the name field's own x and width, read
+    // from real rects, are still required to be identical to the hundredth of
+    // a pixel, and they are what "the transport bar did not reflow" means.
     assert.deepEqual(
-      { left: off.fieldLeft, width: off.fieldWidth, dot: off.width },
-      { left: on.fieldLeft, width: on.fieldWidth, dot: on.width },
+      { left: off.fieldLeft, width: off.fieldWidth, dot: off.layoutWidth },
+      { left: on.fieldLeft, width: on.fieldWidth, dot: on.layoutWidth },
       'the name field must be in exactly the same place and be exactly as wide either way — ' +
         'a marker that reflows the transport bar is a second change nobody asked for'
+    );
+    assert.ok(
+      on.layoutWidth > 0,
+      'and the marker must occupy real room in the row, or holding its place means nothing'
     );
   });
 
