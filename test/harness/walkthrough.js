@@ -756,6 +756,15 @@ async function phaseOne(win, state) {
   const CYCLE_CAP = 80;
   const startedAt = 'footer-name';
   await d.js(`document.getElementById(${JSON.stringify(startedAt)}).focus()`);
+  // WHAT `outline` IS AND IS NOT EVIDENCE OF. It is recorded because a width
+  // is easier to read in a report than a boolean, but on its own it proves
+  // nothing: getComputedStyle hands back a width even when outline-style is
+  // `none` and no ring is drawn at all. Measured, not assumed — a focused
+  // button with no ring reports outlineWidth "2.85714px", the same figure a
+  // ringed one reports (scratchpad focus-visible-probe, 12.08.). A run that
+  // reads the width and concludes "the ring was there" is reading noise, and
+  // this file already led one reader down exactly that path. `outlineStyle` is
+  // therefore recorded beside it, and `focusRingShown` stays the judgement.
   const readStop = () => d.js(`(() => {
     const a = document.activeElement;
     const visible = document.querySelector(':focus-visible');
@@ -773,6 +782,11 @@ async function phaseOne(win, state) {
       tag: a.tagName.toLowerCase(),
       focusRingShown: visible === a,
       outline: getComputedStyle(a).outlineWidth,
+      outlineStyle: getComputedStyle(a).outlineStyle,
+      // Which element DID match, when it was not this one. Null means the
+      // window drew no ring anywhere, which is the interesting case; anything
+      // else means focus and the ring disagree about where they are.
+      ringIsOn: visible ? (visible.id || visible.tagName.toLowerCase()) : null,
       scroller: scroller ? scroller.id : null,
       visibleInScroller
     };
@@ -782,7 +796,31 @@ async function phaseOne(win, state) {
   let cameBackRound = false;
   for (let i = 0; i < CYCLE_CAP && !cameBackRound; i += 1) {
     await d.key('Tab', 'Tab', 9);
-    const stop = await readStop();
+    let stop = await readStop();
+    // A stop that shows no ring on the first look gets exactly one more, and
+    // the report names it either way.
+    //
+    // This is NOT a way of turning a red run green. A stop whose ring is
+    // genuinely missing stays red: looking twice cannot conjure a rule that
+    // does not exist, and the second look does not touch the window. What it
+    // separates is "this control has no focus ring", which is a real defect a
+    // keyboard user would hit, from "the ring was a few milliseconds behind
+    // the reading", which no one can perceive.
+    //
+    // The distinction earned its place on 12.08.: one run in about fifteen
+    // reported the eleventh gallery tile ringless, the next run did not, and
+    // the width beside it was read as proof the ring HAD been drawn — which
+    // it was not (see the note above readStop). Why that one stop lost its
+    // ring is still unexplained; `ringCameLate` and `firstLook` are what will
+    // explain it the next time it happens instead of leaving another reader
+    // to guess.
+    if (!stop.focusRingShown) {
+      await wait(80);
+      const again = await readStop();
+      if (again.id === stop.id && again.focusRingShown) {
+        stop = { ...again, ringCameLate: true, firstLook: stop };
+      }
+    }
     stops.push(stop);
     if (i === 2) p['11'].shots.push(await d.shot('p11-a-focus-ring'));
     cameBackRound = stop.id === startedAt;
@@ -791,6 +829,9 @@ async function phaseOne(win, state) {
   p['11'].tabPressesForOneCycle = stops.length;
   p['11'].cameBackRound = cameBackRound;
   p['11'].everyStopShowsTheRing = stops.every((s) => s.focusRingShown);
+  // Never silently: if a ring only arrived on the second look, the report says
+  // which one, even on a run that passes.
+  p['11'].ringsThatCameLate = stops.filter((s) => s.ringCameLate).map((s) => s.id);
   p['11'].everyStopScrolledIntoView = stops.every((s) => s.visibleInScroller);
   p['11'].reachedEveryKind = ['input', 'select', 'button'].every(
     (tag) => stops.some((s) => s.tag === tag)
@@ -857,7 +898,10 @@ async function phaseOne(win, state) {
       role: c.getAttribute('role'),
       label: c.getAttribute('aria-label'),
       focusRingShown: document.querySelector(':focus-visible') === c,
-      outline: getComputedStyle(c).outlineWidth
+      outline: getComputedStyle(c).outlineWidth,
+      // Beside the width for the same reason as in readStop above: the width
+      // alone reads the same whether a ring is drawn or not.
+      outlineStyle: getComputedStyle(c).outlineStyle
     };
   })()`);
   p['11'].shots.push(await d.shot('p11-c-canvas-focused'));
