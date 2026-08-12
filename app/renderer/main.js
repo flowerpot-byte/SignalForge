@@ -1057,7 +1057,9 @@ async function boot() {
     // finished -> a short "Gespeichert" that folds back on its own. The
     // message line below still carries path and size; the button is the
     // glance-level half of the same answer, on the very control that was
-    // pressed. Cleared in finally so no exit path can leave it stuck busy.
+    // pressed. There are exactly two exits and each restores the state BY
+    // HAND — the success path below, the catch underneath. Whoever adds a
+    // third exit has to add the third restore; there is no finally doing it.
     footer.setExportState('busy');
     try {
       let result = await window.sf.exportEffect(preview.document(), { force });

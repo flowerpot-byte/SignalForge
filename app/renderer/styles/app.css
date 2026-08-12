@@ -855,11 +855,13 @@ html, body {
   margin: 0 0 var(--space-3);
   padding: var(--space-3);
   border-radius: var(--radius);
-  /* A plain hairline like every other card, not an accent stripe down one
-     side: the first-run question is a card among cards, and its urgency is
-     carried by its words and its one button — a coloured edge was the one
-     card in the window dressed differently from all the rest. */
-  border: 1px solid var(--hairline);
+  /* No border, like every real card in this window (.card carries none —
+     "told apart by the gap", see --surface-card in tokens.css): the
+     first-run question is a card among cards, and its urgency is carried by
+     its words and its one button. The accent stripe it used to wear was the
+     one card dressed differently from all the rest — and the hairline that
+     briefly replaced it was invisible anyway, --hairline and --surface-card
+     being the same colour. */
   background: var(--surface-card);
 }
 /* An author `display` outranks the browser's own `[hidden] { display: none }`,
@@ -1068,9 +1070,13 @@ html, body {
    lands (the built-in easings are too weak to read as intentional). */
 .transport-actions button,
 .cover-actions button {
+  /* `color` stays in the list: this shorthand REPLACES the generic button
+     rule's whole transition, and dropping colour made the busy state's text
+     change snap on the very button this feature is about. */
   transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1),
               border-color var(--motion-press) var(--ease-out),
-              background var(--motion-press) var(--ease-out);
+              background var(--motion-press) var(--ease-out),
+              color var(--motion-press) var(--ease-out);
 }
 .transport-actions button:active:not(:disabled),
 .cover-actions button:active:not(:disabled) {
@@ -1087,11 +1093,9 @@ html, body {
 #footer-export:disabled { cursor: progress; }
 
 @media (prefers-reduced-motion: reduce) {
-  .transport-actions button,
-  .cover-actions button {
-    transition: border-color var(--motion-press) var(--ease-out),
-                background var(--motion-press) var(--ease-out);
-  }
+  /* Only the transform needs taking away here: the sheet's own blanket
+     reduced-motion block already kills every transition with !important,
+     so listing gentler transitions in this rule would be dead code. */
   .transport-actions button:active:not(:disabled),
   .cover-actions button:active:not(:disabled) {
     transform: none;

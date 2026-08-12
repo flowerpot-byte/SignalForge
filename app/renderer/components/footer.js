@@ -200,8 +200,14 @@ export function mountFooter(container, {
   // export into the same file.
   let exportState = 'idle';
   let exportStateTimer = null;
-  const exportWord = () => t(exportState === 'busy' ? 'footer.exporting'
-    : exportState === 'done' ? 'footer.exported' : 'footer.export');
+  // Three LITERAL t('...') calls rather than one call on a ternary key: the
+  // i18n completeness test finds keys by scanning for t('...') literals, and
+  // a computed key would quietly walk all three words out of its sight.
+  const exportWord = () => {
+    if (exportState === 'busy') return t('footer.exporting');
+    if (exportState === 'done') return t('footer.exported');
+    return t('footer.export');
+  };
   function setExportState(state) {
     clearTimeout(exportStateTimer);
     exportStateTimer = null;
