@@ -436,7 +436,54 @@ export function createField(field, options) {
   if (field.type === 'select') return selectField(field, options);
   if (field.type === 'color') return colorField(field, options);
   if (field.type === 'background') return backgroundField(field, options);
+  if (field.type === 'cover') return coverField(field, options);
   return null;
+}
+
+/**
+ * The exported effect's tile picture: automatic, or a picture of the
+ * person's own choosing.
+ *
+ * The one control in this column whose changes do not travel through
+ * onChange at all: choosing a picture means a file dialog, a crop in the
+ * main process and an asset landing in the document — a whole gesture that
+ * lives in main.js's coverPicker (the same division backgroundField
+ * describes for the layer list). This row only SHOWS which of the two
+ * states the document is in and offers the two ways out of it; the column
+ * is rebuilt by the picker once the document has actually changed, so what
+ * is shown is never a guess.
+ */
+function coverField(field, { t, value, coverPicker = null }) {
+  const wrapper = row('control control-row');
+  const id = fieldId(field.path);
+
+  const state = document.createElement('output');
+  state.id = id;
+  state.textContent = t(value ? 'inspector.cover.custom' : 'inspector.cover.auto');
+
+  const actions = document.createElement('div');
+  actions.className = 'cover-actions';
+
+  const choose = document.createElement('button');
+  choose.type = 'button';
+  choose.id = `${id}-choose`;
+  choose.textContent = t('inspector.cover.choose');
+  choose.disabled = !coverPicker;
+  choose.addEventListener('click', () => coverPicker?.choose());
+  actions.append(choose);
+
+  if (value) {
+    const reset = document.createElement('button');
+    reset.type = 'button';
+    reset.id = `${id}-reset`;
+    reset.textContent = t('inspector.cover.reset');
+    reset.disabled = !coverPicker;
+    reset.addEventListener('click', () => coverPicker?.clear());
+    actions.append(reset);
+  }
+
+  wrapper.append(labelFor(id, t(field.labelKey)), state, actions);
+  return wrapper;
 }
 
 /**

@@ -666,6 +666,13 @@ export function describeInspector(doc, layerId) {
     path: 'aspect', type: 'number', section: 'display',
     labelKey: 'inspector.aspect', ...RANGES.aspect
   });
+  // The exported tile: automatic, or the person's own picture. Under the
+  // same heading as aspect because both are about how the effect is SHOWN
+  // rather than what it is — and, like aspect, emitted for every document,
+  // because the tile exists for every export.
+  fields.push({
+    path: 'cover', type: 'cover', section: 'display', labelKey: 'inspector.cover'
+  });
   return fields;
 }
 
@@ -750,7 +757,11 @@ export function mountInspector(container, {
   // The keeper of the remembered swatches ({ list, remember } — see
   // components/recent-colors.js), handed to every colour field. Optional for
   // the same reason again: without one there is simply no swatch row.
-  recents = null
+  recents = null,
+  // The cover picker ({ choose, clear } — main.js owns the dialog, the crop
+  // and the document change), handed to the tile row. Optional again: a
+  // caller without one gets the row with its buttons disabled.
+  coverPicker = null
 }) {
   const SF = window.SignalForgeEngine;
 
@@ -794,11 +805,15 @@ export function mountInspector(container, {
     if (!id) return;
     const again = document.getElementById(id);
     if (again && container.contains(again)) { again.focus(); return; }
-    // The control is gone — the only way that happens is a removed motion.
-    // Land on the add button of the same list rather than dumping the
-    // keyboard user back at the top of the window.
+    // The control is gone — a removed motion, or the tile row's reset, which
+    // only exists while a picture is chosen and therefore always vanishes
+    // under the very click that used it. Land on the nearest control that is
+    // still there rather than dumping the keyboard user at the top of the
+    // window.
     const remove = /^(.*)-remove-\d+$/.exec(id);
-    if (remove) document.getElementById(`${remove[1]}-add`)?.focus();
+    if (remove) { document.getElementById(`${remove[1]}-add`)?.focus(); return; }
+    const reset = /^(.*)-reset$/.exec(id);
+    if (reset) document.getElementById(`${reset[1]}-choose`)?.focus();
   }
 
   /**
@@ -1101,6 +1116,7 @@ export function mountInspector(container, {
         value,
         onChange: report,
         recents,
+        coverPicker,
         // Only a slider has a reset, and it is asked at the moment it is
         // pressed rather than now: the answer costs a normalization of the
         // document, and this loop runs for every control in the column. The

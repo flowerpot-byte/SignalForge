@@ -164,6 +164,72 @@ ipcMain.handle('sf:chooseFolder', async () => {
   await settings.set('effectsFolder', result.filePaths[0]);
   return currentTarget();
 });
+
+/**
+ * The cover picker's dialog, behind the same seam as the folder and project
+ * dialogs above and for the same reason: an automated check that opened a
+ * real one would sit there until a human clicked something.
+ */
+export const coverDialog = {
+  open: (options) => dialog.showOpenDialog(options)
+};
+
+/** What the cover picker's dialog offers — what Image can decode here. */
+const COVER_FILTERS = [{
+  name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp']
+}];
+
+const COVER_MIME = Object.freeze({
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+  webp: 'image/webp', gif: 'image/gif', bmp: 'image/bmp'
+});
+
+/**
+ * Choose a picture and hand back the TILE it becomes: already cropped to the
+ * measured 512 x 288 and re-encoded as PNG, so what is embedded into the
+ * document is a tile-sized asset and never a whole photograph as base64.
+ *
+ * The crop runs through renderCoverPng itself, on a one-field document whose
+ * cover names the chosen file — the very fork the exporter takes, so the
+ * preview the picker stores and the tile the export writes cannot be two
+ * different pictures. Errors come back as values, like every dialog-shaped
+ * handler here: a rejection reaches the renderer stripped to an opaque
+ * "Error invoking remote method".
+ */
+ipcMain.handle('sf:chooseCover', async () => {
+  try {
+    const result = await coverDialog.open({
+      properties: ['openFile'], filters: COVER_FILTERS
+    });
+    if (result.canceled || result.filePaths.length === 0) return { ok: false, canceled: true };
+    const path = result.filePaths[0];
+    const extension = path.slice(path.lastIndexOf('.') + 1).toLowerCase();
+    const mime = COVER_MIME[extension];
+    if (!mime) return { ok: false, canceled: false, message: `not a picture: ${basename(path)}` };
+    // Sized up BEFORE the synchronous read: readFileSync + base64 of a huge
+    // file blocks this whole single-threaded process (every window, every
+    // handler), and renderCoverInProcess's watchdog only starts after it.
+    // 32 MB holds any camera JPEG or screenshot; a file past it is almost
+    // certainly the wrong file.
+    const MAX_COVER_SOURCE_BYTES = 32 * 1024 * 1024;
+    if (statSync(path).size > MAX_COVER_SOURCE_BYTES) {
+      return { ok: false, canceled: false, message: `too large for a tile: ${basename(path)}` };
+    }
+    const png = await renderCoverPng({
+      name: 'cover',
+      layers: [],
+      cover: 'chosen',
+      assets: { chosen: { kind: 'image', mime, data: readFileSync(path).toString('base64') } }
+    });
+    return {
+      ok: true,
+      canceled: false,
+      asset: { kind: 'image', mime: 'image/png', data: png.toString('base64') }
+    };
+  } catch (error) {
+    return { ok: false, canceled: false, message: String(error.message || error) };
+  }
+});
 // The error comes back as a value, not a throw: an ipcMain.handle rejection
 // reaches the renderer as an opaque "Error invoking remote method" with the
 // real message stripped, which is exactly the silent failure the dropped-file

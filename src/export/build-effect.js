@@ -113,7 +113,17 @@ function bootstrap(controls) {
   var drawnAny = false;
   var ticks = 0;
 
-  SF.loadAssets(base, {
+  // Only the assets a layer actually draws are decoded. The document may
+  // carry more — a chosen tile picture (doc.cover) rides in the embedded
+  // JSON so the library can reopen the effect with it — and loadAssets walks
+  // everything it is given, so handing it the full set would make a 24/7
+  // effect decode a picture no frame ever uses.
+  var liveAssets = {};
+  for (var la = 0; la < base.layers.length; la += 1) {
+    var layerAsset = base.layers[la].asset;
+    if (layerAsset && base.assets[layerAsset]) liveAssets[layerAsset] = base.assets[layerAsset];
+  }
+  SF.loadAssets({ assets: liveAssets }, {
     resolveUrl: function (asset) {
       return asset.data ? 'data:' + asset.mime + ';base64,' + asset.data : asset.file;
     }

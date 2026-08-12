@@ -1327,11 +1327,25 @@ export function normalizeDocument(raw) {
     });
   }
 
+  // The tile picture's source: the id of an asset to use as the exported
+  // effect's cover, or null for the automatic frame-0 render that has been
+  // the whole story until now (src/main/cover-image.js holds the mechanism
+  // and the measurements). Validated against the assets built above — a
+  // cover naming a picture the document does not carry would export the
+  // automatic tile while CLAIMING a custom one, so it is reported and
+  // dropped rather than kept as a dead pointer.
+  let cover = str(input.cover, null);
+  if (cover !== null && !Object.prototype.hasOwnProperty.call(assets, cover)) {
+    problems.push(`Cover "${cover}" names no asset in this document, using the automatic tile.`);
+    cover = null;
+  }
+
   const doc = {
     version: DOCUMENT_VERSION,
     name: str(input.name, '').trim() || 'Untitled',
     description: str(input.description, ''),
     publisher: str(input.publisher, ''),
+    cover,
     // Overall output gain, 0..200, applied once to the finished frame by the
     // renderer (see engine.js). 100 = unchanged, matching every document that
     // predates this field so old previews/exports don't shift; below 100

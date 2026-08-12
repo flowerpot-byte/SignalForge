@@ -13,6 +13,7 @@ import { mountGallery } from './components/gallery.js';
 import { mountAppSettings } from './components/appsettings.js';
 import { samplePalette } from './components/palette.js';
 import { rememberColor, isRecentColor } from './components/recent-colors.js';
+import { createCoverPicker } from './components/cover-picker.js';
 import { enter } from './components/motion.js';
 import { decodeAsset as decodeImage } from './components/decode.js';
 // Pure arithmetic over the document's own layer list, the same kind of import
@@ -418,10 +419,26 @@ async function boot() {
     }
   };
 
+  // The tile picker: the dialog, the crop and the asset all happen in the
+  // main process (sf:chooseCover hands back a finished 512x288 tile), so
+  // what lands in the document is tile-sized and never a whole photograph.
+  // The gestures themselves live in components/cover-picker.js, where a test
+  // can drive them; the closures below are late-bound on purpose, so the
+  // factory may be built before `inspector` exists.
+  const coverPicker = createCoverPicker({
+    chooseCover: () => window.sf.chooseCover(),
+    getDocument: () => preview.document(),
+    setDocument: (doc) => preview.setDocument(doc),
+    markChanged: () => markChanged(),
+    refresh: () => inspector.refresh(),
+    onError: (message) => showMessage(`${i18n.t('inspector.coverFailed')}: ${message}`, true)
+  });
+
   const inspector = mountInspector(regions.inspector, {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
     recents,
+    coverPicker,
     // The effect time of the frame on screen, for the one control whose
     // change must not move the picture: the Farbwechsel tempo re-parks the
     // hue at this very moment's angle (see the hueCycle note in

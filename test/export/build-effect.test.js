@@ -155,7 +155,10 @@ test('a property that merely looks unusual but is a valid identifier still build
 
 test('the bootstrap catches a rejected asset load instead of failing silently', () => {
   const html = buildEffectHtml({ doc, engineSource: ENGINE, lang: 'de' });
-  assert.match(html, /SF\.loadAssets\(base, \{[\s\S]*?\}\)\.then\(function \(loaded\) \{ assets = loaded; \}\)\.catch\(/);
+  // { assets: liveAssets }, not `base`: the bootstrap decodes only what a
+  // layer draws, so a chosen tile picture riding in the document is not an
+  // image the running effect pays for (see the note in build-effect.js).
+  assert.match(html, /SF\.loadAssets\(\{ assets: liveAssets \}, \{[\s\S]*?\}\)\.then\(function \(loaded\) \{ assets = loaded; \}\)\.catch\(/);
 });
 
 test('an engine bundle containing a literal closing script tag is rejected at build time', () => {

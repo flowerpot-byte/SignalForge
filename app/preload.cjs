@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('sf', {
   },
   effectsTarget: () => ipcRenderer.invoke('sf:effectsTarget'),
   chooseFolder: () => ipcRenderer.invoke('sf:chooseFolder'),
+  chooseCover: () => ipcRenderer.invoke('sf:chooseCover'),
   // The renderer hands over the dropped File object itself, never a path
   // string: only this preload script (not the sandboxed, isolated renderer
   // world) is trusted to turn that File into a real filesystem path, via

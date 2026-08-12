@@ -289,6 +289,9 @@ test('a document from before the colour layers normalises to exactly what it did
     hueCycle: 0,
     trail: 0,
     aspect: 100,
+    // No tile picture chosen — the automatic frame-0 render, which is all
+    // any document from before this field ever had.
+    cover: null,
     layers: [{
       id: 'a1',
       type: 'image',
@@ -356,6 +359,7 @@ test('a gradient from before the band count normalises to exactly what it must',
     hueCycle: 0,
     trail: 0,
     aspect: 100,
+    cover: null,
     layers: [{
       id: 'a1',
       type: 'gradient',

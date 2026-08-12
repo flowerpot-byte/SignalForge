@@ -75,36 +75,66 @@ export function coverRenderScript(doc) {
     const SF = window.SignalForgeEngine;
     const { doc } = SF.normalizeDocument(${JSON.stringify(doc)});
 
-    const frame = document.createElement('canvas');
-    frame.width = SF.CANVAS_WIDTH;
-    frame.height = SF.CANVAS_HEIGHT;
-    const ctx = frame.getContext('2d', { willReadFrequently: true });
-
     // The exported effect's own resolver, character for character (see the
     // bootstrap in src/export/build-effect.js): embedded data first, a
     // sibling file only if there is no data.
-    const assets = await SF.loadAssets(doc, {
-      resolveUrl: (asset) => (asset.data ? 'data:' + asset.mime + ';base64,' + asset.data : asset.file)
-    });
+    const resolveUrl = (asset) => (asset.data ? 'data:' + asset.mime + ';base64,' + asset.data : asset.file);
 
-    const renderer = SF.createRenderer();
-    // Twice when there is no trail, so any scratch buffer a layer builds
-    // lazily exists for the frame that is actually kept -- safe there because
-    // render() is a pure function of (doc, assets, t) with no trail, so a
-    // throwaway first call and the kept call land on the same pixels.
-    //
-    // ONCE when doc.trail > 0, and that is not the same optimisation skipped:
-    // with a trail, render() is no longer pure -- frame N is composited over
-    // frame N-1 (see createRenderer in src/engine/engine.js) -- so a second
-    // call at t = 0 would veil the first call's frame with itself and hand
-    // back a picture the effect never actually shows. A cold single render is
-    // also the more faithful choice, not just the safe one: the exported
-    // effect's own first frame is cold too (see the WHICH FRAME note above).
-    // test/harness/page.html's sequence path (__run's frames branch) made
-    // exactly this call already, for exactly this reason.
-    renderer.render(ctx, doc, assets, 0);
-    if (!(doc.trail > 0)) renderer.render(ctx, doc, assets, 0);
-    renderer.dispose();
+    // The one fork in this file: a document that NAMES its tile picture
+    // (doc.cover, an asset id — normalizeDocument has already thrown away a
+    // cover that names nothing) draws that picture; every other document
+    // draws its own first frame exactly as always. Both sides land in the
+    // same cover-fit crop below, so a chosen picture of any proportions
+    // fills the tile edge to edge the same way the rendered frame does.
+    let frame = null;
+    if (doc.cover) {
+      const chosen = await new Promise((resolve) => {
+        const image = new Image();
+        // Validated INSIDE onload: an SVG with width 0 decodes "successfully"
+        // with naturalWidth 0, and letting it through would make the crop's
+        // scale infinite and drawImage throw — past this fork, where nothing
+        // would turn it into the automatic tile any more.
+        image.onload = () => resolve(image.naturalWidth > 0 && image.naturalHeight > 0 ? image : null);
+        image.onerror = () => resolve(null);
+        image.src = resolveUrl(doc.assets[doc.cover]);
+      });
+      // A cover that cannot be decoded falls through to the automatic tile:
+      // the effect list is no place for a broken-image placeholder, and the
+      // frame-0 render is always available.
+      if (chosen) frame = chosen;
+    }
+
+    if (!frame) {
+      const canvas = document.createElement('canvas');
+      canvas.width = SF.CANVAS_WIDTH;
+      canvas.height = SF.CANVAS_HEIGHT;
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+      const assets = await SF.loadAssets(doc, { resolveUrl });
+
+      const renderer = SF.createRenderer();
+      // Twice when there is no trail, so any scratch buffer a layer builds
+      // lazily exists for the frame that is actually kept -- safe there because
+      // render() is a pure function of (doc, assets, t) with no trail, so a
+      // throwaway first call and the kept call land on the same pixels.
+      //
+      // ONCE when doc.trail > 0, and that is not the same optimisation skipped:
+      // with a trail, render() is no longer pure -- frame N is composited over
+      // frame N-1 (see createRenderer in src/engine/engine.js) -- so a second
+      // call at t = 0 would veil the first call's frame with itself and hand
+      // back a picture the effect never actually shows. A cold single render is
+      // also the more faithful choice, not just the safe one: the exported
+      // effect's own first frame is cold too (see the WHICH FRAME note above).
+      // test/harness/page.html's sequence path (__run's frames branch) made
+      // exactly this call already, for exactly this reason.
+      renderer.render(ctx, doc, assets, 0);
+      if (!(doc.trail > 0)) renderer.render(ctx, doc, assets, 0);
+      renderer.dispose();
+      frame = canvas;
+    }
+
+    const frameWidth = frame.naturalWidth ?? frame.width;
+    const frameHeight = frame.naturalHeight ?? frame.height;
 
     const out = document.createElement('canvas');
     out.width = ${COVER_WIDTH};
@@ -114,13 +144,13 @@ export function coverRenderScript(doc) {
     octx.imageSmoothingQuality = 'high';
 
     // Cover fit, centred: fill the tile, crop what does not fit. Derived from
-    // the engine's own canvas constants, never from hardcoded numbers here.
-    const scale = Math.max(${COVER_WIDTH} / frame.width, ${COVER_HEIGHT} / frame.height);
+    // the picture's own size, never from hardcoded numbers here.
+    const scale = Math.max(${COVER_WIDTH} / frameWidth, ${COVER_HEIGHT} / frameHeight);
     const sourceWidth = ${COVER_WIDTH} / scale;
     const sourceHeight = ${COVER_HEIGHT} / scale;
     octx.drawImage(
       frame,
-      (frame.width - sourceWidth) / 2, (frame.height - sourceHeight) / 2, sourceWidth, sourceHeight,
+      (frameWidth - sourceWidth) / 2, (frameHeight - sourceHeight) / 2, sourceWidth, sourceHeight,
       0, 0, ${COVER_WIDTH}, ${COVER_HEIGHT}
     );
 

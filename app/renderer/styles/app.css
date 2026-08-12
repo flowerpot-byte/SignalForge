@@ -1038,6 +1038,27 @@ html, body {
   outline-offset: 1px;
 }
 
+/* The tile row: the state on the right of the label, the two actions on a
+   line of their own beneath, spanning the control's grid. The buttons take
+   the footer's quiet button look via the shared tokens. */
+.cover-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: var(--space-2);
+}
+.cover-actions button {
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text);
+  background: var(--surface-raise);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--motion-press) var(--ease-out);
+}
+.cover-actions button:hover:not(:disabled) { border-color: var(--text-muted); }
+.cover-actions button:disabled { opacity: 0.5; cursor: default; }
+
 /* One motion: the kind it is, and the two sliders that steer it, in one card.
    Two motions produce two of these, and that is right — they are the same kind
    of thing, told apart by their own legend and by the kind each is set to. */
