@@ -1127,6 +1127,97 @@ function normalizeAsset(raw) {
   return asset;
 }
 
+/**
+ * Path segments that would reach off the object and onto its prototype. The
+ * same set src/engine/bind.js guards its own walk with, and repeated here
+ * rather than imported for one reason: bind.js imports THIS file, so an import
+ * the other way would be a cycle. Two lists of three strings that must agree
+ * is a smaller cost than that, and test/engine/document.test.js checks this one
+ * refuses each of them.
+ */
+const UNSAFE_PATH_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * A copy of `value` with the property at `keys` taken out of it, or null when
+ * there is no such property to take out.
+ *
+ * Copied only along the path and shared everywhere else. That is not an
+ * optimisation for its own sake: a document's `assets` hold whole pictures as
+ * base64, and a deep clone per lookup would copy megabytes of image data to
+ * answer a question about one number.
+ *
+ * An array element cannot be removed — removing one would shift every index
+ * after it, so the path being asked about would come back pointing at a
+ * different entry. It reports null instead, and defaultValueAt below turns
+ * that into "no answer" rather than a wrong one.
+ */
+function withoutPath(value, keys) {
+  const key = keys[0];
+  if (UNSAFE_PATH_KEYS.has(key)) return null;
+  if (value === null || typeof value !== 'object') return null;
+  if (!Object.hasOwn(value, key)) return null;
+
+  if (keys.length === 1) {
+    if (Array.isArray(value)) return null;
+    const copy = { ...value };
+    delete copy[key];
+    return copy;
+  }
+
+  const inner = withoutPath(value[key], keys.slice(1));
+  if (inner === null) return null;
+  if (Array.isArray(value)) {
+    const copy = [...value];
+    copy[Number(key)] = inner;
+    return copy;
+  }
+  return { ...value, [key]: inner };
+}
+
+/**
+ * What a fresh document would carry at `path`.
+ *
+ * THERE IS NO TABLE OF DEFAULTS ANYWHERE IN THIS PROJECT, and this function is
+ * how it stays that way. The settings column needs to put one slider back to
+ * its starting value, and the obvious way to do that — a map of field name to
+ * default beside the sliders — would be the third copy of numbers that already
+ * exist twice (normalizeDocument fills them in, and effect-controls.js bakes
+ * them into the exported effect by reading a normalized document). This project
+ * has been bitten by a second copy of a table three separate times; a third
+ * copy of the DEFAULTS would be the same mistake in the one place it is
+ * hardest to notice, because a stale default is still a plausible number.
+ *
+ * So the question is asked of the only thing that actually knows the answer:
+ * take the field out of the document and normalize it. Whatever comes back at
+ * that path is, by construction, what a document that never mentioned the
+ * field would have — which is the exact meaning of "the value a fresh document
+ * carries". Change the default in normalizeLayer and this follows it with
+ * nothing to update.
+ *
+ * `undefined` when there is nothing sensible to answer: a path that does not
+ * exist, one that walks through an array element, or one naming a key that is
+ * not there. Callers treat that as "no reset available" rather than writing it
+ * into the document.
+ *
+ * Pure arithmetic over a document, no DOM and no Node, like the rest of this
+ * file — so it is checked in plain node:test (test/engine/document.test.js).
+ */
+export function defaultValueAt(doc, path) {
+  const keys = String(path).split('.');
+  if (keys.length === 0 || keys.some((key) => key === '')) return undefined;
+
+  const stripped = withoutPath(doc, keys);
+  if (stripped === null) return undefined;
+
+  let current = normalizeDocument(stripped).doc;
+  for (const key of keys) {
+    if (UNSAFE_PATH_KEYS.has(key)) return undefined;
+    if (current === null || typeof current !== 'object') return undefined;
+    current = current[key];
+  }
+  return current;
+}
+
 export function normalizeDocument(raw) {
   const problems = [];
   const input = raw && typeof raw === 'object' ? raw : {};

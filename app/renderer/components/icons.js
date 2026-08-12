@@ -93,6 +93,23 @@ const GLYPHS = Object.freeze({
   plus: [['path', { d: 'M8 3.5v9M3.5 8h9' }]],
   /** Remove. */
   minus: [['path', { d: 'M3.5 8h9' }]],
+  /**
+   * Back where it started: an arrow that goes round rather than back.
+   *
+   * Deliberately NOT a cross and not a bin. Both of those say "get rid of
+   * this", and what this button does is the opposite — it puts a value back to
+   * the one a fresh document carries, which is a return and not a removal. The
+   * open circle with the arrowhead at its start is the shape every undo and
+   * every revert in every tool this app sits beside already uses, which is the
+   * whole argument for it: nothing here has to be learned.
+   *
+   * Anticlockwise, because clockwise is "again" (a reload) and anticlockwise is
+   * "back" (an undo), and this is the second of those.
+   */
+  revert: [
+    ['path', { d: 'M3.4 8a4.6 4.6 0 1 0 1.5-3.4' }],
+    ['path', { d: 'M2.6 3.2v3.1h3.1' }]
+  ],
   /** Open: a folder. */
   folder: [
     ['path', { d: 'M1.5 12.5v-9h4.2l1.6 2h7.2v7z' }]

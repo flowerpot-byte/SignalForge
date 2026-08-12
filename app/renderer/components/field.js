@@ -85,18 +85,29 @@ export function fillPercent({ min, max }, value) {
 }
 
 /**
- * A slider with the number beside it.
+ * A slider with the number beside it, and the way back to where it started.
  *
  * `input` fires while the slider is being dragged AND on every arrow-key
  * press, so both ways of working report a change the same way.
+ *
+ * `defaultValue()` is asked, not told: it is called at the moment somebody
+ * reaches for the reset and hands back the value a fresh document would carry
+ * at this field's path. A function rather than a number because answering the
+ * question means normalizing a document (see defaultValueAt in
+ * src/engine/document.js), and doing that for every slider on every rebuild of
+ * this column would be twenty normalizations to answer a question nobody had
+ * asked yet. Absent — a caller with no engine to hand, which is what the unit
+ * tests are — and there is simply no reset button, which is the honest thing
+ * to draw when the value it would return to cannot be found out.
  */
-function numberField(field, { t, value, onChange }) {
+function numberField(field, { t, value, onChange, defaultValue = null }) {
   // One control, in the shape every control in the reference has: its name on
   // the left, its current value on the right, the track across the full width
   // underneath. Whether that control gets a card of its own or shares one with
   // the rest of a motion is mountInspector's decision, not this one's.
-  const wrapper = row('control');
+  const wrapper = row('control control-number');
   const id = fieldId(field.path);
+  const labelText = t(field.labelKey);
 
   const input = document.createElement('input');
   input.type = 'range';
@@ -113,13 +124,61 @@ function numberField(field, { t, value, onChange }) {
   const paint = (at) => input.style.setProperty('--sf-fill', `${fillPercent(field, at)}%`);
   paint(value);
 
-  input.addEventListener('input', () => {
+  /** Report what the control now says, exactly as a drag of it would. */
+  const report = () => {
     readout.textContent = input.value;
     paint(input.value);
     onChange(field.path, Number(input.value));
-  });
+  };
 
-  wrapper.append(labelFor(id, t(field.labelKey)), readout, input);
+  input.addEventListener('input', report);
+
+  wrapper.append(labelFor(id, labelText), readout, input);
+
+  if (defaultValue) {
+    /**
+     * Back to the starting value, through the very same path every other
+     * change takes: the control is set, and then the ordinary change is
+     * reported. So the picture updates on its next frame and the document is
+     * marked unsaved, both without this file knowing that either happens.
+     *
+     * Nothing is written if there is no answer, or if the answer is outside
+     * the range this slider is currently showing — the range gives way to a
+     * value, never the other way round (see widenToInclude in
+     * components/inspector.js), and silently clamping a reset would put a
+     * number in the document that is not the default and is not what was
+     * there before either.
+     */
+    const revert = () => {
+      const to = Number(defaultValue());
+      if (!Number.isFinite(to)) return;
+      if (to < Number(field.min) || to > Number(field.max)) return;
+      if (to === Number(input.value)) return;
+      input.value = String(to);
+      report();
+    };
+
+    // The fast path, and the reason the button can afford to be as quiet as it
+    // is: a double click on the slider itself. It is the gesture every other
+    // tool with sliders uses for this, so it does not have to be advertised —
+    // and the two clicks that precede it have already moved the value, which
+    // this then overrides, so the outcome is the same either way.
+    input.addEventListener('dblclick', revert);
+
+    // Icon-only, so the accessible name is not optional — and it names the
+    // control it belongs to, because there are up to twenty of these in the
+    // column and "Reset" twenty times over tells a screen reader user nothing
+    // about which one they are on.
+    const name = `${t('inspector.reset')}: ${labelText}`;
+    const button = iconButton(`${id}-reset`, 'revert', name);
+    button.classList.add('control-reset');
+    button.addEventListener('click', revert);
+    // After the slider in the document, not before it: tabbing through this
+    // column should reach a control and then that control's reset, rather than
+    // meeting the way back before the way forward.
+    wrapper.append(button);
+  }
+
   return wrapper;
 }
 

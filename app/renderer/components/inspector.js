@@ -667,10 +667,27 @@ export function widenToInclude(field, value) {
  * afterwards by its id, which is derived from the field's path and is
  * therefore stable across a redraw.
  *
+ * `defaultAt(path)` answers "what would a fresh document carry here", and is
+ * what puts a reset button on every slider. It is passed IN rather than
+ * reached for, and that is deliberate on two counts. The engine's
+ * defaultValueAt works by normalizing a document (src/engine/document.js says
+ * why that is the only honest way to ask), and normalizeDocument reaches this
+ * window solely through window.SignalForgeEngine — see the note at the head of
+ * this file, and test/export/parity.test.js, which is what that rule protects.
+ * Making it an argument also means the unit tests can hand over the very same
+ * function and get the very same buttons, instead of a column that is one
+ * control poorer everywhere it is checked.
+ *
+ * Absent, every slider is drawn exactly as it was before: no reset, nothing
+ * else changed. A reset button whose target cannot be worked out would be a
+ * control that does nothing, which is the one thing this column does not do.
+ *
  * There is no layer list yet (that is a later task), so the layer shown is
  * the document's first one.
  */
-export function mountInspector(container, { getDocument, onChange, t, onError }) {
+export function mountInspector(container, {
+  getDocument, onChange, t, onError, defaultAt = null
+}) {
   const SF = window.SignalForgeEngine;
 
   /**
@@ -936,7 +953,19 @@ export function mountInspector(container, { getDocument, onChange, t, onError })
         continue;
       }
 
-      const element = createField(widenToInclude(field, value), { t, value, onChange: report });
+      const element = createField(widenToInclude(field, value), {
+        t,
+        value,
+        onChange: report,
+        // Only a slider has a reset, and it is asked at the moment it is
+        // pressed rather than now: the answer costs a normalization of the
+        // document, and this loop runs for every control in the column. The
+        // document is fetched then as well, not captured here, so the answer
+        // is about the document as it stands when somebody reaches for it.
+        defaultValue: defaultAt && field.type === 'number'
+          ? () => defaultAt(field.path)
+          : null
+      });
       if (!element) continue;
 
       // An entry of a repeating list is one card: for a motion, the dropdown

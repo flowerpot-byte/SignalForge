@@ -399,6 +399,19 @@ async function boot() {
     t: (k) => i18n.t(k),
     getDocument: () => preview.document(),
     /**
+     * What a fresh document would carry at one field's path — which is what
+     * every slider's reset button puts it back to.
+     *
+     * Through the bundle, like every other piece of document arithmetic this
+     * window does, and asked of the LIVE document at the moment it is asked:
+     * a gradient's second colour stop only has a starting position because
+     * there are stops either side of it, so the answer depends on the document
+     * as it stands and not on some empty one. src/engine/document.js says at
+     * length why the question is answered by normalizing rather than by a
+     * table of numbers kept somewhere.
+     */
+    defaultAt: (path) => window.SignalForgeEngine.defaultValueAt(preview.document(), path),
+    /**
      * Which way a change reaches the picture depends on what kind of change
      * it is:
      *

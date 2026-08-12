@@ -87,6 +87,7 @@
   "inspector.addMotion": "Bewegung hinzufügen",
   "inspector.changeFailed": "Änderung konnte nicht übernommen werden",
   "inspector.removeMotion": "Entfernen",
+  "inspector.reset": "Zurücksetzen",
   "inspector.speed": "Tempo",
   "inspector.amount": "Stärke",
   "inspector.trail": "Nachziehen",

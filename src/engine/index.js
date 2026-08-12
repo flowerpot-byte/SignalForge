@@ -66,7 +66,8 @@ export {
   BINDABLE_DOCUMENT_FIELDS,
   clamp,
   normalizeColor,
-  normalizeDocument
+  normalizeDocument,
+  defaultValueAt
 } from './document.js';
 
 export {

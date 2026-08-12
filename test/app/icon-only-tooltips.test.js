@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mountInspector } from '../../app/renderer/components/inspector.js';
 import { mountFooter } from '../../app/renderer/components/footer.js';
-import { normalizeDocument } from '../../src/engine/document.js';
+import { normalizeDocument, defaultValueAt } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 
 /**
@@ -96,7 +96,16 @@ test('every icon-only control carries a title that matches its accessible name',
     layers: [{ id: 'image', type: 'image', asset: 'q', motions: [{ kind: 'drift' }] }]
   }).doc;
   mountInspector(motionContainer, {
-    t, getDocument: () => motionDoc, onChange: () => {}, onError: () => {}
+    t,
+    getDocument: () => motionDoc,
+    onChange: () => {},
+    onError: () => {},
+    // Wired exactly as app/renderer/main.js wires it, so the per-slider reset
+    // buttons are BUILT here and therefore fall under this rule. Without it
+    // the column drawn in this test would be missing the newest icon-only
+    // control in the window, and the guard would go on reporting green over a
+    // button it had never seen.
+    defaultAt: (path) => defaultValueAt(motionDoc, path)
   });
   found.push(...collectButtons(motionContainer));
 
@@ -108,7 +117,11 @@ test('every icon-only control carries a title that matches its accessible name',
   const gradientContainer = makeElement('div');
   const gradientDoc = normalizeDocument({ layers: [{ id: 'a1', type: 'gradient' }] }).doc;
   mountInspector(gradientContainer, {
-    t, getDocument: () => gradientDoc, onChange: () => {}, onError: () => {}
+    t,
+    getDocument: () => gradientDoc,
+    onChange: () => {},
+    onError: () => {},
+    defaultAt: (path) => defaultValueAt(gradientDoc, path)
   });
   found.push(...collectButtons(gradientContainer));
 
@@ -125,12 +138,23 @@ test('every icon-only control carries a title that matches its accessible name',
 
   const iconOnly = found.filter((button) => hasSvgChild(button) && visibleText(button).trim() === '');
 
-  // A vacuous pass would be worthless — this is exactly the four call sites
+  // A vacuous pass would be worthless — this is exactly the five call sites
   // the window has today (motion remove, motion add, stop remove, stop add,
   // the settings toggle), so five or more says the walk found them.
   assert.ok(
     iconOnly.length >= 5,
     `only ${iconOnly.length} icon-only buttons were found — has the walk stopped finding them?`
+  );
+
+  // And the sixth call site by name, because it is the one that arrives in
+  // NUMBERS: a reset per slider, up to twenty of them in a column. A floor
+  // that only counts would go on passing if every one of them vanished, since
+  // the five above already clear it.
+  const resets = iconOnly.filter((button) => String(button.attributes['aria-label'] || '')
+    .startsWith('inspector.reset'));
+  assert.ok(
+    resets.length > 0,
+    'no per-slider reset button was found — the column builds one for every slider'
   );
 
   const offences = [];
