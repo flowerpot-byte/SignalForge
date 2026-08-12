@@ -9,7 +9,7 @@ import {
 import { nextStopPosition } from '../../app/renderer/components/field.js';
 import { TILES } from '../../app/renderer/components/gallery.js';
 import {
-  normalizeDocument, GRADIENT_SHAPES, SHAPE_FIGURES, SOLID_MOTION_KINDS, MOTION_KINDS,
+  normalizeDocument, GRADIENT_SHAPES, SHAPE_FIGURES, SOLID_MOTION_KINDS, GRADIENT_MOTION_KINDS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS
 } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
@@ -83,10 +83,12 @@ test('a radial gradient is not offered an angle, because turning it does nothing
   assert.ok(pathsOf({ type: 'gradient', shape: 'linear' }).includes('layers.0.angle'));
 });
 
-test('a gradient gets every motion there is, unlike a solid colour', () => {
+test('a gradient gets every motion its renderer reads, unlike a solid colour', () => {
   const list = fieldsOf({ type: 'gradient' }).find((f) => f.type === 'motions');
-  // The one layer type with structure at every angle, so nothing is withheld.
-  assert.deepEqual(list.values, [...MOTION_KINDS]);
+  // Structure at every angle, so every displacing motion — but not zoom,
+  // which a canvas-filling layer cannot be seen to perform (see
+  // GRADIENT_MOTION_KINDS in src/engine/document.js).
+  assert.deepEqual(list.values, [...GRADIENT_MOTION_KINDS]);
 });
 
 test('the band count is offered exactly for the shapes that repeat', () => {

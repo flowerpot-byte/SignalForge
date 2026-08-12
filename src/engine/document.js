@@ -534,7 +534,18 @@ export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
  */
 export const PARTICLE_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
 export const IMAGE_MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'pulse']);
-export const GRADIENT_MOTION_KINDS = MOTION_KINDS;
+/**
+ * Its own frozen list, NOT an alias of MOTION_KINDS — that alias was a live
+ * reference, and appending 'zoom' to the master list silently offered a
+ * gradient a motion its renderer never reads: a dead slider in the app, in
+ * the exported panel and on the CLI, unrecoverable there because a layer's
+ * TYPE (unlike a figure) cannot be switched from SignalRGB. Review caught it
+ * arriving. A gradient fills the canvas at every scale, so zoom could only
+ * ever appear to move the conic/radial centre — which drift already does.
+ */
+export const GRADIENT_MOTION_KINDS = Object.freeze([
+  'none', 'warp', 'drift', 'breathe', 'spin', 'pulse'
+]);
 export const SHAPE_MOTION_KINDS = Object.freeze(['none', 'drift', 'breathe', 'pulse', 'zoom']);
 export const SPINNING_SHAPE_MOTION_KINDS = Object.freeze([
   'none', 'drift', 'breathe', 'spin', 'pulse', 'zoom'

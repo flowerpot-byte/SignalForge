@@ -412,32 +412,58 @@ function tracePath(ctx, layer, figure, radius, state) {
 
   if (figure === 'cross') {
     // A plus sign walked clockwise from the top-left of its upper arm:
-    // twelve corners, arms CROSS_ARM_RATIO of the radius wide, tips on the
-    // contract circle.
-    const arm = radius * CROSS_ARM_RATIO;
-    ctx.moveTo(-arm, -radius);
-    ctx.lineTo(arm, -radius);
+    // twelve corners. The FARTHEST points of this polygon are the arms'
+    // outer CORNERS, at sqrt(reach² + arm²) from the centre — so the reach
+    // is scaled DOWN by that hypotenuse and it is the corners that land on
+    // the contract circle, not the flat tips' midpoints. The first version
+    // put the midpoints there and review measured the corners 7.7% outside
+    // the circle the size promises.
+    const reach = radius / Math.sqrt(1 + CROSS_ARM_RATIO ** 2);
+    const arm = reach * CROSS_ARM_RATIO;
+    ctx.moveTo(-arm, -reach);
+    ctx.lineTo(arm, -reach);
     ctx.lineTo(arm, -arm);
-    ctx.lineTo(radius, -arm);
-    ctx.lineTo(radius, arm);
+    ctx.lineTo(reach, -arm);
+    ctx.lineTo(reach, arm);
     ctx.lineTo(arm, arm);
-    ctx.lineTo(arm, radius);
-    ctx.lineTo(-arm, radius);
+    ctx.lineTo(arm, reach);
+    ctx.lineTo(-arm, reach);
     ctx.lineTo(-arm, arm);
-    ctx.lineTo(-radius, arm);
-    ctx.lineTo(-radius, -arm);
+    ctx.lineTo(-reach, arm);
+    ctx.lineTo(-reach, -arm);
     ctx.lineTo(-arm, -arm);
     ctx.closePath();
     return;
   }
 
   if (figure === 'moon') {
-    // A crescent by winding, the ring's own trick one step along: the full
-    // disc clockwise, the bite anticlockwise and OFFSET, so the two cancel
-    // where they overlap and what remains opens to the right. The bite is a
-    // real hole — the sky shows through it, exactly as through a ring.
-    ctx.arc(0, 0, radius, 0, Math.PI * 2, false);
-    ctx.arc(radius * MOON_OFFSET, 0, radius * MOON_INNER_RATIO, 0, Math.PI * 2, true);
+    // A crescent as its own OUTLINE — two arcs between the two points where
+    // the disc and the bite cross — and deliberately NOT the ring's winding
+    // trick. The winding version needed the bite to overhang the rim (that
+    // is what makes a crescent open), and everywhere the bite lay outside
+    // the disc its winding was -1: nonzero, filled — review measured a
+    // free-floating lens of ink out to 1.3R, clean outside the circle the
+    // size promises. An outline has no outside to leak into.
+    //
+    // The crossing points come from the two circles' own equation — centres
+    // (0,0) r and (d,0) ri meet at x = (r² - ri² + d²) / 2d — so they move
+    // WITH the two constants rather than being a third copy of them.
+    const d = radius * MOON_OFFSET;
+    const inner = radius * MOON_INNER_RATIO;
+    const crossX = (radius * radius - inner * inner + d * d) / (2 * d);
+    const crossY = Math.sqrt(Math.max(0, radius * radius - crossX * crossX));
+    const outerFrom = Math.atan2(-crossY, crossX);
+    const outerTo = Math.atan2(crossY, crossX);
+    const innerFrom = Math.atan2(crossY, crossX - d);
+    const innerTo = Math.atan2(-crossY, crossX - d);
+    // The long way round the dark limb (left), anticlockwise through 180°,
+    // then back along the bite's INNER edge — the arc through x = d - inner,
+    // which is the clockwise direction from the lower crossing in canvas
+    // angles (y grows downward). The first cut of this had the flag wrong
+    // and walked the bite's right side instead, wrapping the whole disc.
+    ctx.arc(0, 0, radius, outerFrom, outerTo, true);
+    ctx.arc(d, 0, inner, innerFrom, innerTo, false);
+    ctx.closePath();
     return;
   }
 

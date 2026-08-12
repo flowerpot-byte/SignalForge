@@ -67,8 +67,14 @@ test('a solid layer offers only the motions a flat colour can actually perform',
   for (const moves of ['drift', 'warp', 'spin']) {
     assert.ok(!SOLID_MOTION_KINDS.includes(moves), `a flat colour cannot be seen to ${moves}`);
   }
-  // A gradient has structure at every angle, so it gets the whole list.
-  assert.deepEqual([...motionKindsFor('gradient')], [...MOTION_KINDS]);
+  // A gradient has structure at every angle, so it performs every DISPLACING
+  // motion — but not zoom, which its renderer never reads (a gradient fills
+  // the canvas at every scale; see GRADIENT_MOTION_KINDS, its own frozen
+  // list since the live MOTION_KINDS alias quietly offered a dead slider).
+  assert.deepEqual([...motionKindsFor('gradient')],
+    ['none', 'warp', 'drift', 'breathe', 'spin', 'pulse']);
+  assert.ok(!motionKindsFor('gradient').includes('zoom'),
+    'a gradient must not offer a motion its renderer never reads');
   // A picture gets everything but spin — see IMAGE_MOTION_KINDS for the
   // arithmetic on how much of a crop turning one would cost.
   assert.deepEqual([...motionKindsFor('image')], [...IMAGE_MOTION_KINDS]);

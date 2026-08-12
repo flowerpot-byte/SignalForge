@@ -82,10 +82,23 @@ test('each figure puts ink where its own numbers say, and nowhere past them', as
   assert.ok(isColour(at(cross, CX + R * 0.75, CY - R * 0.75), BLACK),
     'the diagonal between arms is empty');
 
-  // Moon: ink on the dark limb (left), the bite (right of centre) shows
-  // through to black — the winding hole, exactly like a ring's.
+  // Moon: ink on the dark limb (left), the bite (right of centre) empty —
+  // and, the review's own find, NOTHING outside the contract circle: the
+  // first winding-based construction leaked a free-floating lens of ink out
+  // to 1.3R where the overhanging bite's winding was -1. The outline
+  // construction has no outside to leak into, and this point is the proof.
   assert.ok(isColour(at(moon, CX - R * 0.9, CY), INK_RGB), 'moon limb');
-  assert.ok(isColour(at(moon, CX + R * MOON_OFFSET * 0.9, CY), BLACK), 'the bite is a hole');
+  assert.ok(isColour(at(moon, CX + R * MOON_OFFSET * 0.9, CY), BLACK), 'the bite is empty');
+  assert.ok(isColour(at(moon, CX + R * 1.15, CY), BLACK),
+    'no ink may exist outside the circle the size promises');
+
+  // Cross, the same contract at its own weakest point: the arms' outer
+  // CORNERS are the farthest ink, and they sit ON the circle now — the first
+  // version put the flat tips' midpoints there and the corners 7.7% outside.
+  const cornerAngle = Math.atan2(CROSS_ARM_RATIO, 1);
+  const past = R * 1.06;
+  assert.ok(isColour(at(cross, CX + past * Math.cos(cornerAngle), CY - past * Math.sin(cornerAngle)), BLACK),
+    'a cross corner must not reach past the contract circle');
 });
 
 test('rotation poses a figure, adds to spin, and cannot touch a ring', async () => {
