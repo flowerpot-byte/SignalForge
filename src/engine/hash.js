@@ -196,9 +196,16 @@ export function unitFrom(base, channel) {
  * For callers with one draw to make. The particle layer does not use it — it
  * splits the two halves above so the base is computed once per particle — but
  * it is what makes this module usable as the project's seeded-noise primitive
- * without every caller having to know that it comes in two halves. The plasma
- * field docs/effekt-inventur.md section C5 asks for next wants exactly this
- * shape: two coordinates and a channel in, one fraction out.
+ * without every caller having to know that it comes in two halves. The tile
+ * grid docs/effekt-inventur.md section C5 asks for next wants exactly this
+ * shape: a seed, a cell index and a channel in, one fraction out — one draw
+ * per cell for its starting phase.
+ *
+ * (This said "the plasma field ... section C5" until 12.08.2026. There is no
+ * plasma anywhere in that document; C5 is the tile grid, and a per-pixel field
+ * is A11, which is not on the build list at all. The shape the sentence claims
+ * is needed is the right one either way, which is exactly why the wrong name
+ * survived unnoticed.)
  */
 export function hashUnit(seed, index, channel) {
   return unitFrom(seedHash(seed, index), channel);
