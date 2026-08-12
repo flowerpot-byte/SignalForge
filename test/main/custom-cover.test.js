@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { COVER_WIDTH, COVER_HEIGHT, renderCoverPng } from '../../src/main/cover-image.js';
-import { withoutFileAssets } from '../../src/main/export-effect.js';
+import { withoutFileAssets, exportEffect } from '../../src/main/export-effect.js';
 import { runJobs } from '../harness/render.js';
 import { pixelAt, maxDifference } from '../harness/pixels.js';
 
@@ -110,6 +110,70 @@ test('a chosen cover becomes the tile, and no cover keeps the automatic render',
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the whole export: the chosen picture becomes the PNG on disk, and survives the round trip', async () => {
+  // End to end through exportEffect itself, with the REAL cover renderer
+  // injected — the seam every other export test fills with a fake, which is
+  // exactly how the first review round could note "no test proves the
+  // written PNG is the chosen picture". This one does.
+  const files = new Map();
+  const io = {
+    exists: (path) => files.has(path),
+    mkdir: () => {},
+    writeFile: (path, text) => { files.set(path, text); },
+    writeBinary: (path, bytes) => { files.set(path, bytes); },
+    size: (path) => Buffer.byteLength(files.get(path) ?? '', 'utf8')
+  };
+  const doc = coverDoc({
+    name: 'Chosen Tile',
+    layers: [{ id: 's', type: 'solid', color: '#123456' }],
+    cover: 'art',
+    assets: { art: { kind: 'image', mime: 'image/png', data: QUADRANTS } }
+  });
+  const result = await exportEffect({
+    doc,
+    folder: 'X:\\Effects',
+    engineSource: 'window.SignalForgeEngine = {};',
+    io,
+    renderCover: (finished) => renderCoverPng(finished)
+  });
+  assert.equal(result.ok, true, JSON.stringify(result));
+
+  // The PNG beside the effect is the QUADRANT picture, proven on its pixels.
+  const png = files.get('X:\\Effects\\Chosen Tile.png');
+  assert.ok(png, 'the tile PNG was written');
+  const dir = mkdtempSync(join(tmpdir(), 'signalforge-cover-e2e-'));
+  try {
+    const file = join(dir, 'tile.png');
+    writeFileSync(file, png);
+    const [tile] = await runJobs([{ name: 'tile', kind: 'png', file }]);
+    const corners = [
+      pixelAt(tile.pixels, tile.width, 128, 72),
+      pixelAt(tile.pixels, tile.width, 384, 72),
+      pixelAt(tile.pixels, tile.width, 128, 216),
+      pixelAt(tile.pixels, tile.width, 384, 216)
+    ];
+    for (let a = 0; a < corners.length; a += 1) {
+      for (let b = a + 1; b < corners.length; b += 1) {
+        const gap = Math.abs(corners[a].r - corners[b].r)
+          + Math.abs(corners[a].g - corners[b].g)
+          + Math.abs(corners[a].b - corners[b].b);
+        assert.ok(gap > 30, 'the written tile is not the chosen quadrant picture');
+      }
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+
+  // And the round trip: the effect file itself still carries cover + asset,
+  // so the library can reopen it with the chosen tile intact.
+  const html = files.get('X:\\Effects\\Chosen Tile.html');
+  const embedded = html.match(/<script id="sf-document" type="application\/json">([\s\S]*?)<\/script>/);
+  assert.ok(embedded, 'the effect embeds its document');
+  const reopened = JSON.parse(embedded[1].replace(/<\\\//g, '</'));
+  assert.equal(reopened.cover, 'art');
+  assert.equal(reopened.assets.art.data, QUADRANTS);
 });
 
 test('a file-shaped cover is stripped before the render window ever sees it', async () => {
