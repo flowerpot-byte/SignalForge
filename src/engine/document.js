@@ -54,7 +54,7 @@ export const FIT_MODES = Object.freeze(['cover', 'stretch', 'contain']);
  * Keeping the old four where they were means a person's list does not
  * reshuffle itself under them when they update.
  */
-export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'spin', 'pulse']);
+export const MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'spin', 'pulse', 'zoom']);
 export const CONTROL_TYPES = Object.freeze(['number', 'boolean', 'color', 'combobox']);
 
 /**
@@ -102,7 +102,14 @@ export const GRADIENT_SHAPES = Object.freeze(['linear', 'radial', 'conic', 'stri
  * its drawStar and drawHeart) — see src/engine/layers/shape.js, which cites the
  * lines it takes and says what it changed and why.
  */
-export const SHAPE_FIGURES = Object.freeze(['circle', 'ring', 'star', 'heart']);
+export const SHAPE_FIGURES = Object.freeze([
+  'circle', 'ring', 'star', 'heart',
+  // Appended 12.08. ("mehr Figuren"), never reordered — the dropdown order is
+  // baked into exported effects exactly as MOTION_KINDS' note explains. All
+  // five keep the size contract: the figure is drawn inside the circle whose
+  // DIAMETER `size` names.
+  'triangle', 'hexagon', 'diamond', 'cross', 'moon'
+]);
 
 /**
  * The four ways a `particles` layer can move.
@@ -528,13 +535,21 @@ export const SOLID_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
 export const PARTICLE_MOTION_KINDS = Object.freeze(['none', 'breathe', 'pulse']);
 export const IMAGE_MOTION_KINDS = Object.freeze(['none', 'warp', 'drift', 'breathe', 'pulse']);
 export const GRADIENT_MOTION_KINDS = MOTION_KINDS;
-export const SHAPE_MOTION_KINDS = Object.freeze(['none', 'drift', 'breathe', 'pulse']);
+export const SHAPE_MOTION_KINDS = Object.freeze(['none', 'drift', 'breathe', 'pulse', 'zoom']);
 export const SPINNING_SHAPE_MOTION_KINDS = Object.freeze([
-  'none', 'drift', 'breathe', 'spin', 'pulse'
+  'none', 'drift', 'breathe', 'spin', 'pulse', 'zoom'
 ]);
 
-/** The figures a spin can actually be seen on: the ones with no rotational symmetry. */
-export const SPINNABLE_FIGURES = Object.freeze(['star', 'heart']);
+/**
+ * The figures a spin can actually be seen on: everything but the two that are
+ * symmetric under EVERY angle (circle, ring). A hexagon repeats every sixty
+ * degrees and a diamond every one-eighty, but the degrees between repeats are
+ * visible turning — the same reasoning that put the five-fold star here on
+ * day one.
+ */
+export const SPINNABLE_FIGURES = Object.freeze([
+  'star', 'heart', 'triangle', 'hexagon', 'diamond', 'cross', 'moon'
+]);
 
 /**
  * The motion kinds worth offering for a layer of this type.
@@ -1043,6 +1058,11 @@ function normalizeLayer(raw, index, usedIds, problems) {
       thickness: clamp(
         num(input.thickness, DEFAULT_SHAPE_THICKNESS), MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS
       ),
+      // A STANDING angle, degrees, clamped like every angle here — the pose
+      // the figure holds while still. A spin turns on top of it (see
+      // layers/shape.js for the order), so "rotated 30 and spinning" means
+      // what the words say.
+      rotation: clamp(num(input.rotation, 0), 0, 360),
       // Whole points only, rounded rather than truncated so a document carrying
       // 5.7 lands on 6 instead of always downwards — the same rule `bands` uses.
       points: clamp(

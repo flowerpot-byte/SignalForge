@@ -87,6 +87,7 @@ export { speedToRate } from './motion/speed.js';
 export { breatheFactor, motionPhase } from './motion/breathe.js';
 export { pulseFactor } from './motion/pulse.js';
 export { spinDegrees, spinRadians } from './motion/spin.js';
+export { zoomFactor, ZOOM_MAX_DEPTH } from './motion/zoom.js';
 export { driftSwing, DRIFT_CENTRE_REACH } from './motion/drift.js';
 export {
   STAR_INNER_RATIO, STAR_FIRST_POINT, HEART_LOBE_TOP, HEART_INK_HEIGHT, shapeCentre

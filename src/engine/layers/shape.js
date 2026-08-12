@@ -10,6 +10,7 @@ import {
 import { breatheFactor } from '../motion/breathe.js';
 import { pulseFactor } from '../motion/pulse.js';
 import { spinRadians } from '../motion/spin.js';
+import { zoomFactor } from '../motion/zoom.js';
 import { driftSwing, DRIFT_CENTRE_REACH } from '../motion/drift.js';
 import { cyclePaint } from '../motion/color-cycle.js';
 
@@ -208,6 +209,27 @@ export const HEART_INK_HEIGHT = 1 - HEART_LOBE_TOP;
 const HEART_SHOULDER = 0.3;
 const HEART_WAIST = (1 + HEART_SHOULDER) / 2;
 
+/**
+ * The five figures of 12.08., each a handful of named numbers rather than
+ * magic ones — all inside the size contract (points ON the circle whose
+ * diameter `size` names):
+ *
+ *   DIAMOND_WIDTH_RATIO   how wide a diamond is against its height. 1 would
+ *                         be a square stood on its corner; 0.65 is the
+ *                         playing-card shape the word calls up.
+ *   CROSS_ARM_RATIO       the arm's half-width against the outer radius. 0.4
+ *                         keeps the plus readable after SignalRGB samples it
+ *                         down to LEDs; thinner reads as lines.
+ *   MOON_INNER_RATIO      the bite's radius against the moon's own.
+ *   MOON_OFFSET           how far the bite's centre sits towards the light,
+ *                         as a fraction of the radius. Together with the
+ *                         ratio it leaves a crescent open to the right.
+ */
+export const DIAMOND_WIDTH_RATIO = 0.65;
+export const CROSS_ARM_RATIO = 0.4;
+export const MOON_INNER_RATIO = 0.85;
+export const MOON_OFFSET = 0.45;
+
 export function createState() {
   return { starKey: null, starUnit: null };
 }
@@ -240,6 +262,13 @@ function radiusOf(layer) {
 function pointsOf(layer) {
   const raw = Math.round(Number(layer.points));
   return clamp(Number.isFinite(raw) ? raw : DEFAULT_STAR_POINTS, MIN_STAR_POINTS, MAX_STAR_POINTS);
+}
+
+/** The standing pose, in radians — clamped like every field, trusted never. */
+function rotationRadians(layer) {
+  const raw = Number(layer.rotation);
+  const degrees = clamp(Number.isFinite(raw) ? raw : 0, 0, 360);
+  return (degrees * Math.PI) / 180;
 }
 
 /** The ring's inner radius, as a fraction of its outer one. */
@@ -356,6 +385,62 @@ function tracePath(ctx, layer, figure, radius, state) {
     return;
   }
 
+  // The two regular polygons: corners evenly on the contract circle, first
+  // corner straight up (STAR_FIRST_POINT), exactly as the star opens.
+  if (figure === 'triangle' || figure === 'hexagon') {
+    const corners = figure === 'triangle' ? 3 : 6;
+    for (let corner = 0; corner < corners; corner += 1) {
+      const angle = STAR_FIRST_POINT + (corner / corners) * Math.PI * 2;
+      const x = Math.cos(angle) * radius;
+      const y = Math.sin(angle) * radius;
+      if (corner === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    return;
+  }
+
+  if (figure === 'diamond') {
+    const half = radius * DIAMOND_WIDTH_RATIO;
+    ctx.moveTo(0, -radius);
+    ctx.lineTo(half, 0);
+    ctx.lineTo(0, radius);
+    ctx.lineTo(-half, 0);
+    ctx.closePath();
+    return;
+  }
+
+  if (figure === 'cross') {
+    // A plus sign walked clockwise from the top-left of its upper arm:
+    // twelve corners, arms CROSS_ARM_RATIO of the radius wide, tips on the
+    // contract circle.
+    const arm = radius * CROSS_ARM_RATIO;
+    ctx.moveTo(-arm, -radius);
+    ctx.lineTo(arm, -radius);
+    ctx.lineTo(arm, -arm);
+    ctx.lineTo(radius, -arm);
+    ctx.lineTo(radius, arm);
+    ctx.lineTo(arm, arm);
+    ctx.lineTo(arm, radius);
+    ctx.lineTo(-arm, radius);
+    ctx.lineTo(-arm, arm);
+    ctx.lineTo(-radius, arm);
+    ctx.lineTo(-radius, -arm);
+    ctx.lineTo(-arm, -arm);
+    ctx.closePath();
+    return;
+  }
+
+  if (figure === 'moon') {
+    // A crescent by winding, the ring's own trick one step along: the full
+    // disc clockwise, the bite anticlockwise and OFFSET, so the two cancel
+    // where they overlap and what remains opens to the right. The bite is a
+    // real hole — the sky shows through it, exactly as through a ring.
+    ctx.arc(0, 0, radius, 0, Math.PI * 2, false);
+    ctx.arc(radius * MOON_OFFSET, 0, radius * MOON_INNER_RATIO, 0, Math.PI * 2, true);
+    return;
+  }
+
   // heart. `Vibe`'s four curves, with its two magic numbers replaced by the
   // size contract: S is the figure's width, and the box is lifted so that the
   // INK (not the box) is centred on the origin — see HEART_LOBE_TOP.
@@ -408,6 +493,7 @@ export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   const drift = motions.find((motion) => motion.kind === 'drift') ?? null;
   const pulse = motions.find((motion) => motion.kind === 'pulse') ?? null;
   const breathe = motions.find((motion) => motion.kind === 'breathe') ?? null;
+  const zoom = motions.find((motion) => motion.kind === 'zoom') ?? null;
 
   const previousAlpha = ctx.globalAlpha;
   let alpha = previousAlpha;
@@ -416,7 +502,10 @@ export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   if (alpha !== previousAlpha) ctx.globalAlpha = clamp(alpha, 0, 1);
 
   const figure = figureOf(layer);
-  const radius = radiusOf(layer);
+  // Zoom is a factor on the GEOMETRY, applied to the radius before the path
+  // is walked — the star's cached unit vertices never see it (radius has
+  // always been their per-frame multiplier).
+  const radius = radiusOf(layer) * (zoom ? zoomFactor(zoom, timeSec) : 1);
   const centre = shapeCentre(layer, drift, timeSec);
 
   ctx.save();
@@ -432,8 +521,13 @@ export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   if (Number.isFinite(aspect) && aspect > 0 && aspect !== 1) ctx.scale(1 / aspect, 1);
   // Only where the turn can be seen — see the note on spin above for why
   // performing it on a circle or a ring would move bytes without moving the
-  // picture.
-  if (spin && SPINNABLE_FIGURES.includes(figure)) ctx.rotate(spinRadians(spin, timeSec));
+  // picture. The STANDING rotation obeys the same gate for the same reason,
+  // and the two add: "rotated 30 and spinning" holds its pose while turning.
+  if (SPINNABLE_FIGURES.includes(figure)) {
+    const turn = rotationRadians(layer)
+      + (spin ? spinRadians(spin, timeSec) : 0);
+    if (turn !== 0) ctx.rotate(turn);
+  }
   tracePath(ctx, layer, figure, radius, state);
   // Parsed every frame rather than trusted, for the reason the solid layer
   // gives at length: applyControls writes a SignalRGB colour control's raw

@@ -11,7 +11,7 @@
 // the browser as a plain ES module just as it does in node:test, where this
 // file is imported with no DOM whatsoever.
 import {
-  FIT_MODES, GRADIENT_SHAPES, SHAPE_FIGURES, PARTICLE_PATTERNS,
+  FIT_MODES, GRADIENT_SHAPES, SHAPE_FIGURES, SPINNABLE_FIGURES, PARTICLE_PATTERNS,
   MIN_GRADIENT_STOPS, MAX_GRADIENT_STOPS, motionKindsFor
 } from '../../../src/engine/document.js';
 import {
@@ -69,6 +69,7 @@ const RANGES = Object.freeze({
   // finished effect and `x` is not a name to claim there (see CONTROL_RANGES),
   // while the document simply calls them position.x and position.y.
   size: withStep(CONTROL_RANGES.size),
+  rotation: withStep(CONTROL_RANGES.rotation),
   positionX: withStep(CONTROL_RANGES.posX),
   positionY: withStep(CONTROL_RANGES.posY),
   thickness: withStep(CONTROL_RANGES.thickness),
@@ -409,6 +410,16 @@ function fillFields(layer, at, section, R) {
       fields.push({
         path: `${at}.points`, type: 'number', section,
         labelKey: 'inspector.points', ...R.points
+      });
+    }
+    // The standing pose — only for the figures a turn can be SEEN on, the
+    // same gate thickness and points obey for their figures (the engine
+    // ignores a rotation on a circle or a ring outright, see layers/shape.js,
+    // so a slider here would be the one thing worse than a missing one).
+    if (SPINNABLE_FIGURES.includes(layer.figure)) {
+      fields.push({
+        path: `${at}.rotation`, type: 'number', section,
+        labelKey: 'inspector.rotation', ...R.rotation
       });
     }
   }

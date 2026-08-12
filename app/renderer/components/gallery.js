@@ -161,6 +161,12 @@ export const TILES = Object.freeze([
   Object.freeze({ key: 'ring', labelKey: 'gallery.ring', glyph: null, starts: 'ring' }),
   Object.freeze({ key: 'star', labelKey: 'gallery.star', glyph: null, starts: 'star' }),
   Object.freeze({ key: 'heart', labelKey: 'gallery.heart', glyph: null, starts: 'heart' }),
+  // The 12.08. five, under the same rule: a different frame zero earns a tile.
+  Object.freeze({ key: 'triangle', labelKey: 'gallery.triangle', glyph: null, starts: 'triangle' }),
+  Object.freeze({ key: 'hexagon', labelKey: 'gallery.hexagon', glyph: null, starts: 'hexagon' }),
+  Object.freeze({ key: 'diamond', labelKey: 'gallery.diamond', glyph: null, starts: 'diamond' }),
+  Object.freeze({ key: 'cross', labelKey: 'gallery.cross', glyph: null, starts: 'cross' }),
+  Object.freeze({ key: 'moon', labelKey: 'gallery.moon', glyph: null, starts: 'moon' }),
   // ------------------------------------------------------------------------
   // PARTICLES: ONE TILE, NOT FOUR — AND THAT IS THE FIGURES' RULE, NOT AN
   // EXCEPTION TO IT

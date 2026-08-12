@@ -139,6 +139,7 @@ test('every slider offers exactly the range the matching exported control offers
     ['layers.0.position.y', 'posY'],
     ['layers.0.thickness', 'thickness'],
     ['layers.0.points', 'points'],
+    ['layers.0.rotation', 'rotation'],
     // The colour cycle's tempo, on the two shape documents (a figure carries
     // it; the exported control is called cycleTempo because `tempo` is a
     // motion's and the panel is flat).

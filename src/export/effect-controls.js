@@ -123,6 +123,8 @@ const FOREGROUND_RANGES = Object.freeze({
   // The ring's wall, as a percent of its own outer radius. 100 is a filled
   // disc rather than an error, so the range runs continuously into the circle.
   thickness: Object.freeze({ min: MIN_SHAPE_THICKNESS, max: MAX_SHAPE_THICKNESS }),
+  // The figure's standing pose, degrees — the full circle, like every angle.
+  rotation: Object.freeze({ min: 0, max: 360 }),
   // How many points the star has. Whole numbers only, and the engine's clamp
   // says the same thing — test/export/effect-controls.test.js reads both ends
   // out of normalizeDocument rather than trusting these two.
@@ -441,7 +443,12 @@ export function effectControls(doc, layerId, backgroundId = null) {
       slider('posX', 'Position X', 'Position X', layer.position.x, `${layerId}.position.x`),
       slider('posY', 'Position Y', 'Position Y', layer.position.y, `${layerId}.position.y`),
       slider('thickness', 'Randstaerke', 'Thickness', layer.thickness, `${layerId}.thickness`),
-      slider('points', 'Zacken', 'Points', layer.points, `${layerId}.points`)
+      slider('points', 'Zacken', 'Points', layer.points, `${layerId}.points`),
+      // Offered whatever the figure is, exactly like thickness and points:
+      // the Figure dropdown sits in this very panel, and a rotation that only
+      // appeared for the figures it turns would leave somebody who switched
+      // with no way to pose the one they switched to.
+      slider('rotation', 'Drehung', 'Rotation', layer.rotation, `${layerId}.rotation`)
     );
     motionControls();
   }

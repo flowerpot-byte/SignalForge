@@ -631,6 +631,11 @@ async function boot() {
     ring: { type: 'shape', figure: 'ring' },
     star: { type: 'shape', figure: 'star' },
     heart: { type: 'shape', figure: 'heart' },
+    triangle: { type: 'shape', figure: 'triangle' },
+    hexagon: { type: 'shape', figure: 'hexagon' },
+    diamond: { type: 'shape', figure: 'diamond' },
+    cross: { type: 'shape', figure: 'cross' },
+    moon: { type: 'shape', figure: 'moon' },
     // The swarm, and the ONE entry in this table that names numbers. The
     // pattern is still left out — its own default is the first entry of
     // PARTICLE_PATTERNS, and there is one particle tile rather than four (see
