@@ -200,9 +200,11 @@ export function mountFooter(container, {
   // export into the same file.
   let exportState = 'idle';
   let exportStateTimer = null;
-  // Three LITERAL t('...') calls rather than one call on a ternary key: the
-  // i18n completeness test finds keys by scanning for t('...') literals, and
-  // a computed key would quietly walk all three words out of its sight.
+  // Three literal t-calls rather than one call on a ternary key: the i18n
+  // completeness test finds keys by scanning the source for literally quoted
+  // t-arguments, and a computed key would quietly walk all three words out
+  // of its sight. (No quoted parentheses in this comment either — the same
+  // scanner read an earlier version of it as a key called three dots.)
   const exportWord = () => {
     if (exportState === 'busy') return t('footer.exporting');
     if (exportState === 'done') return t('footer.exported');
