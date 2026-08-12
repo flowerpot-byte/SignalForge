@@ -987,6 +987,17 @@ function normalizeLayer(raw, index, usedIds, problems) {
     return {
       ...base,
       color: normalizeColor(input.color, DEFAULT_SOLID_COLOR),
+      // The colour cycle: the same stops the gradient and the particles carry
+      // (at stored and ignored, like the particles), blended through as a
+      // ring when cycleSpeed is above 0 — see src/engine/motion/color-cycle.js
+      // for what each field means and why `color` stays the resting truth.
+      // cyclePhase is the ring's anchor (no control of its own; the settings
+      // column re-parks it so a tempo change never jumps the colour) and is
+      // deliberately NOT whole-number clamped: the re-parking chain writes
+      // exact figures.
+      stops: normalizeStops(input.stops, id, problems),
+      cycleSpeed: clamp(num(input.cycleSpeed, 0), 0, 100),
+      cyclePhase: clamp(num(input.cyclePhase, 0), 0, 100),
       motions: normalizeMotions(input, id, problems)
     };
   }
@@ -1013,6 +1024,11 @@ function normalizeLayer(raw, index, usedIds, problems) {
       ...base,
       figure,
       color: normalizeColor(input.color, DEFAULT_SOLID_COLOR),
+      // The colour cycle, exactly as on a solid — one sentence, two layer
+      // types, see src/engine/motion/color-cycle.js.
+      stops: normalizeStops(input.stops, id, problems),
+      cycleSpeed: clamp(num(input.cycleSpeed, 0), 0, 100),
+      cyclePhase: clamp(num(input.cyclePhase, 0), 0, 100),
       // Percent of the canvas height — see MIN_SHAPE_SIZE above.
       size: clamp(num(input.size, DEFAULT_SHAPE_SIZE), MIN_SHAPE_SIZE, MAX_SHAPE_SIZE),
       // Where the middle of the figure sits, as a percent of each edge, so 50/50

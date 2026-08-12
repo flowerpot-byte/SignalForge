@@ -145,6 +145,11 @@ const FOREGROUND_RANGES = Object.freeze({
   // engine's own clamp restated (see MIN_ASPECT in src/engine/document.js for
   // the measurement behind it). 100, the default, is "not at all".
   aspect: Object.freeze({ min: MIN_ASPECT, max: MAX_ASPECT }),
+  // The colour cycle's tempo, and 0 is deliberately IN the range for the
+  // reason hueCycle's 0 is: this slider IS the on switch (see
+  // src/engine/motion/color-cycle.js), so it has to be able to reach off,
+  // and off is its default.
+  cycleTempo: Object.freeze({ min: 0, max: 100 }),
 
   // ------------------------------------------------------------ the particles
   //
@@ -357,8 +362,34 @@ export function effectControls(doc, layerId, backgroundId = null) {
   // the colour IS the effect and everything else is applied to it, so it comes
   // first — somebody who installs a gradient wants to try their own two
   // colours in it before they wonder how fast it should move.
+  /**
+   * The colour cycle's controls, for the two layer types that carry one.
+   *
+   * The cycle colours get names of their own (`cycleColor1..4`, not
+   * `color1..4`) for the reason every name in this file is chosen once: a
+   * control's property becomes a global in the finished effect, and the
+   * gradient's and the particles' stop colours already answer to `colorN`.
+   * The tempo is offered whatever it currently is — 0 included — because it
+   * is the on switch, and the colours are offered even at tempo 0 for the
+   * reason the gradient's angle is offered on a radial: the switch sits in
+   * this very panel, and a colour that only appeared once the cycle ran
+   * would leave somebody who turned it on with no way to say what it cycles
+   * through.
+   */
+  const cycleControls = (target, id) => {
+    if (!Array.isArray(target.stops)) return;
+    target.stops.forEach((stop, index) => {
+      const at = index + 1;
+      controls.push(colour(`cycleColor${at}`, `Wechselfarbe ${at}`, `Cycle Colour ${at}`,
+        stop.color, `${id}.stops.${index}.color`));
+    });
+    controls.push(slider('cycleTempo', 'Wechseltempo', 'Cycle Tempo',
+      target.cycleSpeed, `${id}.cycleSpeed`));
+  };
+
   if (layer && layer.type === 'solid') {
     controls.push(colour('color', 'Farbe', 'Colour', layer.color, `${layerId}.color`));
+    cycleControls(layer, layerId);
     motionControls();
   }
 
@@ -402,8 +433,9 @@ export function effectControls(doc, layerId, backgroundId = null) {
   // cost is two sliders that do nothing for three figures out of four; the cost
   // of the alternative is a dead end.
   if (layer && layer.type === 'shape') {
+    controls.push(colour('color', 'Farbe', 'Colour', layer.color, `${layerId}.color`));
+    cycleControls(layer, layerId);
     controls.push(
-      colour('color', 'Farbe', 'Colour', layer.color, `${layerId}.color`),
       dropdown('figure', 'Figur', 'Figure', SHAPE_FIGURES, layer.figure, `${layerId}.figure`),
       slider('size', 'Groesse', 'Size', layer.size, `${layerId}.size`),
       slider('posX', 'Position X', 'Position X', layer.position.x, `${layerId}.position.x`),

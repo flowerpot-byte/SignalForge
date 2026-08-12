@@ -29,7 +29,7 @@ test('a solid effect offers its colour, the motions it can perform, and the docu
   const doc = withLiveMotion(docWith({ type: 'solid' }), 'a1');
   assert.deepEqual(
     effectControls(doc, 'a1').map((control) => control.property),
-    ['color', 'motion', 'tempo', 'strength',
+    ['color', 'cycleColor1', 'cycleColor2', 'cycleTempo', 'motion', 'tempo', 'strength',
       'trail', 'hueShift', 'hueCycle', 'brightness', 'saturation', 'greenMagenta', 'blueYellow']
   );
 });

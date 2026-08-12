@@ -62,6 +62,7 @@ const RANGES = Object.freeze({
   hueCycle: withStep(CONTROL_RANGES.hueCycle),
   trail: withStep(CONTROL_RANGES.trail),
   aspect: withStep(CONTROL_RANGES.aspect),
+  cycleTempo: withStep(CONTROL_RANGES.cycleTempo),
   // The shape layer's five numbers. Two of the names differ from the
   // document's, exactly as `speed`/`amount` do: the exported controls are
   // called posX and posY because their `property` becomes a global in the
@@ -263,11 +264,45 @@ function motionKindsWide(layer) {
 function fillFields(layer, at, section, R) {
   const fields = [];
 
+  /**
+   * The colour cycle's three pieces: the tempo, the list, and one colour per
+   * entry — the same card vocabulary the gradient's stops already use, so
+   * there is nothing new to learn (see src/engine/motion/color-cycle.js for
+   * what the fields mean). FOREGROUND ONLY for now: the engine cycles a
+   * background solid just as well, but the exported effect deliberately
+   * offers no background cycle controls yet, and this column showing a knob
+   * the export then quietly lacks would be the two halves disagreeing.
+   */
+  const cycleFields = () => {
+    if (section !== 'fill') return;
+    fields.push({
+      path: `${at}.cycleSpeed`, type: 'number', section,
+      labelKey: 'inspector.cycleSpeed', ...R.cycleTempo
+    });
+    // The cards carry the cycle's OWN words — "Wechselfarbe", the same name
+    // the exported controls already use — rather than inheriting the
+    // gradient's "Farbstopp": there is no ramp here and nothing for a stop to
+    // stop at, and a card called "Farbe" two rows under the resting "Farbe"
+    // field would be told apart by nothing at all.
+    fields.push({
+      path: at, type: 'stops', section,
+      min: MIN_GRADIENT_STOPS, max: MAX_GRADIENT_STOPS,
+      entryLabelKey: 'inspector.cycleColour', addLabelKey: 'inspector.addCycleColour'
+    });
+    layer.stops.forEach((_, i) => {
+      fields.push({
+        path: `${at}.stops.${i}.color`, type: 'color', section,
+        labelKey: 'inspector.cycleColour'
+      });
+    });
+  };
+
   // What the layer is made of, for the two types that are made of colour.
   if (layer && layer.type === 'solid') {
     fields.push({
       path: `${at}.color`, type: 'color', section, labelKey: 'inspector.colour'
     });
+    cycleFields();
   }
 
   if (layer && layer.type === 'gradient') {
@@ -351,6 +386,7 @@ function fillFields(layer, at, section, R) {
     fields.push({
       path: `${at}.color`, type: 'color', section, labelKey: 'inspector.colour'
     });
+    cycleFields();
     fields.push({
       path: `${at}.size`, type: 'number', section,
       labelKey: 'inspector.size', ...R.size
@@ -899,6 +935,11 @@ export function mountInspector(container, {
     let listAdd = null;
     let entryIndex = null;
     let entryCard = null;
+    // What one entry of the open list is CALLED in its legend — the list
+    // field's own entryLabelKey when it carries one (the colour cycle's cards
+    // say "Wechselfarbe", not the gradient's "Farbstopp"), the old ternary's
+    // answer otherwise.
+    let listEntryLabel = null;
 
     /** The add button goes into the nearest heading above what it adds to. */
     const closeList = () => {
@@ -909,6 +950,7 @@ export function mountInspector(container, {
       listRows = [];
       entryIndex = null;
       entryCard = null;
+      listEntryLabel = null;
     };
 
     /**
@@ -1005,6 +1047,21 @@ export function mountInspector(container, {
             hueShiftSlider.dispatchEvent(new Event('input'));
           }
         }
+        // The colour cycle's tempo, held to the same promise: the anchor is
+        // re-parked at the angle on screen before the tempo is written — the
+        // very fault the hueCycle branch above exists for, caught arriving
+        // again one feature later. Cheaper here than there: cyclePhase has no
+        // slider to keep honest, so the EXACT figure goes straight into the
+        // document (no display rounding, hence no side-car chain — see
+        // rebasedCyclePhase in src/engine/motion/color-cycle.js).
+        if (path.endsWith('.cycleSpeed') && previewTime) {
+          const layerPath = path.slice(0, -'.cycleSpeed'.length);
+          const live = SF.getByPath(getDocument(), layerPath);
+          if (live) {
+            onChange(`${layerPath}.cyclePhase`,
+              SF.rebasedCyclePhase(live.cyclePhase, live.cycleSpeed, next, previewTime()));
+          }
+        }
         const result = onChange(path, next);
         // A slider must never pull the ground out from under the drag it is in
         // the middle of, and neither must a colour picker: the native one
@@ -1031,6 +1088,7 @@ export function mountInspector(container, {
         listName = field.type;
         listRows = list.rows;
         listAdd = list.add;
+        listEntryLabel = field.entryLabelKey ?? null;
         continue;
       }
 
@@ -1066,7 +1124,8 @@ export function mountInspector(container, {
         entryCard = document.createElement('fieldset');
         entryCard.className = listName === 'stops' ? 'motion stop' : 'motion';
         const legend = document.createElement('legend');
-        const word = listName === 'stops' ? 'inspector.stop' : 'inspector.motion';
+        const word = listEntryLabel
+          ?? (listName === 'stops' ? 'inspector.stop' : 'inspector.motion');
         legend.textContent = `${t(word)} ${entry + 1}`;
         entryCard.append(legend);
         if (listRows[entry]) entryCard.append(listRows[entry]);

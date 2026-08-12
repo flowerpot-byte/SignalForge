@@ -1,11 +1,10 @@
 // SignalForge — build SignalRGB effects from images, video, gradients and shapes.
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
-import {
-  CANVAS_WIDTH, CANVAS_HEIGHT, clamp, normalizeColor, DEFAULT_SOLID_COLOR
-} from '../document.js';
+import { CANVAS_WIDTH, CANVAS_HEIGHT, clamp } from '../document.js';
 import { breatheFactor } from '../motion/breathe.js';
 import { pulseFactor } from '../motion/pulse.js';
+import { cyclePaint } from '../motion/color-cycle.js';
 
 /**
  * One colour, everywhere.
@@ -74,12 +73,15 @@ export function render(ctx, layer, asset, timeSec) {
   if (breathe) alpha *= breatheFactor(breathe, timeSec);
   if (alpha !== previousAlpha) ctx.globalAlpha = clamp(alpha, 0, 1);
 
-  // Parsed on every frame rather than trusted, because layer.color is not only
+  // Parsed on every frame rather than trusted, because the fields are not only
   // what normalizeDocument put there: applyControls writes a SignalRGB colour
-  // control's raw value straight into it (see src/engine/bind.js), and an
+  // control's raw value straight into them (see src/engine/bind.js), and an
   // unparseable string handed to fillStyle is a silent no-op that would paint
-  // whatever colour the canvas last used.
-  ctx.fillStyle = normalizeColor(layer.color, DEFAULT_SOLID_COLOR);
+  // whatever colour the canvas last used. cyclePaint IS that parse — at
+  // cycleSpeed 0 it returns exactly the normalizeColor(layer.color) this line
+  // has always painted, and above 0 it blends through the layer's own stops
+  // (src/engine/motion/color-cycle.js).
+  ctx.fillStyle = cyclePaint(layer, timeSec);
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
   ctx.globalAlpha = previousAlpha;

@@ -7,6 +7,7 @@ import { mountInspector } from '../../app/renderer/components/inspector.js';
 import { normalizeDocument } from '../../src/engine/document.js';
 import { getByPath, setByPath } from '../../src/engine/bind.js';
 import { hueDegrees, rebasedHueShift } from '../../src/engine/motion/hue.js';
+import { cyclePaint, rebasedCyclePhase } from '../../src/engine/motion/color-cycle.js';
 
 /**
  * The Farbwechsel slider must change the SPEED and nothing else.
@@ -72,7 +73,9 @@ function installFakeDom(container) {
     activeElement: null,
     getElementById: (id) => byId(container, id)
   };
-  globalThis.window = { SignalForgeEngine: { getByPath, setByPath, rebasedHueShift } };
+  globalThis.window = {
+    SignalForgeEngine: { getByPath, setByPath, rebasedHueShift, rebasedCyclePhase }
+  };
 }
 
 const t = (key) => key;
@@ -213,4 +216,36 @@ test('a cycle change at t=0 writes no shift, because nothing has turned', () => 
   assert.deepEqual(changes, [['hueCycle', 70]],
     'a re-park to the value already showing must not write at all');
   assert.equal(doc.hueShift, 100);
+});
+
+test('the colour cycle\'s tempo re-parks its anchor too — the fault must not arrive twice', () => {
+  // The very promise the hueCycle branch above keeps, on the layer's own
+  // tempo: caught missing by review one feature after it was first paid for.
+  const timeSec = 9.13;
+  const doc = normalizeDocument({
+    layers: [{
+      id: 's', type: 'solid', color: '#123456', cycleSpeed: 20,
+      stops: [{ at: 0, color: '#ff0000' }, { at: 100, color: '#0000ff' }]
+    }]
+  }).doc;
+  const { container, changes } = mount(doc, { previewTime: () => timeSec });
+
+  const colourBefore = cyclePaint(doc.layers[0], timeSec);
+
+  const tempo = byId(container, 'sf-layers-0-cycleSpeed');
+  assert.ok(tempo, 'the tempo slider exists');
+  tempo.value = '70';
+  tempo.fire('input');
+
+  // The anchor arrived before the tempo — while the layer still said 20 —
+  // exact and unrounded, and the painted colour did not move.
+  const paths = changes.map(([path]) => path);
+  const anchorAt = paths.indexOf('layers.0.cyclePhase');
+  const tempoAt = paths.indexOf('layers.0.cycleSpeed');
+  assert.ok(anchorAt !== -1, `the anchor was never written: ${JSON.stringify(changes)}`);
+  assert.ok(anchorAt < tempoAt, 'the anchor must be re-parked BEFORE the tempo changes');
+  assert.equal(doc.layers[0].cyclePhase,
+    rebasedCyclePhase(0, 20, 70, timeSec));
+  assert.equal(cyclePaint(doc.layers[0], timeSec), colourBefore,
+    'the colour jumped on a tempo change');
 });

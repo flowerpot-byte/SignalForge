@@ -139,6 +139,10 @@ test('every slider offers exactly the range the matching exported control offers
     ['layers.0.position.y', 'posY'],
     ['layers.0.thickness', 'thickness'],
     ['layers.0.points', 'points'],
+    // The colour cycle's tempo, on the two shape documents (a figure carries
+    // it; the exported control is called cycleTempo because `tempo` is a
+    // motion's and the panel is flat).
+    ['layers.0.cycleSpeed', 'cycleTempo'],
     // The particle layer's four, at layers.1 for the reason given above. Two of
     // them are the same crossing posX and posY are: the exported controls are
     // called particleCount and particleSize because a control's property

@@ -46,7 +46,12 @@ const pathsOf = (layer) => fieldsOf(layer).map((field) => field.path);
 
 test('a solid layer offers one colour, its motions and the document colours', () => {
   const fields = fieldsOf({ type: 'solid' });
-  assert.deepEqual(fields.filter((f) => f.section === 'fill').map((f) => f.path), ['layers.0.color']);
+  // The resting colour, then the cycle: its tempo, the stop list itself
+  // (path = the layer, exactly like the gradient's) and one colour per stop.
+  assert.deepEqual(fields.filter((f) => f.section === 'fill').map((f) => f.path), [
+    'layers.0.color', 'layers.0.cycleSpeed', 'layers.0',
+    'layers.0.stops.0.color', 'layers.0.stops.1.color'
+  ]);
   assert.equal(fields.find((f) => f.path === 'layers.0.color').type, 'color');
   // No picture means no "Bild" section at all — not an empty one.
   assert.equal(fields.filter((f) => f.section === 'image').length, 0);

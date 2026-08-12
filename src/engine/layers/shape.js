@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Max
 // SPDX-License-Identifier: GPL-3.0-or-later
 import {
-  CANVAS_WIDTH, CANVAS_HEIGHT, clamp, normalizeColor, DEFAULT_SOLID_COLOR,
+  CANVAS_WIDTH, CANVAS_HEIGHT, clamp,
   SHAPE_FIGURES, MIN_SHAPE_SIZE, MAX_SHAPE_SIZE, DEFAULT_SHAPE_SIZE,
   MIN_SHAPE_THICKNESS, MAX_SHAPE_THICKNESS, DEFAULT_SHAPE_THICKNESS,
   MIN_STAR_POINTS, MAX_STAR_POINTS, DEFAULT_STAR_POINTS, SPINNABLE_FIGURES
@@ -11,6 +11,7 @@ import { breatheFactor } from '../motion/breathe.js';
 import { pulseFactor } from '../motion/pulse.js';
 import { spinRadians } from '../motion/spin.js';
 import { driftSwing, DRIFT_CENTRE_REACH } from '../motion/drift.js';
+import { cyclePaint } from '../motion/color-cycle.js';
 
 /**
  * One filled figure on transparent ground.
@@ -438,7 +439,10 @@ export function render(ctx, layer, asset, timeSec, state, aspect = 1) {
   // gives at length: applyControls writes a SignalRGB colour control's raw
   // value straight into layer.color, and an unparseable string handed to
   // fillStyle is a silent no-op that paints whatever colour was last used.
-  ctx.fillStyle = normalizeColor(layer.color, DEFAULT_SOLID_COLOR);
+  // cyclePaint IS that parse — the resting colour at cycleSpeed 0, byte for
+  // byte, and the layer's own stops blended as a ring above it
+  // (src/engine/motion/color-cycle.js).
+  ctx.fillStyle = cyclePaint(layer, timeSec);
   ctx.fill();
   ctx.restore();
 

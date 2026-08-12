@@ -44,8 +44,13 @@ test('a solid layer carries a colour and motions, and no picture fields at all',
   assert.equal(layer.type, 'solid');
   assert.equal(layer.color, DEFAULT_SOLID_COLOR);
   assert.deepEqual(layer.motions, []);
+  // The colour cycle's two fields, at rest: the default stop pair ready to be
+  // edited, and a tempo of 0 — which is OFF, so the resting colour above is
+  // still the whole story (src/engine/motion/color-cycle.js).
+  assert.equal(layer.cycleSpeed, 0);
+  assert.equal(layer.stops.length, 2);
   // Nothing to fit, nothing to crop, no asset to name.
-  for (const absent of ['asset', 'fit', 'offset', 'stops', 'shape', 'angle']) {
+  for (const absent of ['asset', 'fit', 'offset', 'shape', 'angle']) {
     assert.ok(!Object.hasOwn(layer, absent), `a solid layer must not carry ${absent}`);
   }
 });

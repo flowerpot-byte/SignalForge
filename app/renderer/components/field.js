@@ -442,7 +442,10 @@ export function createStops(field, { t, value, onChange }) {
     return line;
   });
 
-  const add = iconButton(`${base}-stop-add`, 'plus', t('inspector.addStop'));
+  // The button says what it adds: the gradient's ramp adds a "Farbstopp", the
+  // colour cycle's ring adds a "Wechselfarbe" — the list field carries the
+  // word (addLabelKey) because only it knows which of the two it is.
+  const add = iconButton(`${base}-stop-add`, 'plus', t(field.addLabelKey ?? 'inspector.addStop'));
   add.disabled = stops.length >= field.max;
   add.addEventListener('click', () => {
     // The new stop starts out as the colour the gradient already shows at its
