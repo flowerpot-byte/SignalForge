@@ -6,6 +6,8 @@ geometric shapes.
 SignalRGB can play effects but not create them. The community tools that exist only
 handle shapes; nothing lets you turn a photograph into lighting. SignalForge does.
 
+![A particle swarm over a gradient, being edited in SignalForge](docs/screenshots/01-particles.png)
+
 ## Why images matter
 
 A SignalRGB effect is a 320x200 web page. SignalRGB overlays your device layout and
@@ -29,6 +31,20 @@ your own photos included.
 - A **live preview** that is the same engine the exported effect runs, so what
   you see is what SignalRGB plays.
 - Your own **tile picture** for the effect, and your **name** on it.
+
+### Several layers, stacked
+
+Each layer is a picture, a shape, a gradient, a flat colour or a swarm. Reorder
+them, hide them, remove them — the preview follows every change immediately.
+
+![Three layers — a ring, a star and a particle swarm — over a gradient](docs/screenshots/02-layers.png)
+
+### Everything is a control, and every control is exported
+
+What you set here becomes a slider inside SignalRGB, so the effect stays
+adjustable after you have installed it.
+
+![A wave gradient with its angle, bands and hue being set](docs/screenshots/03-gradient.png)
 
 ## What it cannot do: video
 
